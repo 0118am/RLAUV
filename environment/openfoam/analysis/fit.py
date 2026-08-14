@@ -80,7 +80,7 @@ class HydroFitResult:
 
     def config_updates(self) -> dict[str, list[list[float]]]:
         return {
-            # The project keeps the historical key name while accepting 6x6.
+            # The runtime config key accepts the fitted full 6x6 matrix.
             "added_mass_diag": self.added_mass.tolist(),
             "linear_damping": self.linear_damping.tolist(),
             "quadratic_damping": self.quadratic_damping.tolist(),

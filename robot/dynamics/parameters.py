@@ -47,7 +47,7 @@ class AUVModel:
         (-0.001001989, -0.000004539, 0.259427119),
     )
 
-    # Canonical action/calibration order.  The centers are measured relative
+    # Canonical action/measurement order. The centers are measured relative
     # to the COM in the FLU body frame and converted from millimetres to metres.
     # T1--T4 are vertical (FR, RR, FL, RL); T5--T8 are horizontal
     # (RL, RR, FL, FR).  Keeping these physical IDs preserves the policy action

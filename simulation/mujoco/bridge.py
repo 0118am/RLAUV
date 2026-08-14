@@ -1,7 +1,7 @@
 """Simulator-independent policy bridge used by the MuJoCo validator.
 
 The code in this module deliberately depends only on NumPy.  It mirrors the
-deployed Actor contract from :mod:`simulation.isaac.envs.auv.observations` without importing
+deployed Actor contract from :mod:`simulation.isaac.observations` without importing
 IsaacLab or MuJoCo, which keeps the bridge easy to test.
 """
 

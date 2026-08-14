@@ -17,7 +17,7 @@ from environment.openfoam.analysis.fit import (
     added_mass_coriolis_product,
     analyze_cases,
 )
-from environment.openfoam.analysis.forces import ForceSeries, load_case_forces, parse_forces_file
+from environment.openfoam.analysis.forces import ForceSeries, load_case_forces, parse_total_vector_file
 from environment.openfoam.analysis.motion import (
     CaseData,
     MotionSpec,
@@ -31,39 +31,27 @@ def _vector_text(vector: np.ndarray) -> str:
 
 
 class ForcesParserTests(unittest.TestCase):
-    def test_openfoam_components_are_summed(self) -> None:
+    def test_v2512_total_vector_header_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "forces.dat"
+            path = Path(directory) / "force.dat"
             path.write_text(
-                "# Time forces(pressure viscous porous) moment(pressure viscous porous)\n"
-                "0.25 ((1 2 3) (0.1 0.2 0.3) (0.01 0.02 0.03)) "
-                "((4 5 6) (0.4 0.5 0.6) (0.04 0.05 0.06))\n",
+                "0.25 1 2 3 1 2 3 0 0 0\n",
                 encoding="utf-8",
             )
-            result = parse_forces_file(path)
-            np.testing.assert_allclose(result.force_global[0], (1.11, 2.22, 3.33))
-            np.testing.assert_allclose(result.moment_global[0], (4.44, 5.55, 6.66))
+            with self.assertRaisesRegex(ValueError, "missing OpenCFD v2512"):
+                parse_total_vector_file(path)
 
-    def test_restart_duplicate_prefers_later_segment(self) -> None:
+    def test_combined_forces_file_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             case = Path(directory)
-            first = case / "postProcessing" / "auvForces" / "0"
-            second = case / "postProcessing" / "auvForces" / "1"
-            first.mkdir(parents=True)
-            second.mkdir(parents=True)
-            (first / "forces.dat").write_text(
-                "0 ((1 0 0) (0 0 0)) ((0 0 0) (0 0 0))\n"
-                "1 ((2 0 0) (0 0 0)) ((0 0 0) (0 0 0))\n",
+            output = case / "postProcessing" / "forces" / "0"
+            output.mkdir(parents=True)
+            (output / "forces.dat").write_text(
+                "0 ((1 0 0) (0 0 0)) ((0 0 0) (0 0 0))\n",
                 encoding="utf-8",
             )
-            (second / "forces.dat").write_text(
-                "1 ((3 0 0) (0 0 0)) ((0 0 0) (0 0 0))\n"
-                "2 ((4 0 0) (0 0 0)) ((0 0 0) (0 0 0))\n",
-                encoding="utf-8",
-            )
-            result = load_case_forces(case)
-            np.testing.assert_allclose(result.time_s, (0, 1, 2))
-            np.testing.assert_allclose(result.force_global[:, 0], (1, 3, 4))
+            with self.assertRaisesRegex(FileNotFoundError, "OpenCFD v2512"):
+                load_case_forces(case)
 
     def test_v2512_split_files_align_and_deduplicate_restarts(self) -> None:
         def split_file(rows: list[tuple[float, tuple[float, float, float]]]) -> str:
@@ -427,15 +415,24 @@ class FullMatrixRecoveryTests(unittest.TestCase):
         cofr = np.asarray(metadata["centre_of_rotation_m"])
         moment_origin_global = moment_com_global + np.cross(com - cofr, force_global)
 
-        lines = ["# Time forces(pressure viscous porous) moment(pressure viscous porous)\n"]
+        header = (
+            "# Time total_x total_y total_z pressure_x pressure_y pressure_z "
+            "viscous_x viscous_y viscous_z\n"
+        )
+        force_lines = [header]
+        moment_lines = [header]
         zero = np.zeros(3)
         for sample_time, force, moment in zip(time, force_global, moment_origin_global):
-            lines.append(
-                f"{sample_time:.17g} "
-                f"({_vector_text(force)} {_vector_text(zero)} {_vector_text(zero)}) "
-                f"({_vector_text(moment)} {_vector_text(zero)} {_vector_text(zero)})\n"
+            force_lines.append(
+                f"{sample_time:.17g} {_vector_text(force)[1:-1]} "
+                f"{_vector_text(force)[1:-1]} {_vector_text(zero)[1:-1]}\n"
             )
-        (output / "forces.dat").write_text("".join(lines), encoding="utf-8")
+            moment_lines.append(
+                f"{sample_time:.17g} {_vector_text(moment)[1:-1]} "
+                f"{_vector_text(moment)[1:-1]} {_vector_text(zero)[1:-1]}\n"
+            )
+        (output / "force.dat").write_text("".join(force_lines), encoding="utf-8")
+        (output / "moment.dat").write_text("".join(moment_lines), encoding="utf-8")
         return case
 
     def test_recovers_every_entry_with_even_coriolis_and_moving_frames(self) -> None:

@@ -13,7 +13,6 @@ from environment.openfoam import build_mesh
 from environment.openfoam import generate_cases
 from environment.openfoam.build_mesh import (
     _check_mesh_audit,
-    _check_mesh_failures,
     _generator_command,
     _mesh_volume_validation,
     _parser,
@@ -64,6 +63,10 @@ Checking geometry...
 Failed 4 mesh checks.
 End
 """
+
+
+def _hard_failures(output: str) -> list[str]:
+    return list(_check_mesh_audit(output)["hard_failures"])
 
 
 def _locked_rotor_report() -> dict:
@@ -155,7 +158,7 @@ class MeshQualityGateTests(unittest.TestCase):
         self.assertEqual(audit["connected_regions"], 1)
         self.assertGreater(len(audit["warnings"]), 4)
         self.assertNotIn("Mesh OK.", _CURRENT_STRICT_CHECK_OUTPUT)
-        self.assertEqual(_check_mesh_failures(_CURRENT_STRICT_CHECK_OUTPUT), [])
+        self.assertEqual(_hard_failures(_CURRENT_STRICT_CHECK_OUTPUT), [])
 
     def test_accepts_snappy_only_when_final_configured_counts_are_zero(self) -> None:
         audit = _snappy_mesh_audit(_PASSING_SNAPPY_OUTPUT)
@@ -173,7 +176,7 @@ class MeshQualityGateTests(unittest.TestCase):
         )
 
         self.assertFalse(_snappy_mesh_audit(snappy)["passed"])
-        failures = _check_mesh_failures(check_mesh)
+        failures = _hard_failures(check_mesh)
         self.assertTrue(
             any("configured mesh-quality limits exceeded" in item for item in failures)
         )
@@ -186,10 +189,10 @@ class MeshQualityGateTests(unittest.TestCase):
         incomplete = "Checking geometry...\nMesh OK.\nEnd\n"
 
         self.assertTrue(
-            any("terminal End" in item for item in _check_mesh_failures(truncated))
+            any("terminal End" in item for item in _hard_failures(truncated))
         )
-        self.assertTrue(any("fatal diagnostic" in item for item in _check_mesh_failures(fatal)))
-        self.assertGreater(len(_check_mesh_failures(incomplete)), 3)
+        self.assertTrue(any("fatal diagnostic" in item for item in _hard_failures(fatal)))
+        self.assertGreater(len(_hard_failures(incomplete)), 3)
 
     def test_rejects_negative_volume_multiple_regions_and_missing_core_topology(self) -> None:
         negative = _CURRENT_STRICT_CHECK_OUTPUT.replace(
@@ -202,9 +205,9 @@ class MeshQualityGateTests(unittest.TestCase):
             "    Face vertices OK.\n", ""
         )
 
-        self.assertTrue(any("minimum cell volume" in item for item in _check_mesh_failures(negative)))
-        self.assertTrue(any("exactly one" in item for item in _check_mesh_failures(multiple)))
-        self.assertTrue(any("Face vertices OK" in item for item in _check_mesh_failures(missing_core)))
+        self.assertTrue(any("minimum cell volume" in item for item in _hard_failures(negative)))
+        self.assertTrue(any("exactly one" in item for item in _hard_failures(multiple)))
+        self.assertTrue(any("Face vertices OK" in item for item in _hard_failures(missing_core)))
 
 
 class GeneratedControlDictTests(unittest.TestCase):

@@ -1,11 +1,4 @@
-"""Versioned domain-randomization recipes independent of measured profiles.
-
-Measured :class:`PoolDynamicsProfile` objects describe one deterministic
-vehicle/pool configuration.  This module describes how training samples around
-that configuration.  Keeping the two artifacts separate allows several
-training distributions to reference the same measured profile without
-changing the physical source of truth.
-"""
+"""Versioned domain-randomization recipes independent of deterministic sources."""
 
 from __future__ import annotations
 
@@ -16,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .features import DOMAIN_RANDOMIZATION_FEATURES
+from .environment_profile import EnvironmentProfile
 from .pool_profile import (
     DomainRandomizationProfile,
     PoolDynamicsProfile,
@@ -92,12 +86,7 @@ class DomainRandomizationSpec:
             raise ValueError("base_profile_name must be a non-empty string when provided.")
         self.parameters.validate()
         parameter_names = domain_randomization_parameter_names()
-        # ``enabled_features`` was introduced after the original versioned
-        # recipe schema. Its omission intentionally means "all features".
-        optional_legacy_parameters = {"enabled_features"}
-        missing_parameters = sorted(
-            parameter_names - optional_legacy_parameters - set(self.parameters.to_cfg_updates())
-        )
+        missing_parameters = sorted(parameter_names - set(self.parameters.to_cfg_updates()))
         if missing_parameters:
             raise ValueError(
                 "DomainRandomizationSpec.parameters must be complete; missing: "
@@ -218,7 +207,7 @@ def complete_domain_randomization_profile(
     parameters: DomainRandomizationProfile,
     base_profile: PoolDynamicsProfile,
 ) -> DomainRandomizationProfile:
-    """Fill a calibration overlay with explicit neutral values.
+    """Fill a partial overlay with explicit neutral values.
 
     Standalone recipes must not inherit hidden training ranges from an
     environment config. Absolute mass/volume/battery values are centered on
@@ -267,13 +256,6 @@ def complete_domain_randomization_profile(
         "damping_speed_quadratic_scale_range": [1.0, 1.0],
         "battery_voltage_range": [battery.initial_voltage, battery.initial_voltage],
         "battery_voltage_drop_per_s_range": [battery.voltage_drop_per_s, battery.voltage_drop_per_s],
-        "observation_noise_std_range": [0.0, 0.0],
-        "observation_bias_range": [0.0, 0.0],
-        "observation_delay_steps_range": [0, 0],
-        "observation_update_period_steps_range": [1, 1],
-        "observation_dropout_probability_range": [0.0, 0.0],
-        "observation_lowpass_alpha_range": [1.0, 1.0],
-        "observation_bias_drift_std_range": [0.0, 0.0],
         "disturbance_curriculum": False,
         "disturbance_curriculum_stage_steps": [],
         "water_current_smooth": False,
@@ -293,38 +275,9 @@ def complete_domain_randomization_profile(
     return completed
 
 
-def domain_randomization_spec_from_pool_profile(
-    profile: PoolDynamicsProfile,
-    *,
-    name: str | None = None,
-    description: str = "",
-    parameter_sources: Mapping[str, str] | None = None,
-    metadata: Mapping[str, Any] | None = None,
-) -> DomainRandomizationSpec:
-    """Extract legacy calibration uncertainty into a separate bound recipe."""
-
-    profile.validate()
-    if profile.domain_randomization is None:
-        raise ValueError(f"Pool profile {profile.name!r} has no domain_randomization section to export.")
-    completed_parameters = complete_domain_randomization_profile(
-        profile.domain_randomization,
-        profile,
-    )
-    spec = DomainRandomizationSpec(
-        name=name or f"{profile.name}-dr-v1",
-        description=description,
-        base_profile_name=profile.name,
-        parameters=completed_parameters,
-        parameter_sources=copy.deepcopy(dict(parameter_sources or {})),
-        metadata=copy.deepcopy(dict(metadata or {})),
-    )
-    spec.validate()
-    return spec
-
-
 def validate_domain_randomization_base_profile(
     spec: DomainRandomizationSpec,
-    base_profile: PoolDynamicsProfile,
+    base_profile: PoolDynamicsProfile | EnvironmentProfile,
 ) -> None:
     """Reject a recipe accidentally paired with a different measured profile."""
 
@@ -340,7 +293,7 @@ def apply_domain_randomization_spec(
     cfg: Any,
     spec: DomainRandomizationSpec,
     *,
-    base_profile: PoolDynamicsProfile | None = None,
+    base_profile: PoolDynamicsProfile | EnvironmentProfile | None = None,
 ) -> Any:
     """Apply a domain-randomization recipe to an AUV config."""
 

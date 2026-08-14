@@ -9,7 +9,6 @@ __pycache__/
 runs/
 logs/
 results/
-exported_policies/
 archives/
 *.pt
 *.onnx

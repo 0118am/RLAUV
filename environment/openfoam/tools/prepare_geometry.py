@@ -206,28 +206,8 @@ def _scale_with_openfoam(
     scale: float,
     executable: str,
 ) -> dict[str, Any]:
-    try:
-        help_result = subprocess.run(
-            [executable, "-help"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise GeometryPreparationError(f"surfaceTransformPoints help query failed: {exc}") from exc
-    help_text = help_result.stdout + "\n" + help_result.stderr
-    if "-write-scale" in help_text:
-        scale_option = "-write-scale"
-    elif re.search(r"(^|\s)-scale(?:\s|$)", help_text):
-        scale_option = "-scale"
-    else:
-        raise GeometryPreparationError(
-            "surfaceTransformPoints exposes neither -write-scale nor legacy -scale"
-        )
-
     scale_vector = f"({scale:.17g} {scale:.17g} {scale:.17g})"
-    command = [executable, scale_option, scale_vector, str(source), str(destination)]
+    command = [executable, "-write-scale", scale_vector, str(source), str(destination)]
     try:
         completed = subprocess.run(
             command,

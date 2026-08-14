@@ -179,13 +179,6 @@
     "angular_deflection_rad": 0.2,
     "note": "These values are part of the source-specific intermediate mesh signature and are intentionally not CLI-overridable."
   },
-  "triangulation_reference": {
-    "null_triangulation_face_indices": [10856],
-    "binary_triangle_count": 1205609,
-    "repeated_vertex_triangle_count": 239,
-    "zero_area_triangle_count": 241,
-    "note": "Historical pre-nose reference retained only for provenance comparison. Exact OCP triangle/null/repeated/zero counts are recorded with expected_match but never gate production; physical gates are shell/frame mapping, solid overlap and motor-volume agreement followed by wrapped volume/topology and snappy displaced volume/checkMesh."
-  },
   "groups": {
     "main_outer_fairing": [236, 242],
     "thruster_support_complex": [126, 134, 142, 150],

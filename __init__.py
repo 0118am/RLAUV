@@ -1,8 +1,3 @@
-# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 """Gym registration entry point for the AUV IsaacLab task package."""
 
 from __future__ import annotations
@@ -13,9 +8,9 @@ def _register_environments():
 
     import gymnasium as gym
 
-    from .simulation.isaac.agents.ppo import config as ppo_config
-    from .simulation.isaac.envs.auv.config import AUVTrajEnvCfg
-    from .simulation.isaac.envs.auv.env import AUVTrajEnv
+    from .simulation.isaac.config import AUVTrajEnvCfg
+    from .simulation.isaac.env import AUVTrajEnv
+    from .simulation.isaac.ppo import config as ppo_config
 
     gym.register(
         id="Isaac-AUV-Traj-Direct-v1",

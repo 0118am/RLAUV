@@ -246,8 +246,8 @@ class HydrodynamicForceModels:
         Damping is evaluated with relative velocity nu_r = nu - nu_c.  The
         dissipation check should therefore use nu_r^T tau_damping <= 0, not
         nu^T tau_damping, because moving water can do work on the vehicle.
-        ``added_mass_diag`` is kept as the legacy argument name, but it accepts
-        either a 6-vector of diagonal coefficients or a full 6x6 matrix.
+        ``added_mass_diag`` is the runtime config key and accepts either a
+        6-vector of diagonal coefficients or a full 6x6 matrix.
         """
 
         buoyancy_forces_b, buoyancy_torques_b = self.calculate_buoyancy_forces(

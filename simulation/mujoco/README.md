@@ -29,7 +29,7 @@ python -m pip install -r simulation/mujoco/requirements.txt
 Export a checkpoint when ONNX is preferred:
 
 ```bash
-python simulation/isaac/workflows/export/trajectory_onnx.py \
+python simulation/isaac/rlpolicy/export_onnx.py \
   --checkpoint /path/to/model_480.pt \
   --mlp_architecture mlp_history_5
 ```
@@ -38,7 +38,7 @@ python simulation/isaac/workflows/export/trajectory_onnx.py \
 
 ```bash
 python simulation/mujoco/validate_policy.py \
-  --policy exported_policies/auv_traj_policy_mlp_history_5_DATE_model_480.onnx \
+  --policy simulation/isaac/rlpolicy/<architecture>/<run>/exports/<policy>.onnx \
   --mlp-architecture mlp_history_5
 ```
 

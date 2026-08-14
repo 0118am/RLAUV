@@ -10,8 +10,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tests.simulation.isaac.agents.rewards import test_policies as reward_policy_tests
-from tests.simulation.isaac.envs.auv.trajectory import test_guidance
+from tests.simulation.isaac.rewards import test_policies as reward_policy_tests
+from tests.robot.control.trajectory import test_guidance
 
 
 PREFLIGHT_CHECKS = (
@@ -23,7 +23,7 @@ PREFLIGHT_CHECKS = (
     reward_policy_tests.test_policy_5_penalizes_normalized_applied_action_rate_with_mean_over_thrusters,
     reward_policy_tests.test_policy_6_huber_residual_is_half_at_sigma_and_linear_afterward,
     reward_policy_tests.test_policy_4_matches_policy_1_penalty_at_action_bounds_but_suppresses_small_actions_more,
-    reward_policy_tests.test_policy_application_legacy_alias_and_custom_mode,
+    reward_policy_tests.test_policy_application_and_custom_mode,
     reward_policy_tests.test_train_and_eval_commands_carry_the_reward_policy,
     test_guidance.test_body_x_aligns_with_three_dimensional_velocity,
     test_guidance.test_near_zero_velocity_keeps_previous_attitude,

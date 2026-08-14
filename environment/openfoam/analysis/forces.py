@@ -1,11 +1,4 @@
-"""Read OpenCFD force-function output.
-
-OpenCFD v2512 writes separate ``force.dat`` and ``moment.dat`` files whose
-first three data columns are the total vector.  Earlier releases commonly use
-a combined ``forces.dat`` containing nested pressure, viscous and porous
-vectors.  Both layouts are accepted and always yield the total fluid-on-body
-force and moment.
-"""
+"""Read OpenCFD v2512 split force-function output."""
 
 from __future__ import annotations
 
@@ -20,10 +13,6 @@ import numpy as np
 
 _NUMBER = r"[+-]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|(?:nan|inf))"
 _NUMBER_RE = re.compile(_NUMBER, re.IGNORECASE)
-_VECTOR_RE = re.compile(
-    rf"\(\s*({_NUMBER})\s+({_NUMBER})\s+({_NUMBER})\s*\)",
-    re.IGNORECASE,
-)
 _FORCE_SPLIT_RE = re.compile(r"^force(?:_(\d+))?\.dat$")
 _MOMENT_SPLIT_RE = re.compile(r"^moment(?:_(\d+))?\.dat$")
 
@@ -74,76 +63,11 @@ class _VectorSeries:
         object.__setattr__(self, "values", values)
 
 
-def _sum_force_moment_vectors(vectors: list[np.ndarray], *, context: str) -> tuple[np.ndarray, np.ndarray]:
-    if len(vectors) < 2 or len(vectors) % 2:
-        raise ValueError(
-            f"{context}: expected an even number of force/moment vectors, got {len(vectors)}"
-        )
-    midpoint = len(vectors) // 2
-    return np.sum(vectors[:midpoint], axis=0), np.sum(vectors[midpoint:], axis=0)
-
-
-def _parse_data_line(line: str, *, context: str) -> tuple[float, np.ndarray, np.ndarray] | None:
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#") or stripped.startswith("//"):
-        return None
-    time_match = _NUMBER_RE.match(stripped)
-    if time_match is None:
-        return None
-    time_s = float(time_match.group(0))
-    remainder = stripped[time_match.end() :].split("#", 1)[0]
-    vectors = [np.asarray(tuple(map(float, match.groups())), dtype=float) for match in _VECTOR_RE.finditer(remainder)]
-    if vectors:
-        force, moment = _sum_force_moment_vectors(vectors, context=context)
-        return time_s, force, moment
-
-    # A small number of downstream tools flatten OpenFOAM's vector tuples.
-    values = [float(token) for token in _NUMBER_RE.findall(remainder)]
-    if len(values) in (6, 12, 18):
-        triples = [np.asarray(values[index : index + 3], dtype=float) for index in range(0, len(values), 3)]
-        force, moment = _sum_force_moment_vectors(triples, context=context)
-        return time_s, force, moment
-    raise ValueError(f"{context}: could not parse OpenFOAM force/moment columns: {stripped!r}")
-
-
-def parse_forces_file(path: str | Path) -> ForceSeries:
-    """Parse one OpenCFD ``forces.dat`` file.
-
-    Pressure, viscous and porous contributions are summed.  Values are not
-    sign-flipped: OpenFOAM's forces function object reports the force exerted
-    by the fluid on the selected body patches.
-    """
-
-    source = Path(path)
-    times: list[float] = []
-    forces: list[np.ndarray] = []
-    moments: list[np.ndarray] = []
-    with source.open("r", encoding="utf-8", errors="replace") as stream:
-        for line_number, line in enumerate(stream, start=1):
-            parsed = _parse_data_line(line, context=f"{source}:{line_number}")
-            if parsed is None:
-                continue
-            time_s, force, moment = parsed
-            times.append(time_s)
-            forces.append(force)
-            moments.append(moment)
-    if not times:
-        raise ValueError(f"No force samples found in {source}")
-    return ForceSeries(
-        np.asarray(times, dtype=float),
-        np.vstack(forces),
-        np.vstack(moments),
-        (str(source),),
-    )
-
-
 def parse_total_vector_file(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
     """Parse a v2512 ``force.dat`` or ``moment.dat`` total-vector history.
 
     The v2512 header is ``Time total_* pressure_* viscous_*``.  The total is
-    therefore read directly instead of summing all nine columns a second time.
-    For split files without explicit total columns, component triples are
-    summed as a backwards-compatible fallback.
+    read directly from the first three data columns.
     """
 
     source = Path(path)
@@ -165,20 +89,14 @@ def parse_total_vector_file(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
                 continue
             time_s = float(time_match.group(0))
             remainder = stripped[time_match.end() :].split("#", 1)[0]
-            nested = [
-                np.asarray(tuple(map(float, match.groups())), dtype=float)
-                for match in _VECTOR_RE.finditer(remainder)
-            ]
-            if nested:
-                vector = nested[0] if header_has_total or len(nested) == 1 else np.sum(nested, axis=0)
-            else:
-                values = [float(token) for token in _NUMBER_RE.findall(remainder)]
-                if len(values) < 3 or len(values) % 3:
-                    raise ValueError(
-                        f"{source}:{line_number}: expected total/component vector triples, got {len(values)} values"
-                    )
-                triples = np.asarray(values, dtype=float).reshape(-1, 3)
-                vector = triples[0] if header_has_total or len(triples) == 1 else np.sum(triples, axis=0)
+            if not header_has_total:
+                raise ValueError(f"{source}:{line_number}: missing OpenCFD v2512 total-vector header")
+            values = [float(token) for token in _NUMBER_RE.findall(remainder)]
+            if len(values) != 9:
+                raise ValueError(
+                    f"{source}:{line_number}: expected 9 v2512 total/pressure/viscous values, got {len(values)}"
+                )
+            vector = np.asarray(values[:3], dtype=float)
             times.append(time_s)
             vectors.append(np.asarray(vector, dtype=float))
     if not times:
@@ -194,21 +112,6 @@ def _numeric_path_key(path: Path) -> tuple[tuple[int, float | str], ...]:
         except ValueError:
             key.append((1, part))
     return tuple(key)
-
-
-def discover_forces_files(case_dir: str | Path) -> list[Path]:
-    """Return legacy combined ``forces.dat`` restart segments."""
-
-    root = Path(case_dir)
-    files = list(root.glob("postProcessing/forces/**/forces.dat"))
-    # The function-object dictionary name controls the postProcessing folder.
-    # Generated templates sometimes call the object ``auvForces`` even though
-    # its runtime type is ``forces``; accept that layout as a fallback.
-    if not files:
-        files = list(root.glob("postProcessing/*/**/forces.dat"))
-    if not files:
-        raise FileNotFoundError(f"No postProcessing/forces/**/forces.dat (or named forces object) below {root}")
-    return sorted(files, key=lambda item: _numeric_path_key(item.relative_to(root)))
 
 
 def discover_force_moment_files(case_dir: str | Path) -> list[tuple[Path, Path]]:
@@ -350,50 +253,23 @@ def _align_force_moment(force: _VectorSeries, moment: _VectorSeries) -> ForceSer
     )
 
 
-def _merge_series(series: Iterable[ForceSeries]) -> ForceSeries:
-    chunks = list(series)
-    if not chunks:
-        raise ValueError("At least one force series is required")
-    times = np.concatenate([item.time_s for item in chunks])
-    forces = np.concatenate([item.force_global for item in chunks], axis=0)
-    moments = np.concatenate([item.moment_global for item in chunks], axis=0)
-    order = np.argsort(times, kind="stable")
-    times, forces, moments = times[order], forces[order], moments[order]
-
-    # Restart directories repeat the last written time.  Prefer the later
-    # segment and also collapse differences at round-off scale.
-    kept_t: list[float] = []
-    kept_f: list[np.ndarray] = []
-    kept_m: list[np.ndarray] = []
-    for time_s, force, moment in zip(times, forces, moments):
-        tolerance = 1.0e-12 * max(1.0, abs(float(time_s)))
-        if kept_t and abs(float(time_s) - kept_t[-1]) <= tolerance:
-            kept_t[-1] = float(time_s)
-            kept_f[-1] = force
-            kept_m[-1] = moment
-        else:
-            kept_t.append(float(time_s))
-            kept_f.append(force)
-            kept_m.append(moment)
-    sources = tuple(source for item in chunks for source in item.source_files)
-    return ForceSeries(np.asarray(kept_t), np.vstack(kept_f), np.vstack(kept_m), sources)
-
-
 def load_case_forces(case_dir: str | Path) -> ForceSeries:
     """Read and merge all force restart segments for a generated case."""
 
     root = Path(case_dir)
     split_pairs = discover_force_moment_files(root)
-    if split_pairs:
-        force_chunks: list[_VectorSeries] = []
-        moment_chunks: list[_VectorSeries] = []
-        for force_path, moment_path in split_pairs:
-            force_time, force_values = parse_total_vector_file(force_path)
-            moment_time, moment_values = parse_total_vector_file(moment_path)
-            force_chunks.append(_VectorSeries(force_time, force_values, (str(force_path),)))
-            moment_chunks.append(_VectorSeries(moment_time, moment_values, (str(moment_path),)))
-        return _align_force_moment(
-            _merge_vector_series(force_chunks),
-            _merge_vector_series(moment_chunks),
+    if not split_pairs:
+        raise FileNotFoundError(
+            f"No OpenCFD v2512 postProcessing/forces/**/{{force,moment}}.dat below {root}"
         )
-    return _merge_series(parse_forces_file(path) for path in discover_forces_files(root))
+    force_chunks: list[_VectorSeries] = []
+    moment_chunks: list[_VectorSeries] = []
+    for force_path, moment_path in split_pairs:
+        force_time, force_values = parse_total_vector_file(force_path)
+        moment_time, moment_values = parse_total_vector_file(moment_path)
+        force_chunks.append(_VectorSeries(force_time, force_values, (str(force_path),)))
+        moment_chunks.append(_VectorSeries(moment_time, moment_values, (str(moment_path),)))
+    return _align_force_moment(
+        _merge_vector_series(force_chunks),
+        _merge_vector_series(moment_chunks),
+    )

@@ -1324,25 +1324,6 @@ def _validate_config(config: dict, source: Path) -> None:
             or value <= 0.0
         ):
             raise ValueError(f"Configured {name} must be finite and positive")
-    gate = config.get("triangulation_reference", {})
-    expected_gate_types = {
-        "null_triangulation_face_indices": list,
-        "binary_triangle_count": int,
-        "repeated_vertex_triangle_count": int,
-        "zero_area_triangle_count": int,
-    }
-    for name, expected_type in expected_gate_types.items():
-        value = gate.get(name)
-        if type(value) is not expected_type:
-            raise ValueError(f"Triangulation reference {name!r} has the wrong type")
-        if expected_type is int and value < 0:
-            raise ValueError(f"Triangulation reference {name!r} cannot be negative")
-    if any(
-        not isinstance(value, int) or value < 1
-        for value in gate["null_triangulation_face_indices"]
-    ):
-        raise ValueError("Null-triangulation face indices must be positive integers")
-
     crosscheck = config.get("entity_crosscheck", {})
     for name in ("main_outer_fairing", "thruster_support_complex", "propellers", "motors"):
         values = crosscheck.get(name)
@@ -1561,23 +1542,6 @@ def prepare(args: argparse.Namespace) -> dict:
             angular_deflection_rad,
         )
         intermediate_audit = _audit_binary_stl(temporary_output)
-        expected_audit = config["triangulation_reference"]
-        actual_locked = {
-            "null_triangulation_face_indices": triangulation[
-                "null_triangulation_face_indices"
-            ],
-            "binary_triangle_count": intermediate_audit["binary_triangle_count"],
-            "repeated_vertex_triangle_count": intermediate_audit[
-                "repeated_vertex_triangle_count"
-            ],
-            "zero_area_triangle_count": intermediate_audit["zero_area_triangle_count"],
-        }
-        mismatches = [
-            f"{name}: expected {expected_audit[name]}, got {actual}"
-            for name, actual in actual_locked.items()
-            if actual != expected_audit[name]
-        ]
-
         report = {
         "schema_version": 1,
         "source": str(source),
@@ -1622,13 +1586,6 @@ def prepare(args: argparse.Namespace) -> dict:
             "angular_deflection_rad": angular_deflection_rad,
             **triangulation,
             **intermediate_audit,
-        },
-        "triangulation_reference_comparison": {
-            "expected": {name: expected_audit[name] for name in actual_locked},
-            "actual": actual_locked,
-            "expected_match": not mismatches,
-            "mismatches": mismatches,
-            "gating": False,
         },
         "warning": (
             "This STL contains intersecting retained solids and is an intermediate "

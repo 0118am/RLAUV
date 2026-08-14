@@ -275,16 +275,6 @@ class RepairStepSafetyTests(unittest.TestCase):
         triangulation = config["triangulation"]
         self.assertGreater(triangulation["linear_deflection_mm"], 0.0)
         self.assertGreater(triangulation["angular_deflection_rad"], 0.0)
-        self.assertEqual(
-            config["triangulation_reference"],
-            {
-                "null_triangulation_face_indices": [10856],
-                "binary_triangle_count": 1_205_609,
-                "repeated_vertex_triangle_count": 239,
-                "zero_area_triangle_count": 241,
-                "note": config["triangulation_reference"]["note"],
-            },
-        )
 
         _validate_config(config, Path(config["source"]["basename"]))
 

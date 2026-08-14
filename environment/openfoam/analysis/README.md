@@ -4,17 +4,13 @@ Run the fitter after all prescribed-motion cases have produced OpenCFD v2512
 `postProcessing/forces/**/{force.dat,moment.dat}`:
 
 ```bash
-python3 -m openfoam.analysis \
+python3 -m environment.openfoam.analysis \
   --cases-root environment/openfoam/cases \
   --output-dir environment/openfoam/results
 ```
 
-The equivalent deployment-friendly entry point is
-`python3 environment/openfoam/analysis/fit_matrices.py --cases-root environment/openfoam/cases`.
-
 Each oscillatory case must contain `motion.json` plus OpenCFD v2512
-`postProcessing/forces/**/{force.dat,moment.dat}` output. Legacy combined
-`forces.dat` is also accepted. The canonical motion fields are
+`postProcessing/forces/**/{force.dat,moment.dat}` output. The canonical motion fields are
 `dof`, `dof_index`, `motion_kind`, `axis`, `amplitude_si`, `omega_rad_s`,
 `phase_rad`, `settle_cycles`, `sample_cycles`, `cofr_global_m`, and
 `com_initial_global_m`. Generator aliases such as `kind`, `amplitude_m`,

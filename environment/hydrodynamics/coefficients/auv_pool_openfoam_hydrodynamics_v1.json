@@ -32,10 +32,6 @@
     "water_current_periodic_period_s": [18.0, 27.0, 11.0],
     "water_current_periodic_phase_rad": [0.0, 1.5707963267948966, 3.141592653589793]
   },
-  "thrusters": {
-    "dyn_time_constant": 0.0,
-    "max_command_rate": 0.0
-  },
   "pool_boundary": {
     "enabled": true,
     "bounds": [-7.0, 7.0, -7.0, 7.0, -15.0, -1.0],

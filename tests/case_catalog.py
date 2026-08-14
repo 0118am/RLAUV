@@ -13,10 +13,7 @@ CATEGORIES = (
     "physics",
     "thrusters",
     "environment",
-    "sensing",
     "profiles",
-    "identification",
-    "validation",
     "tether",
 )
 
@@ -24,21 +21,8 @@ CATEGORIES = (
 def _category_for(case_name: str) -> str:
     """Map a regression case to the module that owns the exercised behavior."""
 
-    if "replay" in case_name or "validation" in case_name:
-        return "validation"
     if "tether" in case_name or "winch" in case_name or "multisegment" in case_name:
         return "tether"
-    if any(
-        token in case_name
-        for token in (
-            "sensor",
-            "observation",
-            "measurement_delay",
-        )
-    ):
-        return "sensing"
-    if any(token in case_name for token in ("calibration", "_fit_", "_fits_", "_pipeline_", "builder_cli")):
-        return "identification"
     if "profile" in case_name:
         return "profiles"
     if any(token in case_name for token in ("water_current", "pool_boundary", "free_surface", "sloshing", "environment")):

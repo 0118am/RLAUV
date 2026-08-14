@@ -20,7 +20,7 @@ PROJECT_ROOT = MUJOCO_WORKFLOW_ROOT.parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from simulation.isaac.agents.ppo.architectures import available_mlp_architectures, get_mlp_architecture
+from simulation.isaac.ppo.architectures import available_mlp_architectures, get_mlp_architecture
 from simulation.mujoco.bridge import (
     ACTION_DIM,
     coefficient_matrix,
@@ -40,7 +40,7 @@ from environment.profiles.pool_profile import load_pool_dynamics_profile_json
 from robot.dynamics.parameters import AUV
 
 
-DEFAULT_MODEL = PROJECT_ROOT / "robot/assets/mujoco/auv.xml"
+DEFAULT_MODEL = PROJECT_ROOT / "robot/assets/mujoco/t60_auv.xml"
 DEFAULT_PROFILE = PROJECT_ROOT / "environment/hydrodynamics/coefficients/auv_pool_openfoam_hydrodynamics_v1.json"
 
 
@@ -93,7 +93,7 @@ class TorchCheckpointPolicy:
     ):
         import torch
 
-        from simulation.isaac.agents.ppo.evaluation import load_evaluation_actor
+        from simulation.isaac.ppo.evaluation import load_evaluation_actor
 
         self._torch = torch
         self._actor = load_evaluation_actor(

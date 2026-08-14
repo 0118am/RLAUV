@@ -59,14 +59,8 @@ buoyancy material**；由于扁平 STEP 没有保留原 SolidWorks 零件名，�
 OpenFOAM v2512 进一步确认它无非法三角形、法向一致且无自相交。随后绕 COM 原点统一
 缩放 `0.001` 得到正式米制输入，范围为 `0.562 × 0.4025 × 0.191 m`。
 
-> **当前生成物作废：** `geometry/processed/` 中现有
-> `verification_assembly_selected_body_mm.stl`、对应 selection report 和
-> `verification_assembly_wetted_body_{mm,m}.stl` 都是修复 shell 30 之前生成的旧件；
-> 它们的封闭体积只有 `7.686508750 L`，相对目标低 `32.00%`，必须被
-> `±2%` 门禁拒绝。随后保留 shell 30/257、但尚未派生密封边界的诊断 `0.5 mm`
-> wrap 也只有 `8.469799375 L`（低 `25.08%`），同样已被物理门禁正确拒绝。在下述重建、
-> 体积验收和严格 `surfaceCheck` 中均不得使用这些旧件。当前正式输入只来自
-> `geometry/validated_locked_rotor_v1/`，面数、哈希和范围均从该目录的重建报告读取。
+当前正式输入只来自 `geometry/validated_locked_rotor_v1/`，面数、哈希和范围均从该目录的
+重建报告读取。
 
 正式选择明细见
 [`selection_report.json`](geometry/validated_locked_rotor_v1/selection_report.json)，
@@ -80,13 +74,6 @@ OpenFOAM v2512 进一步确认它无非法三角形、法向一致且无自相�
 可同时包含真实孔洞和 `0.5 mm` 分辨率下残留的细缝/通道；数值只能在新包络生成后
 报告，不沿用作废表面的统计。仍须在 ParaView 中人工核对外形与孔洞连通性，并通过网格、
 时间步和外域收敛研究后才能发布水动力矩阵。
-
-### 旧 visual STL 记录
-
-早期 `/home/jining_yang/Downloads/auv_visual.stl`（SHA-256
-`bca0b2c7d0e8c108990a9b51ff0d97bfda275f57492cec9113d7c607a679f9b1`）是含 `180`
-个连通壳的可视化装配体。OpenFOAM 曾检出 `265` 个非法三角形、`144814` 处自相交和
-`220` 个未连接部分，因此它仍仅用于回归几何失败门禁，不再是生产几何。
 
 ## 数学定义
 
@@ -217,7 +204,7 @@ python3 environment/openfoam/tools/check_environment.py --strict --min-api 2512
 也可使用官方镜像 `opencfd/openfoam-default:2512`：
 
 ```bash
-AUV_STL_PATH=/absolute/path/auv_visual.stl environment/openfoam/run_in_docker.sh bash
+environment/openfoam/run_in_docker.sh bash
 ```
 
 系统安装方法以 OpenCFD 官方 Linux 安装页为准。
@@ -241,7 +228,7 @@ AUV_STL_PATH=/absolute/path/auv_visual.stl environment/openfoam/run_in_docker.sh
    ```
 
    中间选择 STL 仍保留零件间相交面，因此不能直接进入 OpenFOAM。selection report 会记录
-   每组锁桨连接轴的 STEP/body 轴线、桨中心和三项实体交叠，并锁定本配置对应的三角签名；
+   每组锁桨连接轴的 STEP/body 轴线、桨中心和三项实体交叠；
    下一步 voxel exterior wrap 会重建表面，最终必须由 `surfaceCheck -checkSelfIntersection`
    证明中间缺陷已经清除。
 
@@ -364,7 +351,7 @@ AUV_STL_PATH=/absolute/path/auv_visual.stl environment/openfoam/run_in_docker.sh
    三张完整矩阵：
 
    ```bash
-   python3 environment/openfoam/analysis/fit_matrices.py \
+   python3 -m environment.openfoam.analysis \
      --cases-root environment/openfoam/cases_locked_rotor_v1 \
      --config environment/openfoam/config.json \
      --output-dir environment/openfoam/results
@@ -403,9 +390,9 @@ python3 environment/openfoam/finish_cfd12.py \
 }
 ```
 
-历史配置键仍叫 `added_mass_diag`，但运行时已经接受完整 `6×6` 矩阵。
+运行时配置键 `added_mass_diag` 接受对角 `6` 向量或完整 `6×6` 矩阵。
 
-## 已执行的兼容验证
+## 已执行的 v2512 验证
 
 本目录不是只做了字典渲染检查。部署阶段已用官方 OpenCFD v2512 二进制完成：
 
@@ -417,9 +404,8 @@ python3 environment/openfoam/finish_cfd12.py \
 - 2 进程 MPI 平移动态网格时间步正常结束；
 - 几何、建网格门禁、载荷解析与完整 108 系数合成恢复测试全部通过。
 
-这些验证只证明部署语法和数据链可以闭合。修复 shell 30 之前的旧表面虽通过过
-拓扑检查，但因体积仅 `7.686508750 L` 已被新物理门禁作废；新湿表面尚待按上述
-独立 staging 链路重建和验收，之后仍需人工外形核对、网格收敛、时间步收敛和外域尺寸研究。
+这些验证证明部署语法和数据链可以闭合。正式湿表面来自上述独立 staging 链路；发布矩阵
+前仍需完成人工外形核对、网格收敛、时间步收敛和外域尺寸研究。
 
 ## 发布矩阵前的最低验证
 

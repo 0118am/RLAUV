@@ -283,12 +283,6 @@ def _check_mesh_audit(output: str) -> dict[str, object]:
     }
 
 
-def _check_mesh_failures(output: str) -> list[str]:
-    """Compatibility helper returning the audit's hard failures."""
-
-    return list(_check_mesh_audit(output)["hard_failures"])
-
-
 def _write_mesh_quality_audit(
     path: Path,
     snappy: dict[str, object] | None,

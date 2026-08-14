@@ -1,4 +1,4 @@
-"""Simulator-independent hydrodynamic models and coefficient artifacts."""
+"""Hydrodynamic forces, water fields, pool effects, and coefficient artifacts."""
 
 from .models import HydrodynamicForceModels
 

@@ -13,7 +13,6 @@ from environment.profiles.domain_randomization import (
     apply_domain_randomization_spec,
     complete_domain_randomization_profile,
     domain_randomization_parameters_requiring_sources,
-    domain_randomization_spec_from_pool_profile,
     domain_randomization_spec_from_dict,
     load_domain_randomization_spec_json,
     write_domain_randomization_spec_json,
@@ -22,7 +21,6 @@ from environment.profiles.pool_profile import (
     NOMINAL_POOL_DYNAMICS_PROFILE,
     DomainRandomizationProfile,
     PoolDynamicsProfile,
-    apply_pool_dynamics_profile,
 )
 
 
@@ -45,11 +43,18 @@ def _test_sources(parameters: DomainRandomizationProfile) -> dict[str, str]:
 
 def test_checked_in_auv_recipe_is_valid() -> None:
     spec = load_domain_randomization_spec_json(
-        ROOT / "simulation/isaac/configs/domain_randomization/auv_pool_openfoam_hydrodynamics_dr_v1.json"
+        ROOT / "environment/profiles/configs/auv_pool_openfoam_hydrodynamics_dr_v1.json"
     )
 
     assert spec.name == "auv-pool-openfoam-hydrodynamics-dr-v1"
     assert spec.parameters.use_custom_randomization is True
+    assert tuple(spec.parameters.enabled_features) == (
+        "rigid_body",
+        "current",
+        "hydrodynamics",
+        "actuators",
+        "battery",
+    )
     assert spec.parameters.water_current_max_by_stage == [0.0, 0.05, 0.1, 0.15, 0.2]
     assert spec.parameters.added_mass_log_std_by_stage == [0.0, 0.0, 0.05, 0.08, 0.12]
 
@@ -126,50 +131,6 @@ def test_apply_spec_rejects_wrong_measured_profile() -> None:
         )
 
 
-def test_runtime_can_ignore_legacy_nested_randomization() -> None:
-    profile = PoolDynamicsProfile(
-        domain_randomization=DomainRandomizationProfile(
-            use_custom_randomization=True,
-            mass_range=[9.0, 11.0],
-        )
-    )
-    cfg = SimpleNamespace(
-        domain_randomization=SimpleNamespace(
-            use_custom_randomization=False,
-            mass_range=[10.11, 10.11],
-        )
-    )
-
-    apply_pool_dynamics_profile(
-        cfg,
-        profile,
-        include_legacy_domain_randomization=False,
-    )
-
-    assert cfg.domain_randomization.use_custom_randomization is False
-    assert cfg.domain_randomization.mass_range == [10.11, 10.11]
-
-
-def test_legacy_calibration_uncertainty_exports_as_bound_recipe() -> None:
-    profile = PoolDynamicsProfile(
-        name="measured-campaign",
-        domain_randomization=DomainRandomizationProfile(
-            use_custom_randomization=True,
-            mass_range=[10.0, 10.2],
-        ),
-    )
-
-    completed = _complete(profile.domain_randomization, profile)
-    spec = domain_randomization_spec_from_pool_profile(
-        profile,
-        parameter_sources=_test_sources(completed),
-    )
-
-    assert spec.name == "measured-campaign-dr-v1"
-    assert spec.base_profile_name == "measured-campaign"
-    assert spec.parameters.mass_range == [10.0, 10.2]
-
-
 def test_spec_rejects_unknown_parameter() -> None:
     with pytest.raises(ValueError, match="Unknown domain-randomization parameter"):
         domain_randomization_spec_from_dict(
@@ -227,8 +188,8 @@ def test_spec_rejects_missing_source_for_active_range() -> None:
     [
         (DomainRandomizationProfile(mass_range=[-1.0, 1.0]), "mass_range must be positive"),
         (
-            DomainRandomizationProfile(observation_noise_std_range=[-0.1, 0.1]),
-            "observation_noise_std_range must be non-negative",
+            DomainRandomizationProfile(thruster_command_dropout_probability_range=[0.0, 1.1]),
+            "thruster_command_dropout_probability_range must be in",
         ),
         (
             DomainRandomizationProfile(thruster_command_delay_steps_range=[-1, 0]),
@@ -301,7 +262,7 @@ def test_payload_ensemble_validates_correlated_physical_samples() -> None:
 
 
 def test_environment_does_not_override_configured_torch_seed() -> None:
-    source = (ROOT / "simulation/isaac/envs/auv/env.py").read_text(encoding="utf-8")
+    source = (ROOT / "simulation/isaac/env.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     manual_seed_calls = [
         node

@@ -54,14 +54,6 @@ if [[ ! -f "${steady_marker}" && -n "${steady_baseline_source}" ]]; then
     : >"${steady_marker}"
 fi
 if [[ -f "${steady_marker}" && ! -s "${steady_time_file}" ]]; then
-    legacy_time="$(foamListTimes -case "${baseline}" -latestTime)"
-    if [[ -n "${legacy_time}" && "${legacy_time}" != "0" ]] && \
-       [[ -d "${baseline}/${legacy_time}" ]] && \
-       [[ -d "${baseline}/processor0/${legacy_time}" ]]; then
-        printf '%s\n' "${legacy_time}" >"${steady_time_file}"
-    fi
-fi
-if [[ -f "${steady_marker}" && ! -s "${steady_time_file}" ]]; then
     rm -f -- "${steady_marker}"
 fi
 if [[ ! -f "${steady_marker}" ]]; then
@@ -69,35 +61,9 @@ if [[ ! -f "${steady_marker}" ]]; then
     cp "${script_dir}/steady_initial/system/fvSolution" "${baseline}/system/fvSolution"
     cp "${script_dir}/steady_initial/system/controlDict" "${baseline}/system/controlDict"
 
-    # A previous run used 32 ranks before this campaign was fixed at 16.
-    # Remove only generated decomposition directories under the exact baseline
-    # case so reconstructPar cannot mistake stale ranks for the current run.
+    # Remove generated decomposition directories under the exact baseline case.
     find "${baseline}" -mindepth 1 -maxdepth 1 -type d \
         -name 'processor[0-9]*' -exec rm -rf -- {} +
-
-    # Reuse the already-computed iteration-300 towing field only as an initial
-    # guess.  The old run stopped at a fixed iteration count and is therefore
-    # not accepted as converged; residualControl below decides when this new
-    # baseline is actually ready.
-    warm_source="${script_dir}/cases_jn2_equivalent_six_dof_level6_v1/baseline"
-    warm_marker="${baseline}/.warm_started_from_v1_iteration_300"
-    if [[ ! -f "${warm_marker}" && -d "${warm_source}/300" ]]; then
-        mapFields "${warm_source}" \
-            -case "${baseline}" \
-            -sourceTime 300 \
-            -consistent \
-            -noFunctionObjects \
-            >"${baseline}/log.mapFields.warmStart" 2>&1
-        : >"${warm_marker}"
-    fi
-    # mapFields maps cell fields but deliberately renames the target point
-    # boundary field when it cannot interpolate it.  The mesh is unchanged and
-    # stationary here, so retain the generated zero point-displacement field.
-    if [[ -f "${baseline}/0/pointDisplacement.unmapped" && \
-          ! -f "${baseline}/0/pointDisplacement" ]]; then
-        mv -- "${baseline}/0/pointDisplacement.unmapped" \
-            "${baseline}/0/pointDisplacement"
-    fi
 
     foamDictionary "${baseline}/system/decomposeParDict" \
         -entry numberOfSubdomains -set 16 >"${baseline}/log.foamDictionary.steady" 2>&1
@@ -193,7 +159,7 @@ python3 "${script_dir}/run_cases.py" \
     --cpu-set 16-31
 
 if [[ -n "${RESULTS_OUTPUT:-}" ]]; then
-    python3 -m openfoam.analysis \
+    python3 -m environment.openfoam.analysis \
         --cases-root "${case_root}" \
         --config "${resolved_case_settings}" \
         --output-dir "${RESULTS_OUTPUT}"

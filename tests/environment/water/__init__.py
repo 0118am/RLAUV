@@ -1,1 +1,0 @@
-"""Pool environment model tests."""

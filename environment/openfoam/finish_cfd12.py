@@ -35,7 +35,6 @@ _EXPECTED_FREQUENCY_HZ = 1.5
 _EXPECTED_CASE_COUNT = 12
 _EXPECTED_CASES_PER_DOF = 2
 _EXPECTED_COMPLETE_CYCLES = 4
-_FIT_SCRIPT = HERE / "analysis" / "fit_matrices.py"
 _RUNNER_FAILURE_RE = re.compile(
     r"^\s*\[fail\]|Traceback \(most recent call last\)|FOAM\s+FATAL|"
     r"\bMPI_ABORT\b|segmentation fault|floating point exception|"
@@ -626,7 +625,8 @@ def _run_analysis(
 ) -> None:
     command = [
         sys.executable,
-        str(_FIT_SCRIPT),
+        "-m",
+        "environment.openfoam.analysis",
         "--cases-root",
         str(campaign.cases_dir),
         "--config",

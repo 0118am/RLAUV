@@ -201,13 +201,13 @@ def test_validation_summary_enforces_tracking_and_action_gates() -> None:
 
 
 def test_mujoco_model_and_entrypoint_exist_without_importing_optional_runtime() -> None:
-    model_path = PROJECT_ROOT / "robot/assets/mujoco/auv.xml"
+    model_path = PROJECT_ROOT / "robot/assets/mujoco/t60_auv.xml"
     entrypoint = MUJOCO_WORKFLOW_ROOT / "validate_policy.py"
     document = ET.parse(model_path)
-    body = document.find(".//body[@name='auv']")
-    joint = document.find(".//freejoint[@name='auv_freejoint']")
-    inertial = document.find(".//body[@name='auv']/inertial")
-    hull = document.find(".//body[@name='auv']/geom[@name='hull']")
+    body = document.find(".//body[@name='t60_auv']")
+    joint = document.find(".//freejoint[@name='t60_auv_freejoint']")
+    inertial = document.find(".//body[@name='t60_auv']/inertial")
+    hull = document.find(".//body[@name='t60_auv']/geom[@name='hull']")
     sites = document.findall(".//site")
 
     assert body is not None
@@ -239,7 +239,7 @@ def test_mujoco_full_inertia_velocity_is_converted_to_project_body_frame() -> No
         pytest.skip("MuJoCo SDK is not installed")
     from simulation.mujoco.validate_policy import _vehicle_state as read_vehicle_state
 
-    model = mujoco.MjModel.from_xml_path(str(PROJECT_ROOT / "robot/assets/mujoco/auv.xml"))
+    model = mujoco.MjModel.from_xml_path(str(PROJECT_ROOT / "robot/assets/mujoco/t60_auv.xml"))
     data = mujoco.MjData(model)
     body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "auv")
     # Free-joint qvel is world translation followed by body angular velocity

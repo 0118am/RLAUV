@@ -21,10 +21,11 @@ class _Env:
         return self._enabled
 
 
-def test_legacy_missing_feature_list_enables_all_groups() -> None:
-    assert normalize_domain_randomization_features(None) == DOMAIN_RANDOMIZATION_FEATURES
-    env = _Env(None)
-    assert all(domain_randomization_feature_enabled(env, name) for name in DOMAIN_RANDOMIZATION_FEATURES)
+def test_feature_list_must_be_explicit() -> None:
+    with pytest.raises(ValueError, match="must be explicitly configured"):
+        normalize_domain_randomization_features(None)
+    with pytest.raises(ValueError, match="must be explicitly configured"):
+        domain_randomization_feature_enabled(_Env(None), DOMAIN_RANDOMIZATION_FEATURES[0])
 
 
 def test_explicit_feature_subset_is_independent() -> None:
