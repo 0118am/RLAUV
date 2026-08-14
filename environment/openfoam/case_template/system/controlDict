@@ -1,0 +1,48 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application         pimpleFoam;
+startFrom           startTime;
+startTime           0;
+stopAt              endTime;
+endTime             2;
+deltaT              0.001666666667;
+adjustTimeStep      yes;
+maxCo               0.5;
+maxDeltaT           0.001666666667;
+writeControl        adjustable;
+writeInterval       0.1666666667;
+// Forces are written every time step under postProcessing and are not purged.
+// Keep only the final four field phases (one cycle at the default cadence) to
+// prevent a 24-case run from retaining hundreds of gigabytes of processor data.
+purgeWrite          4;
+writeFormat         binary;
+writePrecision      10;
+writeCompression    off;
+timeFormat          general;
+timePrecision       10;
+runTimeModifiable   true;
+
+functions
+{
+    forces
+    {
+        type            forces;
+        libs            (forces);
+        executeControl  timeStep;
+        executeInterval 1;
+        writeControl    timeStep;
+        writeInterval   1;
+        timeStart       0.5;
+        log             true;
+        patches         (auv);
+        rho             rhoInf;
+        rhoInf          997;
+        CofR            (0 0 0);
+    }
+}

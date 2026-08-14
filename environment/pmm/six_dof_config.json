@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "analysis_scope": "six_dof_diagonal_per_frequency_hybrid",
+  "source": "PMM records for the user-confirmed 0.562 m towing model; PMM and CFD are the same 0.7-scale geometry",
+  "sampling": {
+    "gather_hz": 100.0,
+    "gather_hz_status": "motor_acquisition_rate_user_confirmed",
+    "sensor_hz": 500.0,
+    "sensor_hz_status": "load_cell_acquisition_rate_user_confirmed",
+    "active_start_s": 2.5,
+    "active_end_s": 9.5,
+    "active_window_status": "original_numerical_sway_yaw_scripts",
+    "sensor_decimation": 5,
+    "kinematic_harmonics": 3,
+    "position_counts_per_m": 1000000.0,
+    "angle_counts_per_degree": 18300.0
+  },
+  "frequency_estimation": {
+    "nominal_frequency_step_hz": 0.1,
+    "search_lower_fraction": 0.96,
+    "search_upper_fraction": 1.02,
+    "refinement_rounds": 6,
+    "grid_points": 121
+  },
+  "model": {
+    "mass_kg": 7.563213625,
+    "mass_status": "provisional_PLA_wet_mass_with_user_confirmed_15pct_CAD_density_underestimate_and_2p5pct_FFF_PLA_water_uptake",
+    "wet_mass_assumption": {
+      "CAD_dry_mass_before_density_correction_kg": 6.4163,
+      "material": "PLA",
+      "user_confirmed_CAD_density_underestimate_fraction": 0.15,
+      "density_corrected_dry_mass_kg": 7.378745,
+      "assumed_FFF_PLA_water_uptake_mass_fraction": 0.025,
+      "material_sorption_mass_gain_kg": 0.184468625,
+      "provisional_wet_rigid_mass_kg": 7.563213625,
+      "free_or_retained_water_policy": "excluded_from_rigid_mass_unless_proven_mechanically_locked_to_the_model",
+      "nine_kg_heft_interpretation": "possible_free_or_retained_water_not_polymer_sorption_and_not_used_for_rigid_body_subtraction",
+      "inertia_distribution_assumption": "density_correction_and_material_sorption_are_uniform_so_original_CAD_inertia_is_multiplied_by_1p17875",
+      "status": "density_correction_user_confirmed_and_PLA_water_uptake_literature_based_pending_same-duration_wet_weighing_and_wet_inertia_measurement"
+    },
+    "solidworks_default_mass_properties": {
+      "mass_g": 6416.30,
+      "material_volume_mm3": 5541368.13,
+      "surface_area_mm2": 564057.49,
+      "com_mm": [-115.89, 14.78, 74.99],
+      "inertia_at_com_positive_tensor_g_mm2": [
+        [60709478.52, 623.37, 769.94],
+        [623.37, 73524135.11, -24975.85],
+        [769.94, -24975.85, 30753746.51]
+      ],
+      "principal_moments_g_mm2": [30753731.90, 60709478.51, 73524149.72],
+      "source": "user-supplied SolidWorks towing-model mass properties"
+    },
+    "inertia_at_com_flu_kg_m2": [
+      [0.0362509786986625, 0.000000907566775, -0.0000294402831875],
+      [0.000000907566775, 0.07156129780545, 0.0000007347973875],
+      [-0.0000294402831875, 0.0000007347973875, 0.0866665742609125]
+    ],
+    "inertia_status": "provisional_PLA_wet_inertia_equal_to_original_CAD_FLU_tensor_times_1p17875_pending_measurement",
+    "solidworks_default_to_flu_rotation": [
+      [0.0, 0.0, 1.0],
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0]
+    ],
+    "solidworks_default_com_m": [-0.11589, 0.01478, 0.07499],
+    "solidworks_default_sensor_axis_origin_m": [-0.115891263093381, 0.2071682070720373, 0.07700787358443315],
+    "com_from_motion_origin_flu_m": [-0.00201787358443315, 0.000001263093381, -0.1923882070720373],
+    "com_status": "tow_model_COM_relative_to_sensor_axis_origin_transformed_from_SolidWorks_default_to_FLU",
+    "fluid_density_kg_m3": 1025.0,
+    "fluid_density_status": "legacy_unverified_pending_fresh_or_saltwater",
+    "wet_length_m": 0.562,
+    "wet_length_status": "same_as_current_CFD_wetted_STL_bbox_x_extent_user_confirmed",
+    "geometry_scale_of_real_robot": 0.7
+  },
+  "apparatus": {
+    "sensor_column_order": ["TX", "TY", "TZ", "FX", "FY", "FZ"],
+    "frame": "FLU apparatus frame H: x forward, y left, z up",
+    "sensor_mount": "upright_not_rolled_same_apparatus_orientation",
+    "sensor_mount_status": "upright_not_rolled_and_not_yaw_rotated_user_confirmed",
+    "sensor_axes_frame": "raw balance axes aligned with apparatus FLU H; raw wrench is the reaction exerted by the model on the sensor",
+    "sensor_wrench_interpretation": "negate_all_three_forces_and_all_three_moments_to_obtain_the_wrench_on_the_model",
+    "sensor_reaction_sign_to_model_wrench": -1.0,
+    "yaw_encoder_sign_to_H_r": -1.0,
+    "sensor_to_H_wrench_matrix_horizontal": [
+      [0.0, 0.0, 0.0, -1.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0, -1.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0, 0.0, -1.0],
+      [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [0.0, -1.0, 0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, -1.0, 0.0, 0.0, 0.0]
+    ],
+    "sensor_to_H_wrench_matrix_vertical": [
+      [0.0, 0.0, 0.0, -1.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0, -1.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0, 0.0, -1.0],
+      [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      [0.0, -1.0, 0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, -1.0, 0.0, 0.0, 0.0]
+    ],
+    "sensor_to_H_wrench_status": "user_confirmed_full_reaction_wrench_negation; sensor remains upright; horizontal and vertical use [X,Y,Z,K,M,N]=-[FX,FY,FZ,TX,TY,TZ] before model rotation",
+    "body_to_apparatus_rotation_horizontal": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "body_to_apparatus_rotation_vertical": [
+      [1.0, 0.0, 0.0],
+      [0.0, 0.0, -1.0],
+      [0.0, 1.0, 0.0]
+    ],
+    "observed_vertical_encoder_initial_offset_deg": 180.35322404371584,
+    "observed_vertical_encoder_offset_interpretation": "encoder_zero_offset_not_body_yaw_user_confirmed",
+    "vertical_mount": "body rolled +90 degrees about body FLU +x only; no yaw rotation; R_HB=Rx(+pi/2)",
+    "vertical_mount_status": "roll_axis_plus_90_and_no_yaw_rotation_user_confirmed",
+    "wrench_reference": "motion_origin",
+    "wrench_reference_status": "assumed_same_as_PMM_motion_origin",
+    "pitch_hydrostatic_restoring_in_fit": false
+  },
+  "timing": {
+    "horizontal_shift_ms": 0.0,
+    "horizontal_status": "original_processing_common_start_assumption_not_hardware_timestamped",
+    "vertical_shift_ms": 0.0,
+    "vertical_status": "original_processing_common_start_assumption_not_hardware_timestamped",
+    "sensitivity_shifts_ms": [0.0]
+  },
+  "quality": {
+    "short_record_policy": "exclude",
+    "minimum_repeats_per_frequency": 2,
+    "minimum_motion_fit_r2": 0.98,
+    "minimum_load_fit_r2_for_flag": 0.8
+  },
+  "fit": {
+    "method": "trial_harmonic_projection_then_per_frequency_huber",
+    "load_harmonics": [1, 2, 3],
+    "huber_k": 1.5
+  },
+  "full_6d_completion": {
+    "basis": "Every PMM trial includes forward surge/tow speed, which enters u*q and full wrench translation, but there is no independent oscillatory surge acceleration for identifying surge added mass; roll was not performed. Use external priors only for the unidentifiable surge and roll diagonals.",
+    "source": "robot/dynamics/parameters.py",
+    "surge_u": {
+      "added_mass": 10.77,
+      "linear_damping": 38.95,
+      "quadratic_damping": 31.01
+    },
+    "roll_p": {
+      "added_mass": 0.103,
+      "linear_damping": 0.0,
+      "quadratic_damping": 2.08
+    }
+  },
+  "result_scale": {
+    "wet_length_m": 0.562,
+    "geometry_scale_of_real_robot": 0.7,
+    "PMM_and_CFD_length_ratio": 1.0,
+    "coefficient_scale_factor_applied": 1.0,
+    "full_scale_conversion_performed": false,
+    "status": "user_confirmed_same_physical_model_scale"
+  }
+}

@@ -1,0 +1,866 @@
+{
+  "schema_version": 1,
+  "analysis_scope": "six_dof_diagonal_per_frequency_hybrid",
+  "result_scale": {
+    "wet_length_m": 0.562,
+    "geometry_scale_of_real_robot": 0.7,
+    "PMM_and_CFD_length_ratio": 1.0,
+    "coefficient_scale_factor_applied": 1.0,
+    "full_scale_conversion_performed": false
+  },
+  "raw_data_policy": "read_only",
+  "planned_trials": 84,
+  "included_trials": 82,
+  "excluded_trials": 2,
+  "included_trials_by_dof": {
+    "sway": 21,
+    "heave": 19,
+    "pitch": 21,
+    "yaw": 21
+  },
+  "config": {
+    "schema_version": 1,
+    "analysis_scope": "six_dof_diagonal_per_frequency_hybrid",
+    "source": "PMM records for the user-confirmed 0.562 m towing model; PMM and CFD are the same 0.7-scale geometry",
+    "sampling": {
+      "gather_hz": 100.0,
+      "gather_hz_status": "motor_acquisition_rate_user_confirmed",
+      "sensor_hz": 500.0,
+      "sensor_hz_status": "load_cell_acquisition_rate_user_confirmed",
+      "active_start_s": 2.5,
+      "active_end_s": 9.5,
+      "active_window_status": "original_numerical_sway_yaw_scripts",
+      "sensor_decimation": 5,
+      "kinematic_harmonics": 3,
+      "position_counts_per_m": 1000000.0,
+      "angle_counts_per_degree": 18300.0
+    },
+    "frequency_estimation": {
+      "nominal_frequency_step_hz": 0.1,
+      "search_lower_fraction": 0.96,
+      "search_upper_fraction": 1.02,
+      "refinement_rounds": 6,
+      "grid_points": 121
+    },
+    "model": {
+      "mass_kg": 7.563213625,
+      "mass_status": "provisional_PLA_wet_mass_with_user_confirmed_15pct_CAD_density_underestimate_and_2p5pct_FFF_PLA_water_uptake",
+      "wet_mass_assumption": {
+        "CAD_dry_mass_before_density_correction_kg": 6.4163,
+        "material": "PLA",
+        "user_confirmed_CAD_density_underestimate_fraction": 0.15,
+        "density_corrected_dry_mass_kg": 7.378745,
+        "assumed_FFF_PLA_water_uptake_mass_fraction": 0.025,
+        "material_sorption_mass_gain_kg": 0.184468625,
+        "provisional_wet_rigid_mass_kg": 7.563213625,
+        "free_or_retained_water_policy": "excluded_from_rigid_mass_unless_proven_mechanically_locked_to_the_model",
+        "nine_kg_heft_interpretation": "possible_free_or_retained_water_not_polymer_sorption_and_not_used_for_rigid_body_subtraction",
+        "inertia_distribution_assumption": "density_correction_and_material_sorption_are_uniform_so_original_CAD_inertia_is_multiplied_by_1p17875",
+        "status": "density_correction_user_confirmed_and_PLA_water_uptake_literature_based_pending_same-duration_wet_weighing_and_wet_inertia_measurement"
+      },
+      "solidworks_default_mass_properties": {
+        "mass_g": 6416.3,
+        "material_volume_mm3": 5541368.13,
+        "surface_area_mm2": 564057.49,
+        "com_mm": [
+          -115.89,
+          14.78,
+          74.99
+        ],
+        "inertia_at_com_positive_tensor_g_mm2": [
+          [
+            60709478.52,
+            623.37,
+            769.94
+          ],
+          [
+            623.37,
+            73524135.11,
+            -24975.85
+          ],
+          [
+            769.94,
+            -24975.85,
+            30753746.51
+          ]
+        ],
+        "principal_moments_g_mm2": [
+          30753731.9,
+          60709478.51,
+          73524149.72
+        ],
+        "source": "user-supplied SolidWorks towing-model mass properties"
+      },
+      "inertia_at_com_flu_kg_m2": [
+        [
+          0.0362509786986625,
+          9.07566775e-07,
+          -2.94402831875e-05
+        ],
+        [
+          9.07566775e-07,
+          0.07156129780545,
+          7.347973875e-07
+        ],
+        [
+          -2.94402831875e-05,
+          7.347973875e-07,
+          0.0866665742609125
+        ]
+      ],
+      "inertia_status": "provisional_PLA_wet_inertia_equal_to_original_CAD_FLU_tensor_times_1p17875_pending_measurement",
+      "solidworks_default_to_flu_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "solidworks_default_com_m": [
+        -0.11589,
+        0.01478,
+        0.07499
+      ],
+      "solidworks_default_sensor_axis_origin_m": [
+        -0.115891263093381,
+        0.2071682070720373,
+        0.07700787358443315
+      ],
+      "com_from_motion_origin_flu_m": [
+        -0.00201787358443315,
+        1.263093381e-06,
+        -0.1923882070720373
+      ],
+      "com_status": "tow_model_COM_relative_to_sensor_axis_origin_transformed_from_SolidWorks_default_to_FLU",
+      "fluid_density_kg_m3": 1025.0,
+      "fluid_density_status": "legacy_unverified_pending_fresh_or_saltwater",
+      "wet_length_m": 0.562,
+      "wet_length_status": "same_as_current_CFD_wetted_STL_bbox_x_extent_user_confirmed",
+      "geometry_scale_of_real_robot": 0.7
+    },
+    "apparatus": {
+      "sensor_column_order": [
+        "TX",
+        "TY",
+        "TZ",
+        "FX",
+        "FY",
+        "FZ"
+      ],
+      "frame": "FLU apparatus frame H: x forward, y left, z up",
+      "sensor_mount": "upright_not_rolled_same_apparatus_orientation",
+      "sensor_mount_status": "upright_not_rolled_and_not_yaw_rotated_user_confirmed",
+      "sensor_axes_frame": "raw balance axes aligned with apparatus FLU H; raw wrench is the reaction exerted by the model on the sensor",
+      "sensor_wrench_interpretation": "negate_all_three_forces_and_all_three_moments_to_obtain_the_wrench_on_the_model",
+      "sensor_reaction_sign_to_model_wrench": -1.0,
+      "yaw_encoder_sign_to_H_r": -1.0,
+      "sensor_to_H_wrench_matrix_horizontal": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "sensor_to_H_wrench_matrix_vertical": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "sensor_to_H_wrench_status": "user_confirmed_full_reaction_wrench_negation; sensor remains upright; horizontal and vertical use [X,Y,Z,K,M,N]=-[FX,FY,FZ,TX,TY,TZ] before model rotation",
+      "body_to_apparatus_rotation_horizontal": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "body_to_apparatus_rotation_vertical": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "observed_vertical_encoder_initial_offset_deg": 180.35322404371584,
+      "observed_vertical_encoder_offset_interpretation": "encoder_zero_offset_not_body_yaw_user_confirmed",
+      "vertical_mount": "body rolled +90 degrees about body FLU +x only; no yaw rotation; R_HB=Rx(+pi/2)",
+      "vertical_mount_status": "roll_axis_plus_90_and_no_yaw_rotation_user_confirmed",
+      "wrench_reference": "motion_origin",
+      "wrench_reference_status": "assumed_same_as_PMM_motion_origin",
+      "pitch_hydrostatic_restoring_in_fit": false
+    },
+    "timing": {
+      "horizontal_shift_ms": 0.0,
+      "horizontal_status": "original_processing_common_start_assumption_not_hardware_timestamped",
+      "vertical_shift_ms": 0.0,
+      "vertical_status": "original_processing_common_start_assumption_not_hardware_timestamped",
+      "sensitivity_shifts_ms": [
+        0.0
+      ]
+    },
+    "quality": {
+      "short_record_policy": "exclude",
+      "minimum_repeats_per_frequency": 2,
+      "minimum_motion_fit_r2": 0.98,
+      "minimum_load_fit_r2_for_flag": 0.8
+    },
+    "fit": {
+      "method": "trial_harmonic_projection_then_per_frequency_huber",
+      "load_harmonics": [
+        1,
+        2,
+        3
+      ],
+      "huber_k": 1.5
+    },
+    "full_6d_completion": {
+      "basis": "Every PMM trial includes forward surge/tow speed, which enters u*q and full wrench translation, but there is no independent oscillatory surge acceleration for identifying surge added mass; roll was not performed. Use external priors only for the unidentifiable surge and roll diagonals.",
+      "source": "robot/dynamics/parameters.py",
+      "surge_u": {
+        "added_mass": 10.77,
+        "linear_damping": 38.95,
+        "quadratic_damping": 31.01
+      },
+      "roll_p": {
+        "added_mass": 0.103,
+        "linear_damping": 0.0,
+        "quadratic_damping": 2.08
+      }
+    },
+    "result_scale": {
+      "wet_length_m": 0.562,
+      "geometry_scale_of_real_robot": 0.7,
+      "PMM_and_CFD_length_ratio": 1.0,
+      "coefficient_scale_factor_applied": 1.0,
+      "full_scale_conversion_performed": false,
+      "status": "user_confirmed_same_physical_model_scale"
+    },
+    "config_path": "/home/jining_yang/isaac-auv-env/environment/pmm/six_dof_config.json"
+  },
+  "coordinate_transform": {
+    "apparatus_frame": "H FLU: x forward, y left, z up",
+    "body_frame": "B FLU: x forward, y left, z up",
+    "sensor_frame": "upright raw balance frame S; unchanged between horizontal and vertical tests",
+    "sensor_mount_status": "upright_not_rolled_and_not_yaw_rotated_user_confirmed",
+    "horizontal_R_HB": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "vertical_R_HB": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0
+      ]
+    ],
+    "observed_vertical_encoder_initial_offset_deg": 180.35322404371584,
+    "observed_vertical_encoder_offset_interpretation": "encoder_zero_offset_not_body_yaw_user_confirmed",
+    "assumption": "vertical model is rolled +90 degrees about body FLU +x only; the encoder initial offset is not a body yaw rotation",
+    "status": "roll_axis_plus_90_and_no_yaw_rotation_user_confirmed",
+    "derivation": "twists and wrenches are explicitly rotated H to B; changing +90 to -90 reverses each diagonal generalized motion and conjugate load together",
+    "scope": "diagonal terms only; no cross-coupling inference"
+  },
+  "pitch_restoring": {
+    "included_in_fit": false,
+    "reason": "the rolled-model pitch axis is parallel to gravity; normal-attitude hydrostatic restoring is separate"
+  },
+  "wrench_and_rigid_body": {
+    "raw_sensor_order": [
+      "TX",
+      "TY",
+      "TZ",
+      "FX",
+      "FY",
+      "FZ"
+    ],
+    "sensor_mount": "upright_not_rolled_same_apparatus_orientation",
+    "sensor_axes_frame": "raw balance axes aligned with apparatus FLU H; raw wrench is the reaction exerted by the model on the sensor",
+    "sensor_to_H_wrench_matrix_horizontal": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.0
+      ],
+      [
+        -1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "sensor_to_H_wrench_matrix_vertical": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.0
+      ],
+      [
+        -1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "wrench_mapping_scope": "unchanged upright balance: negate the complete raw reaction wrench so [X,Y,Z,K,M,N]=-[FX,FY,FZ,TX,TY,TZ], then apply the model-roll transform",
+    "raw_wrench_reference": "motion_origin",
+    "com_from_motion_origin_flu_m": [
+      -0.00201787358443315,
+      1.263093381e-06,
+      -0.1923882070720373
+    ],
+    "translation_formula": "M_COM=M_origin-r_origin_to_COM cross F using confirmed force channels",
+    "rigid_force_formula": "m*(v_dot+omega cross v) at COM",
+    "rigid_moment_formula": "I_COM*omega_dot+omega cross (I_COM*omega)",
+    "hydrodynamic_target": "measured_wrench_at_COM-rigid_body_wrench_at_COM"
+  },
+  "time_alignment": {
+    "horizontal": {
+      "sensor_time_shift_ms": 0.0,
+      "status": "original_processing_common_start_assumption_not_hardware_timestamped",
+      "definition": "sensor(t) is paired with motion(t+shift)"
+    },
+    "vertical": {
+      "sensor_time_shift_ms": 0.0,
+      "status": "original_processing_common_start_assumption_not_hardware_timestamped",
+      "definition": "sensor(t) is paired with motion(t+shift)"
+    }
+  },
+  "frequency_estimation": {
+    "method": "per-trial nonlinear grid refinement of constant+trend+three-harmonic motion fit",
+    "estimated_frequency_hz_by_trial": {
+      "sway/r1/id8": 0.10199999999998192,
+      "sway/r1/id9": 0.19799258237705764,
+      "sway/r1/id10": 0.29706354517187505,
+      "sway/r1/id11": 0.39609123277494857,
+      "sway/r1/id12": 0.4950689159281764,
+      "sway/r1/id13": 0.5940458475516976,
+      "sway/r1/id14": 0.6929790111040381,
+      "sway/r2/id8": 0.10199999999998996,
+      "sway/r2/id9": 0.19799244854835393,
+      "sway/r2/id10": 0.2970635314699075,
+      "sway/r2/id11": 0.3960912810743312,
+      "sway/r2/id12": 0.49506895886895574,
+      "sway/r2/id13": 0.5940458539791666,
+      "sway/r2/id14": 0.6929789769637346,
+      "sway/r3/id8": 0.10199999999998394,
+      "sway/r3/id9": 0.1979925077205504,
+      "sway/r3/id10": 0.2970635524855324,
+      "sway/r3/id11": 0.3960912512564301,
+      "sway/r3/id12": 0.49506893724022627,
+      "sway/r3/id13": 0.5940458435995372,
+      "sway/r3/id14": 0.6929789663188014,
+      "heave/r1/id8": 0.10199999999989953,
+      "heave/r1/id9": 0.197992491711677,
+      "heave/r1/id10": 0.29706355426697534,
+      "heave/r1/id11": 0.3960912352744342,
+      "heave/r1/id12": 0.4950689750684799,
+      "heave/r1/id13": 0.5940458821990742,
+      "heave/r1/id14": 0.6929789902507716,
+      "heave/r2/id8": 0.10199999999999197,
+      "heave/r2/id9": 0.19799238524871401,
+      "heave/r2/id11": 0.39609124014326136,
+      "heave/r2/id12": 0.49506894081018515,
+      "heave/r2/id13": 0.5940458471882717,
+      "heave/r3/id8": 0.10199999999998594,
+      "heave/r3/id9": 0.19799255266975307,
+      "heave/r3/id10": 0.29706357927314814,
+      "heave/r3/id11": 0.3960912567309671,
+      "heave/r3/id12": 0.4950689407333462,
+      "heave/r3/id13": 0.5940458219251543,
+      "heave/r3/id14": 0.6929789950754244,
+      "pitch/r1/id22": 0.10200000000000001,
+      "pitch/r1/id23": 0.19799156866872428,
+      "pitch/r1/id24": 0.29707168301408177,
+      "pitch/r1/id25": 0.3960712261972737,
+      "pitch/r1/id26": 0.49509009368409207,
+      "pitch/r1/id27": 0.5940374349097224,
+      "pitch/r1/id28": 0.6929779573771863,
+      "pitch/r2/id22": 0.10200000000000001,
+      "pitch/r2/id23": 0.19798392173984056,
+      "pitch/r2/id24": 0.2970743952771991,
+      "pitch/r2/id25": 0.39607755695190333,
+      "pitch/r2/id26": 0.4950694888814943,
+      "pitch/r2/id27": 0.5940625349139661,
+      "pitch/r2/id28": 0.6929486733074847,
+      "pitch/r3/id22": 0.10200000000000001,
+      "pitch/r3/id23": 0.19799399881198565,
+      "pitch/r3/id24": 0.29705521333159723,
+      "pitch/r3/id25": 0.3961038432024177,
+      "pitch/r3/id26": 0.4950529659288195,
+      "pitch/r3/id27": 0.594055782828318,
+      "pitch/r3/id28": 0.6929792620715021,
+      "yaw/r1/id22": 0.10200000000000001,
+      "yaw/r1/id23": 0.19799528074639922,
+      "yaw/r1/id24": 0.2970748577640818,
+      "yaw/r1/id25": 0.3960726346923868,
+      "yaw/r1/id26": 0.4950800934278549,
+      "yaw/r1/id27": 0.5940498894521606,
+      "yaw/r1/id28": 0.6929612071990742,
+      "yaw/r2/id22": 0.10200000000000001,
+      "yaw/r2/id23": 0.19797819586188273,
+      "yaw/r2/id24": 0.2970730009778164,
+      "yaw/r2/id25": 0.3960913382476852,
+      "yaw/r2/id26": 0.49505640472704476,
+      "yaw/r2/id27": 0.5940635031481483,
+      "yaw/r2/id28": 0.6929561508157793,
+      "yaw/r3/id22": 0.10200000000000001,
+      "yaw/r3/id23": 0.19799032940367797,
+      "yaw/r3/id24": 0.2970529284643133,
+      "yaw/r3/id25": 0.396109356128858,
+      "yaw/r3/id26": 0.49505216425154325,
+      "yaw/r3/id27": 0.5940619278838736,
+      "yaw/r3/id28": 0.6929870072492285
+    }
+  },
+  "load_fit": {
+    "method": "trial_harmonic_projection_then_per_frequency_huber",
+    "harmonics": [
+      1,
+      2,
+      3
+    ],
+    "regression": "one Huber fit over repeated trials at each nominal frequency; no cross-frequency pooling",
+    "huber_k": 1.5,
+    "frequency_group_results": {
+      "sway/0.1Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.10199999999998527,
+        "estimated_frequency_std_hz": 3.4138699840210824e-15,
+        "full_r2": 0.9495841582392314,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 6.207651146588096
+      },
+      "sway/0.2Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.19799251288198735,
+        "estimated_frequency_std_hz": 5.475710490850444e-08,
+        "full_r2": 0.9988777046312687,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 9.57518593742335
+      },
+      "sway/0.3Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.2970635430424383,
+        "estimated_frequency_std_hz": 8.710721293274783e-09,
+        "full_r2": 0.9996727231346604,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.14150391189643
+      },
+      "sway/0.4Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.3960912550352366,
+        "estimated_frequency_std_hz": 1.989836049387493e-08,
+        "full_r2": 0.9983620251488934,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 9.882456355555188
+      },
+      "sway/0.5Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.49506893734578616,
+        "estimated_frequency_std_hz": 1.7530658655504554e-08,
+        "full_r2": 0.9984174275642798,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.053953538706565
+      },
+      "sway/0.6Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.5940458483768004,
+        "estimated_frequency_std_hz": 4.277442624071233e-09,
+        "full_r2": 0.9926777824095637,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.080002428464764
+      },
+      "sway/0.7Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.6929789847955248,
+        "estimated_frequency_std_hz": 1.9103787759144612e-08,
+        "full_r2": 0.9962068348162205,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.091596731915919
+      },
+      "heave/0.1Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.10199999999995914,
+        "estimated_frequency_std_hz": 4.2225695725661894e-14,
+        "full_r2": 0.7180679271028441,
+        "fit_quality_flag": "low_load_fit_r2",
+        "standardized_condition_number": 6.207659974212981
+      },
+      "heave/0.2Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.19799247654338137,
+        "estimated_frequency_std_hz": 6.91857835791997e-08,
+        "full_r2": 0.9770939376831027,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 9.57520575118467
+      },
+      "heave/0.3Hz": {
+        "included_repeats": 2,
+        "mean_estimated_frequency_hz": 0.29706356677006174,
+        "estimated_frequency_std_hz": 1.2503086399551222e-08,
+        "full_r2": 0.9940146153503667,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.141504641978647
+      },
+      "heave/0.4Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.39609124404955426,
+        "estimated_frequency_std_hz": 9.184771613698448e-09,
+        "full_r2": 0.7501898697683593,
+        "fit_quality_flag": "low_load_fit_r2",
+        "standardized_condition_number": 9.882454608227853
+      },
+      "heave/0.5Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.49506895220400376,
+        "estimated_frequency_std_hz": 1.6167656576352884e-08,
+        "full_r2": 0.9503737757487422,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.053940168365369
+      },
+      "heave/0.6Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.5940458504375,
+        "estimated_frequency_std_hz": 2.4713754165340394e-08,
+        "full_r2": 0.7862579110313342,
+        "fit_quality_flag": "low_load_fit_r2",
+        "standardized_condition_number": 10.07998416195297
+      },
+      "heave/0.7Hz": {
+        "included_repeats": 2,
+        "mean_estimated_frequency_hz": 0.692978992663098,
+        "estimated_frequency_std_hz": 2.412326394196641e-09,
+        "full_r2": 0.9591918778504922,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.091565863018007
+      },
+      "pitch/0.1Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.10200000000000002,
+        "estimated_frequency_std_hz": 1.3877787807814457e-17,
+        "full_r2": 0.5879507586404551,
+        "fit_quality_flag": "low_load_fit_r2",
+        "standardized_condition_number": 6.970401461473272
+      },
+      "pitch/0.2Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.1979898297401835,
+        "estimated_frequency_std_hz": 4.293774571540482e-06,
+        "full_r2": 0.9538730189639129,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 8.48222787748193
+      },
+      "pitch/0.3Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.29706709720762603,
+        "estimated_frequency_std_hz": 8.475807725726542e-06,
+        "full_r2": 0.9762075171190735,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 7.95491938775507
+      },
+      "pitch/0.4Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.3960842087838649,
+        "estimated_frequency_std_hz": 1.4122143545389801e-05,
+        "full_r2": 0.9974545804977477,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 6.886256265144367
+      },
+      "pitch/0.5Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.4950708494981353,
+        "estimated_frequency_std_hz": 1.5187846262239501e-05,
+        "full_r2": 0.998663610559743,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 6.103703311335304
+      },
+      "pitch/0.6Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.5940519175506688,
+        "estimated_frequency_std_hz": 1.0605276414355637e-05,
+        "full_r2": 0.9989232346373603,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 5.549701324265958
+      },
+      "pitch/0.7Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.6929686309187243,
+        "estimated_frequency_std_hz": 1.412221044099607e-05,
+        "full_r2": 0.9977161889109597,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 4.940187397694506
+      },
+      "yaw/0.1Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.10200000000000002,
+        "estimated_frequency_std_hz": 1.3877787807814457e-17,
+        "full_r2": 0.9731779253740128,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 6.210586870827642
+      },
+      "yaw/0.2Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.19798793533731998,
+        "estimated_frequency_std_hz": 7.177371154320996e-06,
+        "full_r2": 0.9981947819616147,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 9.579067821494265
+      },
+      "yaw/0.3Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.29706692906873716,
+        "estimated_frequency_std_hz": 9.928900811411154e-06,
+        "full_r2": 0.9996745826896382,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.141995057495238
+      },
+      "yaw/0.4Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.39609110968964334,
+        "estimated_frequency_std_hz": 1.4992334779505531e-05,
+        "full_r2": 0.9997260680925432,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 9.881833576651136
+      },
+      "yaw/0.5Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.4950628874688143,
+        "estimated_frequency_std_hz": 1.2288997192612149e-05,
+        "full_r2": 0.999635137057266,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.062143703388811
+      },
+      "yaw/0.6Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.5940584401613941,
+        "estimated_frequency_std_hz": 6.080369269538862e-06,
+        "full_r2": 0.9993628388840077,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.077251983532229
+      },
+      "yaw/0.7Hz": {
+        "included_repeats": 3,
+        "mean_estimated_frequency_hz": 0.6929681217546939,
+        "estimated_frequency_std_hz": 1.3512665191462454e-05,
+        "full_r2": 0.9998755542753556,
+        "fit_quality_flag": "ok",
+        "standardized_condition_number": 10.091144131630823
+      }
+    }
+  }
+}

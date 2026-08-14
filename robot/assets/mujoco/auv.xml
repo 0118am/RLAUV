@@ -1,0 +1,48 @@
+<mujoco model="AUV policy validation">
+  <compiler angle="radian" inertiafromgeom="false" autolimits="true"/>
+  <option timestep="0.005" gravity="0 0 -9.81" integrator="RK4">
+    <flag contact="disable"/>
+  </option>
+
+  <visual>
+    <headlight ambient="0.25 0.25 0.25" diffuse="0.75 0.75 0.75"/>
+    <rgba haze="0.05 0.15 0.20 1"/>
+    <global azimuth="135" elevation="-25"/>
+  </visual>
+
+  <asset>
+    <material name="hull" rgba="0.12 0.32 0.48 1"/>
+    <material name="thruster" rgba="0.08 0.08 0.08 1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 4" dir="0 0 -1"/>
+    <geom name="water_plane" type="plane" pos="0 0 -1" size="8 8 0.02"
+          rgba="0.05 0.25 0.35 0.18" contype="0" conaffinity="0"/>
+
+    <body name="auv" pos="0 0 -3">
+      <freejoint name="auv_freejoint"/>
+      <inertial pos="0 0 0" mass="11.301"
+                fullinertia="0.115628684 0.201210129 0.259427119 -0.000010883 -0.001001989 -0.000004539"/>
+      <geom name="hull" type="ellipsoid" size="0.28075 0.200999878 0.0953108865"
+            material="hull" contype="0" conaffinity="0"/>
+
+      <site name="thruster_T1" pos="0.13400 -0.16000 -0.17098" size="0.018"
+            type="sphere" material="thruster"/>
+      <site name="thruster_T2" pos="-0.15000 -0.16000 -0.17098" size="0.018"
+            type="sphere" material="thruster"/>
+      <site name="thruster_T3" pos="0.13400 0.16000 -0.17098" size="0.018"
+            type="sphere" material="thruster"/>
+      <site name="thruster_T4" pos="-0.15000 0.16000 -0.17098" size="0.018"
+            type="sphere" material="thruster"/>
+      <site name="thruster_T5" pos="-0.15039 0.10360 -0.06312" size="0.018"
+            type="sphere" material="thruster"/>
+      <site name="thruster_T6" pos="-0.15039 -0.10360 -0.06312" size="0.018"
+            type="sphere" material="thruster"/>
+      <site name="thruster_T7" pos="0.13439 0.10360 -0.06312" size="0.018"
+            type="sphere" material="thruster"/>
+      <site name="thruster_T8" pos="0.13439 -0.10360 -0.06312" size="0.018"
+            type="sphere" material="thruster"/>
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,0 +1,15 @@
+# Python and notebooks
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+
+# Experiment outputs and immutable local snapshots
+runs/
+logs/
+results/
+exported_policies/
+archives/
+*.pt
+*.onnx

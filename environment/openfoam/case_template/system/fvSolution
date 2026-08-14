@@ -1,0 +1,82 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+
+solvers
+{
+    "pcorr.*"
+    {
+        solver          GAMG;
+        // __GAMG_UPDATE_INTERVAL__
+        tolerance       0.02;
+        relTol          0;
+        smoother        GaussSeidel;
+    }
+    p
+    {
+        $pcorr;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    pFinal
+    {
+        $p;
+        relTol          0;
+    }
+    "(U|k|omega)"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-7;
+        relTol          0.05;
+    }
+    "(U|k|omega)Final"
+    {
+        $U;
+        relTol          0;
+    }
+    cellDisplacement
+    {
+        solver          GAMG;
+        // __GAMG_UPDATE_INTERVAL__
+        tolerance       1e-8;
+        relTol          0;
+        smoother        GaussSeidel;
+    }
+    cellDisplacementFinal
+    {
+        $cellDisplacement;
+        relTol          0;
+    }
+}
+
+PIMPLE
+{
+    momentumPredictor       yes;
+    correctPhi              yes;
+    // __MOVE_MESH_OUTER_CORRECTORS__
+    nOuterCorrectors        __PIMPLE_OUTER_CORRECTORS__;
+    nCorrectors             2;
+    nNonOrthogonalCorrectors 1;
+    pRefCell                0;
+    pRefValue               0;
+}
+
+relaxationFactors
+{
+    fields { p 0.3; }
+    equations
+    {
+        "(U|k|omega)"       0.7;
+        "(U|k|omega)Final"  1;
+    }
+}
+
+cache
+{
+    grad(U);
+}

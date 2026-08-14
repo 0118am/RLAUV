@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "source": {
+    "basename": "验证机装配体.STEP",
+    "sha256": "9777be1c028d8ebb18f61118466d17671aee1f5860ea8144717c50bc65d6ba07",
+    "units": "mm",
+    "expected_shell_count": 275
+  },
+  "output_frame": {
+    "name": "body_flu_com",
+    "mapping": {
+      "x_body": "z_step",
+      "y_body": "x_step",
+      "z_body": "y_step"
+    },
+    "translation_mm": [1.306, -0.061, -2.385],
+    "source_com_body_mm": [-1.306, 0.061, 2.385],
+    "reference_assumption": "The SolidWorks mass report's Coordinate System1 origin is assumed to coincide with the exported STEP top-level global origin. The STEP contains an identity top-level placement but does not retain a named Coordinate System1 relationship, so this origin equivalence is high-confidence rather than directly provable from the STEP file alone.",
+    "note": "Right-handed cyclic permutation followed by the negative of the reported Coordinate System1 COM, so the output origin is the measured COM.",
+    "validation": {
+      "propeller_landmarks": [
+        {"shell_index": 28, "label": "T1", "expected_body_mm": [143.306, -160.061, -66.885]},
+        {"shell_index": 32, "label": "T2", "expected_body_mm": [-140.694, -160.061, -66.885]},
+        {"shell_index": 35, "label": "T3", "expected_body_mm": [143.306, 159.939, -66.885]},
+        {"shell_index": 38, "label": "T4", "expected_body_mm": [-140.694, 159.939, -66.885]},
+        {"shell_index": 147, "label": "T5", "expected_body_mm": [-139.574, 104.089, 40.115]},
+        {"shell_index": 131, "label": "T6", "expected_body_mm": [-139.574, -104.211, 40.115]},
+        {"shell_index": 139, "label": "T7", "expected_body_mm": [142.186, 104.089, 40.115]},
+        {"shell_index": 123, "label": "T8", "expected_body_mm": [142.186, -104.211, 40.115]}
+      ],
+      "max_nearest_error_mm": 3.0,
+      "note": "Fixed shell-to-thruster labels detect axis/sign errors. The reviewed STEP-origin nominal centres are shifted by the same measured-COM translation as the output surface."
+    }
+  },
+  "selection": {
+    "default_closed_shell_action": "keep",
+    "open_shell_action": "remove",
+    "remove_groups": [
+      "thruster_motor_with_cable",
+      "motor_fastener_detail",
+      "internal_long_enclosure",
+      "internal_bulkhead_frame",
+      "internal_tie_rod"
+    ],
+    "replace_groups": {
+      "thruster_motor_with_cable": "smooth_axisymmetric_envelope"
+    },
+    "preserve_groups": [
+      "main_outer_fairing",
+      "thruster_support_complex",
+      "vertical_thruster_mount_plate",
+      "main_closed_cell_buoyancy_material",
+      "external_hatches_and_windows",
+      "tail_fins_and_connector",
+      "main_pressure_hull",
+      "pressure_hull_endcaps",
+      "propeller_4blade",
+      "propeller_3blade",
+      "propeller_hub_or_nut"
+    ],
+    "hole_policy": "Preserve FACE_BOUND inner loops and cylindrical holes in every retained parent shell.",
+    "note": "Shell 30 is the externally wetted main pressure-hull tube and shells 42/43 are its reviewed open annular end fittings. Their CAD solids only meet the tube at zero-common-volume faces and retain service/fastener openings. The waterproof assembled vehicle therefore requires two derived sealing disks at the measured tube mouths, representing the real end seal/O-ring boundary without filling the external fitting recesses. The production geometry represents the fully assembled vehicle with all eight propellers statically locked."
+  },
+  "volume_validation": {
+    "target_displaced_volume_mm3": 11304505.834,
+    "wrapped_surface_relative_tolerance": 0.02,
+    "snappy_excluded_volume_relative_tolerance": 0.055,
+    "source": "Independently identified assembled-vehicle displacement; the SolidWorks material volume 8690716.111 mm^3 is not the displaced volume."
+  },
+  "motor_replacement": {
+    "shape": "smooth_axisymmetric_envelope",
+    "mount_extension_mm": 5.5,
+    "mount_side_by_shell": {
+      "29": "vmax",
+      "33": "vmax",
+      "36": "vmax",
+      "39": "vmax",
+      "120": "vmax",
+      "128": "vmax",
+      "136": "vmax",
+      "144": "vmax"
+    },
+    "mount_shells_by_motor": {
+      "29": [238],
+      "33": [238],
+      "36": [237],
+      "39": [237],
+      "120": [126],
+      "128": [134],
+      "136": [142],
+      "144": [150]
+    },
+    "minimum_common_volume_mm3": 1.0,
+    "note": "The reviewed axisymmetric envelope retains the main casing, motor nose and static-lock shaft while removing cable/fastener detail. Its mount-side main casing extends 5.5 mm: the vertical motors then overlap shells 237/238 by 0.5 mm, whereas 5.0 mm merely touched the nominal plane. Every single-solid envelope must have positive common volume with its declared mount, hub and propeller."
+  },
+  "locked_propeller": {
+    "condition": "fully_assembled_static_locked",
+    "nominal_motor_shaft_radius_mm": 2.0,
+    "connector_radius_mm": 2.05,
+    "shaft_tip_extension_mm": 0.5,
+    "shaft_refinement_end_mm": 0.0,
+    "maximum_source_volume_relative_error": 0.01,
+    "expected_motor_shaft_length_mm": 24.629963359,
+    "expected_propeller_hub_length_mm": 20.0,
+    "expected_separate_hub_length_mm": 5.0,
+    "signature_tolerance_mm": 0.00001,
+    "minimum_common_volume_mm3": {
+      "mount": 1.0,
+      "hub": 1.0,
+      "propeller": 1.0
+    },
+    "axisymmetric_profile_mm": [
+      [-42.897463135207, 0.0],
+      [-42.897463135207, 2.05],
+      [-20.397463135207, 2.05],
+      [-20.397463135207, 6.0],
+      [-15.897463135207, 6.0],
+      [-15.897463135207, 2.05],
+      [-14.397463135207, 2.05],
+      [-14.397463135207, 7.4],
+      [-12.897463135207, 8.4],
+      [-9.897463135207, 8.4],
+      [-9.897463135207, 9.0],
+      [-6.647463135207, 9.0],
+      [-5.397463135207, 10.25],
+      [-5.397463135207, 12.7],
+      [-2.410623117, 15.537498018],
+      [-1.370861642017, 16.292991320832],
+      [0.0, 16.5],
+      [35.102536865, 16.5],
+      [35.102536865, 0.0]
+    ],
+    "assemblies_by_motor": {
+      "29": {"label": "T1", "propeller_shell": 28, "hub_shell": 27},
+      "33": {"label": "T2", "propeller_shell": 32, "hub_shell": 31},
+      "36": {"label": "T3", "propeller_shell": 35, "hub_shell": 34},
+      "39": {"label": "T4", "propeller_shell": 38, "hub_shell": 37},
+      "144": {"label": "T5", "propeller_shell": 147, "hub_shell": 148},
+      "128": {"label": "T6", "propeller_shell": 131, "hub_shell": 132},
+      "136": {"label": "T7", "propeller_shell": 139, "hub_shell": 140},
+      "120": {"label": "T8", "propeller_shell": 123, "hub_shell": 124}
+    },
+    "note": "The eight STEP motors have the same reviewed coaxial casing/nose/shaft profile. One revolved profile replaces the cabled detailed motor as a single valid smooth solid; its fine shaft is enlarged from radius 2.0 to 2.05 mm only inside the nominal bore. A reviewed intermediate knot approximates the final B-spline blend within 0.0752 mm, well below the 0.5 mm wrap voxel. Each envelope must overlap its mount, hub and propeller and remain within 1% of the corresponding detailed-motor volume. Axes are measured independently from STEP; no world-axis directions are hard-coded."
+  },
+  "sealed_pressure_boundary": {
+    "condition": "waterproof_assembled_vehicle",
+    "representation": "two_tube_opening_sealing_disks",
+    "hull_shell": 30,
+    "endcap_shells": [42, 43],
+    "endcap_by_hull_end": {"start": 43, "end": 42},
+    "expected_inner_radius_mm": 60.0,
+    "expected_outer_radius_mm": 65.0,
+    "expected_hull_length_mm": 300.0,
+    "radial_wall_overlap_mm": 0.5,
+    "disk_half_thickness_mm": 0.5,
+    "signature_tolerance_mm": 0.00001,
+    "minimum_common_volume_mm3": {
+      "start_disk_hull": 1.0,
+      "start_disk_endcap": 1.0,
+      "end_disk_hull": 1.0,
+      "end_disk_endcap": 1.0
+    },
+    "note": "Dimensions are source-specific checks, not construction constants: repair_step measures the coaxial inner/outer radii, axis and two axial endpoints from shell 30. It centres one 1.0 mm disk on each measured tube mouth and extends the radius only 0.5 mm into the tube wall, remaining far inside Rout=65 mm. Each disk must have positive common volume with shell 30 and its reviewed annular end fitting. These disks are waterproof boundary patches, not a full-length solid occupancy: external fitting recesses remain floodable and internal sealed volume is created by surface closure. Final acceptance remains the independent 11.304505834 L ±2% voxel-wrap gate."
+  },
+  "buoyancy_material_validation": {
+    "shell": 257,
+    "role": "waterproof closed-cell main buoyancy material",
+    "condition": "waterproof_closed_cell",
+    "identification_status": "high-confidence geometry/placement inference",
+    "expected_closed_solid_volume_mm3": 2674187.521821612,
+    "volume_relative_tolerance": 0.001,
+    "bbox_absolute_tolerance_mm": 0.0001,
+    "expected_bbox_step_mm": [-110.0000001, 2.4999999, -160.0000001, 110.0000001, 100.63720669, 140.000000155],
+    "hydrodynamic_accounting": "included_once_by_geometry_union; never add this volume numerically to the 11.304505834 L displacement target",
+    "note": "The flattened STEP does not preserve the SolidWorks component name. The large closed upper-body solid, its 2.674 L volume and placement make shell 257 a high-confidence identification of the user-confirmed main waterproof closed-cell buoyancy material. It remains explicitly preserved; the final voxel union naturally prevents double counting against the sealed pressure boundary."
+  },
+  "triangulation": {
+    "linear_deflection_mm": 0.15,
+    "angular_deflection_rad": 0.2,
+    "note": "These values are part of the source-specific intermediate mesh signature and are intentionally not CLI-overridable."
+  },
+  "triangulation_reference": {
+    "null_triangulation_face_indices": [10856],
+    "binary_triangle_count": 1205609,
+    "repeated_vertex_triangle_count": 239,
+    "zero_area_triangle_count": 241,
+    "note": "Historical pre-nose reference retained only for provenance comparison. Exact OCP triangle/null/repeated/zero counts are recorded with expected_match but never gate production; physical gates are shell/frame mapping, solid overlap and motor-volume agreement followed by wrapped volume/topology and snappy displaced volume/checkMesh."
+  },
+  "groups": {
+    "main_outer_fairing": [236, 242],
+    "thruster_support_complex": [126, 134, 142, 150],
+    "vertical_thruster_mount_plate": [237, 238],
+    "main_closed_cell_buoyancy_material": [257],
+    "external_hatches_and_windows": [21, 22, 23, 24, 154, 241],
+    "tail_fins_and_connector": [235, 266, 267],
+    "propeller_4blade": [123, 131, 139, 147],
+    "propeller_3blade": [28, 32, 35, 38],
+    "propeller_hub_or_nut": [27, 31, 34, 37, 124, 132, 140, 148],
+    "thruster_motor_with_cable": [29, 33, 36, 39, 120, 128, 136, 144],
+    "motor_fastener_detail": [119, 121, 122, 125, 127, 129, 130, 133, 135, 137, 138, 141, 143, 145, 146, 149],
+    "main_pressure_hull": [30],
+    "pressure_hull_endcaps": [42, 43],
+    "internal_long_enclosure": [45],
+    "internal_bulkhead_frame": [239, 240],
+    "internal_tie_rod": [53, 54, 56, 57, 58, 59, 155, 156, 157, 158]
+  },
+  "entity_crosscheck": {
+    "main_outer_fairing": [259870, 538790],
+    "thruster_support_complex": [5382, 35380, 400023, 542379],
+    "propellers": [86564, 420102, 450810, 535358, 265912, 335315, 543613, 593571],
+    "motors": [56154, 126836, 127306, 197925, 460810, 476706, 512024, 623040]
+  }
+}

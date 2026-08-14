@@ -1,0 +1,25 @@
+# Generated geometry and provenance
+geometry/processed/
+geometry/validated_*/
+
+# Local OpenFOAM binary deployment (about 594 MiB)
+.runtime/
+
+# Generated OpenFOAM cases and meshes
+cases/
+cases_*/
+mesh_case/constant/polyMesh/
+mesh_case/[1-9]*/
+mesh_case/postProcessing/
+mesh_case/processor*/
+**/processor*/
+**/postProcessing/
+**/log.*
+
+# Identification outputs
+results/*
+!results/.gitkeep
+
+# Python caches
+__pycache__/
+*.py[cod]

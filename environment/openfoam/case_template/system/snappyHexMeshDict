@@ -1,0 +1,119 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+castellatedMesh true;
+snap            true;
+// __SNAPPY_ADD_LAYERS_BEGIN__
+addLayers       true;
+// __SNAPPY_ADD_LAYERS_END__
+
+geometry
+{
+    auv_visual_m.stl
+    {
+        type    triSurfaceMesh;
+        name    auv;
+    }
+    nearBody
+    {
+        type    box;
+        min     (-0.9 -0.7 -0.5);
+        max     ( 0.9  0.7  0.5);
+    }
+    // __LOCKED_ROTOR_GEOMETRY__
+}
+
+castellatedMeshControls
+{
+// __SNAPPY_CELL_LIMITS_BEGIN__
+    maxLocalCells       16000000;
+    maxGlobalCells      16000000;
+// __SNAPPY_CELL_LIMITS_END__
+    minRefinementCells  10;
+    maxLoadUnbalance    0.10;
+    nCellsBetweenLevels 3;
+
+    features
+    (
+        { file "auv_visual_m.eMesh"; level 4; }
+    );
+
+    refinementSurfaces
+    {
+        auv
+        {
+            level (3 4);
+            patchInfo { type wall; }
+        }
+    }
+
+    resolveFeatureAngle 30;
+
+    refinementRegions
+    {
+        nearBody
+        {
+            mode inside;
+            levels ((1e15 2));
+        }
+        // __LOCKED_ROTOR_REFINEMENT__
+    }
+
+    locationInMesh      (4.041 1.541 1.541);
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch        5;
+    tolerance           2.0;
+    nSolveIter          100;
+    nRelaxIter          8;
+    // The 0.5 mm exterior wrap contains millions of voxel stair-step edges.
+    // Explicit attraction to those artificial edges creates irreducible
+    // tet/twist errors; retain their castellated refinement but snap only to
+    // the watertight surface itself.
+    nFeatureSnapIter    8;
+    implicitFeatureSnap false;
+    explicitFeatureSnap false;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    // __SNAPPY_LAYER_CONTROLS_BEGIN__
+    relativeSizes           true;
+    layers
+    {
+        auv { nSurfaceLayers 4; }
+    }
+    expansionRatio          1.2;
+    finalLayerThickness     0.35;
+    minThickness            0.10;
+    nGrow                   0;
+    nBufferCellsNoExtrude   0;
+    // __SNAPPY_LAYER_CONTROLS_END__
+    featureAngle            60;
+    slipFeatureAngle        30;
+    nRelaxIter              5;
+    nSmoothSurfaceNormals   1;
+    nSmoothNormals          3;
+    nSmoothThickness        10;
+    maxFaceThicknessRatio   0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle      90;
+    nLayerIter              50;
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+
+writeFlags (scalarLevels layerSets layerFields);
+mergeTolerance 1e-6;

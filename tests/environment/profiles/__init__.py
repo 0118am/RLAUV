@@ -1,0 +1,1 @@
+"""Measured profile contract tests."""

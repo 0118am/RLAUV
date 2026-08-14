@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bin_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+openfoam_dir="$(cd -- "${bin_dir}/.." && pwd)"
+paraview_root="${AUV_PARAVIEW_ROOT:-${openfoam_dir}/.runtime/paraview-6.0.1}"
+paraview_launcher="${paraview_root}/bin/paraview"
+
+if [[ ! -x "${paraview_launcher}" ]]; then
+    echo "ParaView 尚未安装：${paraview_launcher}" >&2
+    echo "请先执行 ${openfoam_dir}/install_paraview.sh。" >&2
+    exit 1
+fi
+
+unset PV_PLUGIN_PATH QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH
+unset QML2_IMPORT_PATH PYTHONHOME PYTHONPATH
+
+gui_dependency_dir="${paraview_root}/usr/lib/x86_64-linux-gnu"
+if [[ -d "${gui_dependency_dir}" ]]; then
+    export LD_LIBRARY_PATH="${gui_dependency_dir}"
+else
+    unset LD_LIBRARY_PATH
+fi
+
+exec "${paraview_launcher}" "$@"
