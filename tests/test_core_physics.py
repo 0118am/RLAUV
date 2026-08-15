@@ -7,6 +7,8 @@ import torch
 from environment.hydrodynamics import current_fields, models, pool_effects
 from robot.dynamics import tether
 from robot.propulsion import curves
+from robot.propulsion.dynamics import FirstOrderThrusterResponse, ThrusterCommandProcessor
+from robot.runtime import T60_RUNTIME
 
 
 def test_hydrodynamic_terms_obey_energy_contracts() -> None:
@@ -32,6 +34,50 @@ def test_hydrodynamic_terms_obey_energy_contracts() -> None:
         torch.sum(relative_velocity * coriolis, dim=-1),
         torch.zeros(2),
         atol=1.0e-7,
+    )
+
+
+def test_full_hydrodynamic_matrices_use_relative_velocity_and_cross_dof_terms() -> None:
+    model = models.HydrodynamicForceModels(num_envs=1, device=torch.device("cpu"))
+    identity = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+    body_linear_velocity = torch.tensor([[0.30, -0.20, 0.10]])
+    body_angular_velocity = torch.tensor([[0.04, -0.03, 0.02]])
+    current_w = torch.tensor([[0.10, -0.05, 0.02]])
+    relative_velocity = model.calculate_relative_velocity(
+        identity,
+        body_linear_velocity,
+        body_angular_velocity,
+        current_w,
+    )
+    assert torch.allclose(
+        relative_velocity,
+        torch.tensor([[0.20, -0.15, 0.08, 0.04, -0.03, 0.02]]),
+    )
+
+    linear = torch.eye(6).unsqueeze(0)
+    linear[0, 0, 2] = 2.5
+    quadratic = (2.0 * torch.eye(6)).unsqueeze(0)
+    quadratic[0, 4, 0] = -0.75
+    damping = model.calculate_relative_damping_wrench(
+        relative_velocity,
+        linear,
+        quadratic,
+    )
+    expected_damping = -(
+        torch.bmm(linear, relative_velocity.unsqueeze(-1)).squeeze(-1)
+        + torch.bmm(
+            quadratic,
+            (relative_velocity.abs() * relative_velocity).unsqueeze(-1),
+        ).squeeze(-1)
+    )
+    assert torch.allclose(damping, expected_damping)
+
+    added_mass = torch.eye(6).unsqueeze(0)
+    added_mass[0, 1, 5] = 0.4
+    relative_acceleration = torch.tensor([[0.2, -0.1, 0.3, 0.02, -0.04, 0.06]])
+    assert torch.allclose(
+        model.calculate_added_mass_inertia_wrench(relative_acceleration, added_mass),
+        -torch.bmm(added_mass, relative_acceleration.unsqueeze(-1)).squeeze(-1),
     )
 
 
@@ -76,6 +122,82 @@ def test_thruster_curve_preserves_deadband_and_wrench_geometry() -> None:
         dim=-1,
     )
     assert torch.allclose(wrench, expected)
+
+
+def test_horizontal_positive_pwm_selects_complete_installed_flu_branch() -> None:
+    pwm = torch.full((1, 8), 1700.0, dtype=torch.float64)
+    forces = curves.thruster_body_forces_from_pwm_us(pwm)[0]
+    coefficients = torch.tensor(
+        T60_RUNTIME.model.thruster_force_curve_coefficients,
+        dtype=torch.float64,
+    )
+    q = 1700.0 - T60_RUNTIME.model.thruster_pwm_center_us - T60_RUNTIME.model.thruster_pwm_deadband_us
+
+    # Positive physical PWM selects each normalized positive branch. Preserve
+    # its Fx/Fy/Fz vector as a unit.
+    expected_horizontal_flu = coefficients[4:, 2, :] * q**2 + coefficients[4:, 3, :] * q
+    assert torch.allclose(forces[4:], expected_horizontal_flu)
+    assert torch.all(forces[4:6, 0] < 0.0)  # T5/T6: forward rotation, installed toward F-
+    assert torch.all(forces[6:8, 0] > 0.0)  # T7/T8: forward, force toward +F
+
+    # Mirrored installations retain equal F/Z and mirrored L components.
+    assert torch.allclose(forces[4, [0, 2]], forces[5, [0, 2]])
+    assert torch.allclose(forces[4, 1], -forces[5, 1])
+    assert torch.allclose(forces[6, [0, 2]], forces[7, [0, 2]])
+    assert torch.allclose(forces[6, 1], -forces[7, 1])
+
+    negative_pwm = torch.full((1, 8), 1300.0, dtype=torch.float64)
+    negative_forces = curves.thruster_body_forces_from_pwm_us(negative_pwm)[0]
+    expected_negative_horizontal_flu = coefficients[4:, 0, :] * q**2 + coefficients[4:, 1, :] * q
+    assert torch.allclose(negative_forces[4:], expected_negative_horizontal_flu)
+
+
+def test_installed_curve_jacobian_matches_all_three_flu_components() -> None:
+    commands = torch.full((1, 8), 0.8, dtype=torch.float64)
+    epsilon = 1.0e-5
+    numerical = (
+        curves.measured_thruster_body_forces(commands + epsilon)
+        - curves.measured_thruster_body_forces(commands - epsilon)
+    ) / (2.0 * epsilon)
+    analytical = curves.measured_thruster_force_jacobian(commands)
+    assert torch.allclose(analytical, numerical, rtol=1.0e-6, atol=1.0e-6)
+
+
+def test_nominal_thruster_response_and_delay_are_explicit_and_applied() -> None:
+    physics_dt_s = 1.0 / 200.0
+    delay_steps = T60_RUNTIME.thruster_command_delay_steps_for_dt(physics_dt_s)
+    assert T60_RUNTIME.thruster_time_constant_s == 0.08
+    assert T60_RUNTIME.thruster_command_delay_s == 0.13
+    assert delay_steps == 26
+
+    processor = ThrusterCommandProcessor(1, 8, delay_steps, torch.device("cpu"))
+    commands = torch.ones((1, 8))
+    for _ in range(delay_steps):
+        applied = processor.process(commands, delay_steps, 0.0, physics_dt_s)
+        assert torch.equal(applied, torch.zeros_like(applied))
+    applied = processor.process(commands, delay_steps, 0.0, physics_dt_s)
+    assert torch.equal(applied, commands)
+
+    limiter = ThrusterCommandProcessor(1, 8, 0, torch.device("cpu"))
+    out_of_range = torch.tensor([[-2.0, 2.0] * 4])
+    assert torch.equal(
+        limiter.process(out_of_range, 0, 0.0, physics_dt_s),
+        torch.tensor([[-1.0, 1.0] * 4]),
+    )
+
+    response = FirstOrderThrusterResponse(
+        1,
+        8,
+        T60_RUNTIME.thruster_time_constant_s,
+        torch.device("cpu"),
+    )
+    target = torch.ones((1, 8, 3))
+    assert torch.equal(response.advance(target, 0.0), torch.zeros_like(target))
+    realized = response.advance(target, T60_RUNTIME.thruster_time_constant_s)
+    assert torch.allclose(realized, torch.full_like(target, 1.0 - torch.exp(torch.tensor(-1.0))))
+
+    instantaneous = FirstOrderThrusterResponse(1, 8, 0.0, torch.device("cpu"))
+    assert torch.equal(instantaneous.advance(target, 0.0), target)
 
 
 def test_current_field_interpolation_and_periodic_current() -> None:

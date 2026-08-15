@@ -13,9 +13,9 @@ def get_thruster_positions(device: torch.device, dtype: torch.dtype = torch.floa
 
 
 def normalized_command_to_pwm_us(command: torch.Tensor) -> torch.Tensor:
-    """Map a normalized action to the measured 1300...1700 µs interval."""
+    """Map an already bounded normalized command to physical PWM."""
 
-    return AUV.thruster_pwm_center_us + AUV.thruster_pwm_half_range_us * command.clamp(-1.0, 1.0)
+    return AUV.thruster_pwm_center_us + AUV.thruster_pwm_half_range_us * command
 
 
 def thruster_body_forces_from_pwm_us(
@@ -24,8 +24,8 @@ def thruster_body_forces_from_pwm_us(
 ) -> torch.Tensor:
     """Evaluate the canonical absolute-PWM to FLU vector-force curve.
 
-    ``pwm_us`` has shape ``(..., 8)`` and is clamped to 1300...1700 us before
-    evaluation.  The coefficient layout is ``(8, 4, 3)`` with rows
+    ``pwm_us`` has shape ``(..., 8)`` and must already be in 1300...1700 us.
+    The coefficient layout is ``(8, 4, 3)`` with rows
     ``(a_negative, b_negative, a_positive, b_positive)`` and final components
     ``(Fx, Fy, Fz)``.  PWM values in the inclusive 1475...1525 us dead zone
     produce an exact zero vector.
@@ -41,9 +41,7 @@ def thruster_body_forces_from_pwm_us(
     if coeff.shape != (len(AUV.thruster_labels), 4, 3):
         raise ValueError("coefficients must have shape (8, 4, 3).")
 
-    minimum_pwm_us = AUV.thruster_pwm_center_us - AUV.thruster_pwm_half_range_us
-    maximum_pwm_us = AUV.thruster_pwm_center_us + AUV.thruster_pwm_half_range_us
-    offset_us = pwm_us.clamp(minimum_pwm_us, maximum_pwm_us) - AUV.thruster_pwm_center_us
+    offset_us = pwm_us - AUV.thruster_pwm_center_us
     q_negative = torch.clamp(-offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     q_positive = torch.clamp(offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     return (
@@ -61,8 +59,8 @@ def measured_thruster_body_forces(
     """Evaluate the measured FLU force vector of every T60.
 
     ``command`` has shape ``(..., 8)`` and the result has shape ``(..., 8, 3)``.
-    The negative-branch signs and off-axis components are part of the measured
-    coefficients and must not be modified by a separate polarity or direction.
+    Coefficients are stored in physical-PWM branch order. All measured FLU
+    components and their signs are preserved together.
     """
 
     return thruster_body_forces_from_pwm_us(
@@ -86,7 +84,7 @@ def measured_thruster_force_jacobian(
     )
     if coeff.shape != (len(AUV.thruster_labels), 4, 3):
         raise ValueError("coefficients must have shape (8, 4, 3).")
-    offset_us = AUV.thruster_pwm_half_range_us * command.clamp(-1.0, 1.0)
+    offset_us = AUV.thruster_pwm_half_range_us * command
     q_positive = torch.clamp(offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     q_negative = torch.clamp(-offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     positive_slope = AUV.thruster_pwm_half_range_us * (
@@ -104,8 +102,7 @@ def measured_thruster_force_jacobian(
             torch.zeros_like(positive_slope),
         ),
     )
-    inside_command_range = ((command >= -1.0) & (command <= 1.0)).unsqueeze(-1)
-    return torch.where(inside_command_range, branch_slope, torch.zeros_like(branch_slope))
+    return branch_slope
 
 
 def reduce_point_forces_to_wrench(positions_b: torch.Tensor, forces_b: torch.Tensor) -> torch.Tensor:

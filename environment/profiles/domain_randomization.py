@@ -40,7 +40,6 @@ class DomainRandomizationProfile:
     thruster_command_resolution_range: NumberSequence | None = None
     thruster_command_dropout_probability_range: NumberSequence | None = None
     thruster_wake_loss_coefficient_scale_range: NumberSequence | None = None
-    thruster_reaction_torque_coeff_scale_range: NumberSequence | None = None
     damping_speed_linear_scale_range: NumberSequence | None = None
     damping_speed_quadratic_scale_range: NumberSequence | None = None
     battery_voltage_range: NumberSequence | None = None
@@ -66,7 +65,6 @@ class DomainRandomizationProfile:
             "thruster_command_resolution_range",
             "thruster_command_dropout_probability_range",
             "thruster_wake_loss_coefficient_scale_range",
-            "thruster_reaction_torque_coeff_scale_range",
             "damping_speed_linear_scale_range",
             "damping_speed_quadratic_scale_range",
             "battery_voltage_range",

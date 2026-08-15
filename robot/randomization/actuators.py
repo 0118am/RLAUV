@@ -18,7 +18,6 @@ def reset_actuators(env, env_ids: torch.Tensor, stage: int, *, enabled: bool) ->
     env.thruster_command_resolution[env_ids] = env.cfg.thruster_command_resolution
     env.thruster_command_dropout_probability[env_ids] = env.cfg.thruster_command_dropout_probability
     env.thruster_wake_loss_coefficient[env_ids] = env.cfg.thruster_wake_loss_coefficient
-    env.thruster_reaction_torque_coeff[env_ids] = env.cfg.thruster_reaction_torque_coeff
     if not enabled:
         if bool(getattr(env.cfg, "evaluation_thruster_force_scale_override", False)):
             env.thruster_force_scale[env_ids] = float(env.cfg.evaluation_thruster_force_scale)
@@ -33,7 +32,10 @@ def reset_actuators(env, env_ids: torch.Tensor, stage: int, *, enabled: bool) ->
     tau_scale = env.cfg.domain_randomization.thruster_tau_scale_by_stage[stage]
     if tau_scale > 0.0:
         multiplier = 1.0 + sample_symmetric_bounded_normal(tau_scale, (count,), env.device)
-        env.thruster_time_constant[env_ids] = torch.clamp(env.cfg.dyn_time_constant * multiplier, min=0.01)
+        env.thruster_time_constant[env_ids] = torch.clamp(
+            env.cfg.dyn_time_constant * multiplier,
+            min=0.0,
+        )
 
     delay_min, delay_max = env.cfg.domain_randomization.thruster_command_delay_steps_range
     if delay_max > delay_min:
@@ -59,13 +61,6 @@ def reset_actuators(env, env_ids: torch.Tensor, stage: int, *, enabled: bool) ->
     wake_scale = sample_bounded_normal(wake_min, wake_max, (count,), env.device)
     env.thruster_wake_loss_coefficient[env_ids] = torch.clamp(
         env.cfg.thruster_wake_loss_coefficient * wake_scale, min=0.0
-    )
-    reaction_min, reaction_max = getattr(
-        env.cfg.domain_randomization, "thruster_reaction_torque_coeff_scale_range", [1.0, 1.0]
-    )
-    reaction_scale = sample_bounded_normal(reaction_min, reaction_max, (count,), env.device)
-    env.thruster_reaction_torque_coeff[env_ids] = torch.clamp(
-        env.cfg.thruster_reaction_torque_coeff * reaction_scale, min=0.0
     )
     if bool(getattr(env.cfg, "evaluation_thruster_force_scale_override", False)):
         env.thruster_force_scale[env_ids] = float(env.cfg.evaluation_thruster_force_scale)

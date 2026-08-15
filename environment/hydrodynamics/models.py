@@ -20,7 +20,6 @@ from .tensor_ops import (
     expand_6d_matrix,
     mean_one_lognormal_scale,
     multiply_6d_matrix,
-    positive_semidefinite_6d_matrix_from_factor,
     quat_apply_wxyz,
     quat_conjugate_wxyz,
     scale_hydrodynamic_coefficients,
@@ -93,11 +92,6 @@ class HydrodynamicForceModels:
         water_current_w: torch.Tensor,
         added_mass_diag: torch.Tensor | None = None,
         relative_acceleration_b: torch.Tensor | None = None,
-        high_order_residual_enabled: bool = False,
-        high_order_residual_added_mass_factor: torch.Tensor | None = None,
-        high_order_residual_linear_damping_factor: torch.Tensor | None = None,
-        high_order_residual_quadratic_damping_factor: torch.Tensor | None = None,
-        high_order_residual_cubic_damping_factor: torch.Tensor | None = None,
         *,
         added_mass_enabled: bool | None = None,
         relative_velocity_b: torch.Tensor | None = None,
@@ -143,80 +137,11 @@ class HydrodynamicForceModels:
                     added_mass_diag,
                 )
 
-        if high_order_residual_enabled:
-            residual_wrench = self.calculate_high_order_residual_wrench(
-                nu_r,
-                relative_acceleration_b,
-                added_mass_factor=high_order_residual_added_mass_factor,
-                linear_damping_factor=high_order_residual_linear_damping_factor,
-                quadratic_damping_factor=high_order_residual_quadratic_damping_factor,
-                cubic_damping_factor=high_order_residual_cubic_damping_factor,
-            )
-            fluid_wrench = fluid_wrench + residual_wrench
-
         if self.debug:
             power = torch.sum(nu_r * damping_wrench, dim=-1)
             print(f"relative damping power={power}")
 
         return fluid_wrench[:, 0:3], fluid_wrench[:, 3:6]
-
-    def calculate_high_order_residual_wrench(
-        self,
-        nu_r: torch.Tensor,
-        relative_acceleration_b: torch.Tensor | None,
-        *,
-        added_mass_factor: torch.Tensor | None,
-        linear_damping_factor: torch.Tensor | None,
-        quadratic_damping_factor: torch.Tensor | None,
-        cubic_damping_factor: torch.Tensor | None,
-    ) -> torch.Tensor:
-        """Return a passive, coupled 6-DOF residual hydrodynamic wrench.
-
-        This augments, rather than replaces, the nominal Fossen model:
-
-        ``tau_res = -[D1 + ||nu_r|| D2 + ||nu_r||^2 D3] nu_r
-                   - C(Mr, nu_r) nu_r - Mr dot(nu_r)``.
-
-        ``D1``, ``D2``, ``D3`` and ``Mr`` are reconstructed as ``L L^T``
-        from config factors.  It therefore supports CFD-identified full
-        cross-DOF coefficients while retaining non-negative dissipation.  A
-        zero factor is exactly neutral, which is the safe default before CFD
-        or water-tank residual data exists.
-        """
-
-        if nu_r.ndim != 2 or nu_r.shape[1] != 6:
-            raise ValueError(f"nu_r must have shape (N, 6), got {tuple(nu_r.shape)}.")
-
-        batch_size = nu_r.shape[0]
-        zero_factor = torch.zeros(6, dtype=nu_r.dtype, device=nu_r.device)
-
-        def coefficient(factor: torch.Tensor | None) -> torch.Tensor:
-            if factor is None:
-                factor = zero_factor
-            factor_tensor = torch.as_tensor(factor, dtype=nu_r.dtype, device=nu_r.device)
-            return positive_semidefinite_6d_matrix_from_factor(factor_tensor, batch_size)
-
-        residual_added_mass = coefficient(added_mass_factor)
-        linear = coefficient(linear_damping_factor)
-        quadratic = coefficient(quadratic_damping_factor)
-        cubic = coefficient(cubic_damping_factor)
-
-        speed = torch.linalg.vector_norm(nu_r, dim=-1).reshape(batch_size, 1, 1)
-        damping = linear + speed * quadratic + speed.square() * cubic
-        damping_wrench = -torch.bmm(damping, nu_r.unsqueeze(-1)).squeeze(-1)
-
-        residual_wrench = damping_wrench - self.calculate_added_mass_coriolis_wrench(nu_r, residual_added_mass)
-        if relative_acceleration_b is not None:
-            if relative_acceleration_b.shape != nu_r.shape:
-                raise ValueError(
-                    "relative_acceleration_b must have shape "
-                    f"{tuple(nu_r.shape)}, got {tuple(relative_acceleration_b.shape)}."
-                )
-            residual_wrench = residual_wrench + self.calculate_added_mass_inertia_wrench(
-                relative_acceleration_b,
-                residual_added_mass,
-            )
-        return residual_wrench
 
     def calculate_relative_velocity(
         self,

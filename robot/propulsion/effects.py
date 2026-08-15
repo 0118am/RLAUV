@@ -189,37 +189,3 @@ def calculate_thruster_wake_interaction_scale(
 
     total_loss = torch.sum(loss, dim=1)
     return torch.clamp(1.0 - total_loss, min=float(min_scale), max=1.0)
-
-
-def calculate_reaction_torques(
-    thrust: torch.Tensor,
-    thruster_axes_b: torch.Tensor,
-    torque_coeff: torch.Tensor | float,
-    spin_directions: torch.Tensor | list[float] | tuple[float, ...],
-) -> torch.Tensor:
-    """Return body-frame reaction torques from propeller spin."""
-
-    coefficient = torch.as_tensor(torque_coeff, dtype=thrust.dtype, device=thrust.device)
-    if coefficient.ndim == 0:
-        if float(coefficient.item()) == 0.0:
-            return torch.zeros_like(thruster_axes_b)
-        coefficient = coefficient.reshape(1, 1, 1)
-    elif coefficient.ndim == 1:
-        coefficient = coefficient.reshape(-1, 1, 1)
-    elif coefficient.ndim == 2 and coefficient.shape[1] == 1:
-        coefficient = coefficient.reshape(-1, 1, 1)
-    else:
-        raise ValueError("torque_coeff must be a scalar or per-env tensor.")
-    if coefficient.shape[0] not in (1, thrust.shape[0]):
-        raise ValueError(
-            f"torque_coeff must be scalar or have one value per environment, got {tuple(coefficient.shape)}."
-        )
-
-    spin = torch.as_tensor(spin_directions, dtype=thrust.dtype, device=thrust.device)
-    if spin.ndim == 1:
-        spin = spin.reshape(1, -1)
-    if spin.shape[0] == 1:
-        spin = spin.repeat(thrust.shape[0], 1)
-    if spin.shape != thrust.shape:
-        raise ValueError(f"spin_directions must broadcast to thrust shape {tuple(thrust.shape)}.")
-    return -torch.clamp(coefficient, min=0.0) * spin.unsqueeze(-1) * thrust.unsqueeze(-1) * thruster_axes_b

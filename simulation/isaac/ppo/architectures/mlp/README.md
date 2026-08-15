@@ -15,7 +15,7 @@ Each profile declares:
 `mlp_history_5` uses the current 30-D deployable observation plus five prior
 samples of position error, linear-velocity error, attitude error, angular
 velocity, and the actual rate-limited actuator command. This is 135 inputs.
-The Critic receives those same 135 inputs plus 77-D exact simulator state:
+The Critic receives those same 135 inputs plus 76-D privileged simulator state:
 true navigation state, instantaneous water current, effective damping/added
 mass/buoyancy, sampled rigid-body properties, realized actuator force, and
 actuator/battery/tether state. The environment builds and resets the causal

@@ -17,7 +17,6 @@ from robot.dynamics.tether import (
 from robot.propulsion.curves import measured_thruster_body_forces, reduce_point_forces_to_wrench
 from robot.propulsion.effects import (
     calculate_axial_inflow_thrust_scale,
-    calculate_reaction_torques,
     calculate_thruster_wake_interaction_scale,
 )
 
@@ -155,7 +154,6 @@ class AUVForceCompositionMixin:
         needs_axes = (
             self.cfg.thruster_inflow_loss_enabled
             or self.cfg.thruster_wake_interaction_enabled
-            or self._thruster_reaction_torque_enabled
         )
         thruster_axes_b = self._calculate_thruster_axes_b(thruster_forces_b) if needs_axes else None
         if self.cfg.thruster_inflow_loss_enabled:
@@ -175,14 +173,6 @@ class AUVForceCompositionMixin:
         self.realized_thruster_force_n[:] = magnitudes
         wrench_b = reduce_point_forces_to_wrench(self.thruster_com_offsets, thruster_forces_b)
         forces_b, torques_b = wrench_b[:, 0:3], wrench_b[:, 3:6]
-        if self._thruster_reaction_torque_enabled:
-            assert thruster_axes_b is not None
-            torques_b = torques_b + calculate_reaction_torques(
-                magnitudes,
-                thruster_axes_b,
-                self.thruster_reaction_torque_coeff,
-                self._thruster_spin_directions,
-            ).sum(dim=-2)
         return forces_b, torques_b
 
     def _relative_acceleration_for_added_mass(
@@ -200,9 +190,8 @@ class AUVForceCompositionMixin:
         self,
         effective_hydrodynamics: EffectiveHydrodynamicState,
         relative_acceleration_b: torch.Tensor | None,
-        physics_time_s: float,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Evaluate Fossen terms and the separately managed residual wrench."""
+        """Evaluate the configured Fossen fluid terms."""
 
         volumes = self.volumes * effective_hydrodynamics.buoyancy_scale
         forces_b, torques_b = self.force_calculation_functions.calculate_fossen_fluid_forces(
@@ -218,22 +207,9 @@ class AUVForceCompositionMixin:
             effective_hydrodynamics.water_current_w,
             effective_hydrodynamics.added_mass,
             relative_acceleration_b,
-            False,
-            self.high_order_residual_added_mass_factor,
-            self.high_order_residual_linear_damping_factor,
-            self.high_order_residual_quadratic_damping_factor,
-            self.high_order_residual_cubic_damping_factor,
             added_mass_enabled=self._added_mass_enabled,
             relative_velocity_b=effective_hydrodynamics.relative_velocity_b,
         )
-        if self.physx_hydrodynamic_wrench_manager.enabled:
-            residual_wrench_b = self.physx_hydrodynamic_wrench_manager.compute_wrench(
-                effective_hydrodynamics.relative_velocity_b,
-                relative_acceleration_b,
-                physics_time_s,
-            )
-            forces_b = forces_b + residual_wrench_b[:, 0:3]
-            torques_b = torques_b + residual_wrench_b[:, 3:6]
         return forces_b, torques_b
 
     def _compute_dynamics(self, actions: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -252,7 +228,6 @@ class AUVForceCompositionMixin:
         fluid_forces, fluid_torques = self._compose_fluid_wrench(
             effective_hydrodynamics,
             relative_acceleration_b,
-            physics_time_s,
         )
         tether_forces, tether_torques = self._calculate_tether_wrench(
             effective_hydrodynamics.water_current_w

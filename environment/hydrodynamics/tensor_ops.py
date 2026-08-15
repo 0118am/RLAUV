@@ -111,20 +111,6 @@ def scale_hydrodynamic_coefficients(
     raise ValueError(f"Expected 6-vector or 6x6 hydrodynamic coefficients, got {tuple(coefficients.shape)}.")
 
 
-def positive_semidefinite_6d_matrix_from_factor(factor: torch.Tensor, batch_size: int) -> torch.Tensor:
-    """Build a batched PSD 6x6 coefficient matrix from a diagonal or full factor.
-
-    The residual model stores factors rather than unconstrained coefficient
-    matrices.  For a factor ``L`` it uses ``L L^T``; consequently every
-    configured residual-damping term is dissipative by construction and every
-    residual added-mass term is symmetric positive semidefinite.  A six-vector
-    denotes the diagonal of ``L``.
-    """
-
-    matrix_factor = expand_6d_matrix(factor, batch_size)
-    return torch.bmm(matrix_factor, matrix_factor.transpose(-1, -2))
-
-
 def calculate_speed_dependent_damping_scale(
     nu_r: torch.Tensor,
     speed_points: torch.Tensor | list[float] | tuple[float, ...],

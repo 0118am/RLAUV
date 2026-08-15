@@ -28,11 +28,7 @@ from environment.hydrodynamics.models import (
 from robot.propulsion.effects import calculate_voltage_thrust_scale
 from .dynamics_state import AUVDynamicsStateMixin
 from .force_composition import AUVForceCompositionMixin
-from .hydrodynamic_state import (
-    EffectiveHydrodynamicState,
-    PhysxHydrodynamicWrenchCfg,
-    PhysxHydrodynamicWrenchManager,
-)
+from .hydrodynamic_state import EffectiveHydrodynamicState
 
 
 class AUVDynamicsMixin(AUVForceCompositionMixin, AUVDynamicsStateMixin):

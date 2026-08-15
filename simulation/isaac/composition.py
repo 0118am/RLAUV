@@ -19,7 +19,10 @@ from environment.profiles.environment_profile import (
 from robot.runtime import RobotRuntimeProfile, T60_RUNTIME
 
 
-def _neutral_randomization_updates(robot: RobotRuntimeProfile) -> dict[str, Any]:
+def _neutral_randomization_updates(
+    robot: RobotRuntimeProfile,
+    physics_dt_s: float,
+) -> dict[str, Any]:
     """Materialize the complete no-randomization cross-domain contract."""
 
     model = robot.model
@@ -30,14 +33,15 @@ def _neutral_randomization_updates(robot: RobotRuntimeProfile) -> dict[str, Any]
         "volume_range": [model.displaced_volume_m3, model.displaced_volume_m3],
         "mass_range": [model.mass_kg, model.mass_kg],
         "payload_samples": [],
-        "thruster_command_delay_steps_range": [robot.thruster_command_delay_steps] * 2,
+        "thruster_command_delay_steps_range": [
+            robot.thruster_command_delay_steps_for_dt(physics_dt_s)
+        ] * 2,
         "thruster_max_command_rate_range": [robot.thruster_max_command_rate] * 2,
         "thruster_command_resolution_range": [robot.thruster_command_resolution] * 2,
         "thruster_command_dropout_probability_range": [
             robot.thruster_command_dropout_probability
         ] * 2,
         "thruster_wake_loss_coefficient_scale_range": [1.0, 1.0],
-        "thruster_reaction_torque_coeff_scale_range": [1.0, 1.0],
         "damping_speed_linear_scale_range": [1.0, 1.0],
         "damping_speed_quadratic_scale_range": [1.0, 1.0],
         "battery_voltage_range": [robot.battery_initial_voltage] * 2,
@@ -67,13 +71,14 @@ class IsaacComposition:
 
     def apply(self, cfg: Any) -> Any:
         self.robot.validate()
+        physics_dt_s = float(cfg.sim.dt)
         for key, value in self.environment.to_cfg_updates().items():
             setattr(cfg, key, copy.deepcopy(value))
-        for key, value in self.robot.to_isaac_cfg_updates().items():
+        for key, value in self.robot.to_isaac_cfg_updates(physics_dt_s).items():
             setattr(cfg, key, copy.deepcopy(value))
 
         if self.randomization is None:
-            for key, value in _neutral_randomization_updates(self.robot).items():
+            for key, value in _neutral_randomization_updates(self.robot, physics_dt_s).items():
                 setattr(cfg.domain_randomization, key, copy.deepcopy(value))
             cfg.domain_randomization_spec_name = None
         else:

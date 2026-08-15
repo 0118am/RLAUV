@@ -18,8 +18,6 @@ from robot.propulsion.curves import (
 from robot.propulsion.dynamics import FirstOrderThrusterResponse, ThrusterCommandProcessor
 
 from .hydrodynamic_state import (
-    PhysxHydrodynamicWrenchCfg,
-    PhysxHydrodynamicWrenchManager,
     _nominal_hydro_coeff_tensor,
     _repeat_hydro_coeff_for_envs,
 )
@@ -230,11 +228,6 @@ class AUVDynamicsStateMixin:
             )
         else:
             self._sloshing_angular_frequencies_rad_s = self._runtime_empty_frequencies
-        self._thruster_spin_directions = torch.as_tensor(
-            self.cfg.thruster_spin_directions,
-            dtype=torch.float32,
-            device=self.device,
-        ).reshape(1, self.num_thrusters).expand(self.num_envs, self.num_thrusters)
         endpoint_commands = torch.tensor(
             [[-1.0] * self.num_thrusters, [1.0] * self.num_thrusters],
             dtype=torch.float32,
@@ -260,21 +253,6 @@ class AUVDynamicsStateMixin:
 
     def _init_hydrodynamic_model_state(self) -> None:
         self._added_mass_enabled = bool(np.any(np.asarray(self.cfg.added_mass_diag, dtype=np.float32) != 0.0))
-        residual_factors = np.concatenate(
-            [
-                np.asarray(values, dtype=np.float32).reshape(-1)
-                for values in (
-                    self.cfg.high_order_residual_added_mass_factor,
-                    self.cfg.high_order_residual_linear_damping_factor,
-                    self.cfg.high_order_residual_quadratic_damping_factor,
-                    self.cfg.high_order_residual_cubic_damping_factor,
-                )
-            ]
-        )
-        self._high_order_residual_enabled = bool(
-            self.cfg.high_order_residual_enabled and np.any(residual_factors != 0.0)
-        )
-        self._thruster_reaction_torque_enabled = float(self.cfg.thruster_reaction_torque_coeff) != 0.0
         self._added_mass_accel_filter_alpha = min(
             max(float(self.cfg.added_mass_accel_filter_alpha), 0.0),
             1.0,
@@ -298,41 +276,6 @@ class AUVDynamicsStateMixin:
         self._nominal_added_mass_diag = _nominal_hydro_coeff_tensor(
             self.cfg.added_mass_diag, self.device, "added_mass_diag"
         )
-        self.high_order_residual_added_mass_factor = _nominal_hydro_coeff_tensor(
-            self.cfg.high_order_residual_added_mass_factor,
-            self.device,
-            "high_order_residual_added_mass_factor",
-        )
-        self.high_order_residual_linear_damping_factor = _nominal_hydro_coeff_tensor(
-            self.cfg.high_order_residual_linear_damping_factor,
-            self.device,
-            "high_order_residual_linear_damping_factor",
-        )
-        self.high_order_residual_quadratic_damping_factor = _nominal_hydro_coeff_tensor(
-            self.cfg.high_order_residual_quadratic_damping_factor,
-            self.device,
-            "high_order_residual_quadratic_damping_factor",
-        )
-        self.high_order_residual_cubic_damping_factor = _nominal_hydro_coeff_tensor(
-            self.cfg.high_order_residual_cubic_damping_factor,
-            self.device,
-            "high_order_residual_cubic_damping_factor",
-        )
-        self.physx_hydrodynamic_wrench_manager = PhysxHydrodynamicWrenchManager(
-            self.force_calculation_functions,
-            PhysxHydrodynamicWrenchCfg(
-                enabled=bool(self._high_order_residual_enabled and self.cfg.physx_high_order_wrench_enabled),
-                base_scale=float(self.cfg.physx_high_order_wrench_base_scale),
-                modulation_amplitude=float(self.cfg.physx_high_order_wrench_modulation_amplitude),
-                modulation_frequency_hz=float(self.cfg.physx_high_order_wrench_modulation_frequency_hz),
-                modulation_phase_rad=float(self.cfg.physx_high_order_wrench_modulation_phase_rad),
-            ),
-            added_mass_factor=self.high_order_residual_added_mass_factor,
-            linear_damping_factor=self.high_order_residual_linear_damping_factor,
-            quadratic_damping_factor=self.high_order_residual_quadratic_damping_factor,
-            cubic_damping_factor=self.high_order_residual_cubic_damping_factor,
-        )
-
     def _init_randomized_runtime_state(self) -> None:
         self._nominal_water_current_w = torch.tensor(
             self.cfg.water_current_w, dtype=torch.float32, device=self.device
@@ -395,12 +338,6 @@ class AUVDynamicsStateMixin:
         self.thruster_wake_loss_coefficient = torch.full(
             (self.num_envs,),
             self.cfg.thruster_wake_loss_coefficient,
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self.thruster_reaction_torque_coeff = torch.full(
-            (self.num_envs,),
-            self.cfg.thruster_reaction_torque_coeff,
             dtype=torch.float32,
             device=self.device,
         )

@@ -4,8 +4,9 @@
 
 - `isaac/`：Isaac Lab/PhysX Direct Task、共享模型适配、观测、奖励、PPO、训练和评估。
 
-水动力状态计算位于 `isaac/physics_adapter.py`，推进器、缆绳和最终 wrench 合成位于
-`isaac/force_composition.py`。训练和评估命令分别位于
+水流、相对速度和有效水动力状态计算位于 `isaac/physics_adapter.py`；推进器、流体、可选
+系缆和最终 wrench 合成位于 `isaac/force_composition.py`，再由 `env.py` 每个物理步向
+PhysX 提交一次。训练和评估命令分别位于
 `isaac/trajectory/training_commands.py` 与 `evaluation_commands.py`，旧的公共导入入口保持兼容。
 
 Isaac 后端必须从 `robot/` 读取 T60 本体、推进器和运行参数，从 `environment/` 读取水流、

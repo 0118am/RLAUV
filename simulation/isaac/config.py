@@ -251,15 +251,6 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     rew_track_vel_sigma = 0.35
     rew_ang_vel_sigma = 0.5
     rew_forward_min_speed = 1.0e-3
-    # The calibrated high-order residual is applied as a separate external
-    # body wrench through the PhysX wrench composer.  It can be modulated for
-    # explicit dynamics-change experiments without mutating nominal factors.
-    physx_high_order_wrench_enabled = True
-    physx_high_order_wrench_base_scale = 1.0
-    physx_high_order_wrench_modulation_amplitude = 0.0
-    physx_high_order_wrench_modulation_frequency_hz = 0.0
-    physx_high_order_wrench_modulation_phase_rad = 0.0
-
     # Neutral runtime defaults for trajectory tracking. Training distributions are
     # selected through a versioned recipe in simulation.isaac.training.
     class domain_randomization:

@@ -22,7 +22,7 @@ ARCHITECTURE = MlpArchitecture(
     # consumed only by V(o, z_priv) during PPO training, never by the Actor.
     critic_privileged_fields=TRAJECTORY_CRITIC_PRIVILEGED_FIELDS,
     # 30 + 5 * (3 + 3 + 4 + 3 + 8) = 135 Actor inputs; the Critic appends
-    # the 77-D privileged state declared in base.py.
+    # the 76-D privileged state declared in base.py.
     actor_hidden_dims=(512, 384, 256, 128),
     critic_hidden_dims=(512, 384, 256, 128),
     experiment_name="auv_traj_mlp_history_5",

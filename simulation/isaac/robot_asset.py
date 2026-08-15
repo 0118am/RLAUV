@@ -16,6 +16,8 @@ AUV_CFG = RigidObjectCfg(
         ),
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
+            linear_damping=0.0,
+            angular_damping=0.0,
             max_depenetration_velocity=10.0,
             enable_gyroscopic_forces=True,
         ),

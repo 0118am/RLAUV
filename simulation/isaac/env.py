@@ -144,7 +144,7 @@ class AUVTrajEnv(
         self._previous_applied_actions[:] = self.thruster_command_processor.rate_limited_state
         incoming_actions = actions.to(device=self.device, dtype=self._actions.dtype)
         self._raw_actions.copy_(incoming_actions)
-        self._actions.copy_(incoming_actions).clamp_(-1.0, 1.0)
+        self._actions.copy_(incoming_actions)
 
     def _log_action_transport_diagnostics(self) -> None:
         """Periodically expose PPO-command-to-thruster transport statistics."""
@@ -351,7 +351,6 @@ class AUVTrajEnv(
         self._previous_applied_actions[env_ids] = 0.0
         self.realized_thruster_force_n[env_ids] = 0.0
         self.realized_thruster_forces_b[env_ids] = 0.0
-        self.physx_hydrodynamic_wrench_manager.reset(env_ids)
 
         self._default_root_state[env_ids, :] = self._robot.data.default_root_state[env_ids]
         self._default_root_state[env_ids, :3] += self.scene.env_origins[env_ids]

@@ -4,6 +4,7 @@
   "metadata": {
     "additional_hydrodynamics_activation": "scale=0 through policy step 22499; 0.35 from step 22500; 0.70 from step 40500; 1.00 from step 57000",
     "added_mass_distribution": "The recipe never replaces nominal added mass. It multiplies hydrodynamics.added_mass from the selected base profile by independent per-DOF, mean-one lognormal scales generated from standard-normal latent variables; the same sampled matrix is used by inertia and Coriolis terms.",
+    "actuator_timing_reference": "Provisional external hardware reference pending synchronized PWM-to-force tests on the T60: tau=0.08 s for a Blue Robotics T200 and fixed command delay=0.13 s for a Blue Robotics Basic ESC. At the fixed 200 Hz physics rate, 0.13 s is 26 steps.",
     "continuous_parameter_distribution": "Bounded Gaussian: range midpoint is the mean and range endpoints are +/-3 standard deviations; stage amplitudes are symmetric +/-3-sigma bounds.",
     "correlation_model": "Independent reset-time sampling except for shared damping scale and staged disturbance magnitudes.",
     "intended_task": "Isaac-AUV-Traj-Direct-v1",
@@ -19,8 +20,8 @@
     "disturbance_curriculum_stage_steps": "Trajectory curriculum schedule expressed in policy steps; use the selected MLP training configuration to derive iteration counts.",
     "mass_range": "AUV CAD nominal only; no payload ensemble yet.",
     "thruster_scale_by_stage": "Engineering curriculum; target T60 unit-to-unit measurements pending.",
-    "thruster_tau_scale_by_stage": "Disabled until T60 step-response measurements exist.",
-    "thruster_command_delay_steps_range": "Disabled until controller-to-thrust timing is measured.",
+    "thruster_tau_scale_by_stage": "Engineering uncertainty around the external T200 nominal tau=0.08 s from Rossol et al., OCEANS 2022 (https://www.dfki.de/fileadmin/user_upload/import/12795_oceans2022_sos_paper_final.pdf); replace with T60 step-response measurements.",
+    "thruster_command_delay_steps_range": "Fixed 26 physics steps = 0.13 s at 200 Hz, from the NUS Bumblebee oscilloscope measurement of a Blue Robotics Basic ESC (https://bumblebee.sg/pdf/Bumblebee_Robosub_Paper_2022.pdf); no delay randomization until T60 controller-to-thrust timing is measured.",
     "volume_range": "Assembled-vehicle displacement nominal only; repeat buoyancy measurements for an uncertainty range.",
     "water_current_max_by_stage": "Existing pool-training curriculum; target-pool repeated measurements pending.",
     "water_current_tau_range": "Engineering prior for slowly varying pool flow; target-pool time-series fit pending.",
@@ -86,8 +87,8 @@
     ],
     "payload_samples": [],
     "thruster_command_delay_steps_range": [
-      0,
-      0
+      26,
+      26
     ],
     "thruster_command_dropout_probability_range": [
       0.0,
@@ -100,10 +101,6 @@
     "thruster_max_command_rate_range": [
       0.0,
       0.0
-    ],
-    "thruster_reaction_torque_coeff_scale_range": [
-      1.0,
-      1.0
     ],
     "thruster_scale_by_stage": [
       0.0,

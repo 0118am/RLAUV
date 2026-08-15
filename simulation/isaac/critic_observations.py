@@ -119,7 +119,6 @@ class AUVCriticObservationMixin:
                     self.thruster_command_resolution,
                     self.thruster_command_dropout_probability,
                     self.thruster_wake_loss_coefficient.unsqueeze(-1),
-                    self.thruster_reaction_torque_coeff.unsqueeze(-1),
                 ),
                 dim=-1,
             ),
@@ -131,11 +130,6 @@ class AUVCriticObservationMixin:
                 dim=-1,
             ),
             "tether_slack_ratio": self.tether_slack_length / self._critic_nominal_tether_length,
-            # Truth of the *separately managed* external wrench used by
-            # PhysX. It is available only to profiles that explicitly select
-            # it for the Critic and never enters the deployable Actor input.
-            "high_order_residual_wrench_b": self.physx_hydrodynamic_wrench_manager.last_wrench_b / 100.0,
-            "physx_hydrodynamics_scale": self.physx_hydrodynamic_wrench_manager.last_scale,
         }
 
     def _build_critic_observation(self, actor_obs: torch.Tensor) -> torch.Tensor:

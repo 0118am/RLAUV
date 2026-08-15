@@ -64,12 +64,12 @@ class AUVModel:
         (0.13439, -0.10360, -0.06312),   # T8 horizontal/front-right
     )
 
-    # Measured body-frame T60 vector-force model.  Each thruster stores the
-    # four FLU vectors (a_negative, b_negative, a_positive, b_positive), with
+    # Measured body-frame T60 vector-force model. Each thruster stores the four
+    # physical-PWM FLU vectors (a_negative, b_negative, a_positive, b_positive), with
     # vector components ordered (Fx, Fy, Fz).  Quadratic coefficients are in
     # N/us^2 and linear coefficients in N/us.  Curve signs and off-axis forces
-    # are already encoded; there is no separate scalar thrust, polarity, or
-    # fixed-axis conversion in the runtime chain.
+    # are already encoded, so a selected branch must always be evaluated as a
+    # complete three-component vector rather than as a signed scalar thrust.
     thruster_pwm_center_us: float = 1500.0
     thruster_pwm_half_range_us: float = 200.0
     thruster_pwm_deadband_us: float = 25.0
@@ -99,28 +99,28 @@ class AUVModel:
             (8.59225e-3, -7.88179e-3, 4.28832e-2),
         ),
         (
-            (-2.87273e-5, -5.99843e-7, 2.54886e-7),
-            (-2.10643e-2, -1.06914e-2, -2.08868e-3),
             (-1.85457e-5, 1.74530e-5, -1.77918e-6),
             (2.07221e-2, -6.78815e-3, -8.46072e-3),
+            (-2.87273e-5, -5.99843e-7, 2.54886e-7),
+            (-2.10643e-2, -1.06914e-2, -2.08868e-3),
         ),
         (
-            (-2.87273e-5, 5.99843e-7, 2.54886e-7),
-            (-2.10643e-2, 1.06914e-2, -2.08868e-3),
             (-1.85457e-5, -1.74530e-5, -1.77918e-6),
             (2.07221e-2, 6.78815e-3, -8.46072e-3),
+            (-2.87273e-5, 5.99843e-7, 2.54886e-7),
+            (-2.10643e-2, 1.06914e-2, -2.08868e-3),
         ),
         (
-            (3.02662e-5, 4.69924e-7, 2.31237e-5),
-            (2.83503e-2, -1.21290e-2, -1.42489e-2),
             (-6.96610e-5, 1.68788e-5, 2.93961e-5),
             (4.26677e-3, -7.72990e-3, -2.07979e-2),
+            (3.02662e-5, 4.69924e-7, 2.31237e-5),
+            (2.83503e-2, -1.21290e-2, -1.42489e-2),
         ),
         (
-            (3.02662e-5, -4.69924e-7, 2.31237e-5),
-            (2.83503e-2, 1.21290e-2, -1.42489e-2),
             (-6.96610e-5, -1.68788e-5, 2.93961e-5),
             (4.26677e-3, 7.72990e-3, -2.07979e-2),
+            (3.02662e-5, -4.69924e-7, 2.31237e-5),
+            (2.83503e-2, 1.21290e-2, -1.42489e-2),
         ),
     )
 

@@ -37,11 +37,6 @@ class HydrodynamicsProfile:
     added_mass: HydroCoefficients = ZERO_HYDRODYNAMIC_COEFFICIENTS
     added_mass_inertia_scale: float = 1.0
     added_mass_accel_filter_alpha: float = 0.35
-    high_order_residual_enabled: bool = False
-    high_order_residual_added_mass_factor: HydroCoefficients = ZERO_HYDRODYNAMIC_COEFFICIENTS
-    high_order_residual_linear_damping_factor: HydroCoefficients = ZERO_HYDRODYNAMIC_COEFFICIENTS
-    high_order_residual_quadratic_damping_factor: HydroCoefficients = ZERO_HYDRODYNAMIC_COEFFICIENTS
-    high_order_residual_cubic_damping_factor: HydroCoefficients = ZERO_HYDRODYNAMIC_COEFFICIENTS
     water_current_w: NumberSequence = (0.0, 0.0, 0.0)
     water_current_periodic_enabled: bool = False
     water_current_periodic_amplitude_w: NumberSequence = (0.0, 0.0, 0.0)
@@ -78,13 +73,6 @@ class HydrodynamicsProfile:
         validate_nonnegative(self.added_mass_inertia_scale, "hydrodynamics.added_mass_inertia_scale")
         if not 0.0 <= float(self.added_mass_accel_filter_alpha) <= 1.0:
             raise ValueError("hydrodynamics.added_mass_accel_filter_alpha must be in [0, 1].")
-        for name in (
-            "high_order_residual_added_mass_factor",
-            "high_order_residual_linear_damping_factor",
-            "high_order_residual_quadratic_damping_factor",
-            "high_order_residual_cubic_damping_factor",
-        ):
-            validate_6_vector_or_matrix(getattr(self, name), f"hydrodynamics.{name}")
         validate_vector(self.water_current_w, 3, "hydrodynamics.water_current_w")
         validate_vector(
             self.water_current_periodic_amplitude_w,
@@ -137,11 +125,6 @@ class HydrodynamicsProfile:
             "added_mass_diag": self.added_mass,
             "added_mass_inertia_scale": self.added_mass_inertia_scale,
             "added_mass_accel_filter_alpha": self.added_mass_accel_filter_alpha,
-            "high_order_residual_enabled": self.high_order_residual_enabled,
-            "high_order_residual_added_mass_factor": self.high_order_residual_added_mass_factor,
-            "high_order_residual_linear_damping_factor": self.high_order_residual_linear_damping_factor,
-            "high_order_residual_quadratic_damping_factor": self.high_order_residual_quadratic_damping_factor,
-            "high_order_residual_cubic_damping_factor": self.high_order_residual_cubic_damping_factor,
             "water_current_w": self.water_current_w,
             "water_current_periodic_enabled": self.water_current_periodic_enabled,
             "water_current_periodic_amplitude_w": self.water_current_periodic_amplitude_w,

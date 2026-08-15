@@ -249,6 +249,77 @@ def launch_campaign(
     return process.pid, log_path
 
 
+def launch_or_attach_campaign(campaign: TrainingCampaign) -> tuple[int, Path, bool]:
+    """Attach to a tracked live campaign, or launch it when none is running."""
+
+    running, _ = campaign_processes(campaign)
+    tracked = [process for process in running if process.pid_path is not None]
+    if tracked:
+        selected = max(tracked, key=lambda process: process.pid_path.name)
+        return selected.pid, selected.pid_path.with_suffix(".log"), False
+    if running:
+        raise RuntimeError(
+            f"Campaign {campaign.run_name!r} is running without a launcher log; "
+            "refusing to replace it."
+        )
+    pid, log_path = launch_campaign(campaign, replace_running=False)
+    return pid, log_path, True
+
+
+def _emit_log_delta(log_path: Path, offset: int) -> int:
+    """Print newly appended launcher-log bytes and return the next offset."""
+
+    try:
+        with log_path.open("rb") as log_file:
+            log_file.seek(offset)
+            payload = log_file.read()
+            next_offset = log_file.tell()
+    except FileNotFoundError:
+        return offset
+    if payload:
+        text = payload.decode("utf-8", errors="replace")
+        print(_ANSI_ESCAPE.sub("", text), end="", flush=True)
+    return next_offset
+
+
+def follow_campaign_log(
+    pid: int,
+    log_path: str | Path,
+    *,
+    from_start: bool = True,
+    poll_interval_s: float = 0.5,
+) -> str:
+    """Stream a detached campaign's log without owning its lifecycle.
+
+    Interrupting this function only detaches the viewer.  The training worker
+    remains in its independent process group and continues in the background.
+    """
+
+    if poll_interval_s <= 0.0:
+        raise ValueError("poll_interval_s must be positive.")
+    selected_log = Path(log_path)
+    offset = 0
+    if not from_start and selected_log.is_file():
+        offset = selected_log.stat().st_size
+
+    try:
+        while True:
+            offset = _emit_log_delta(selected_log, offset)
+            state = _process_state(pid)
+            if state != "running":
+                offset = _emit_log_delta(selected_log, offset)
+                print(f"\n[training worker PID={pid}: {state}]", flush=True)
+                return state
+            time.sleep(poll_interval_s)
+    except KeyboardInterrupt:
+        state = _process_state(pid)
+        print(
+            f"\n[stopped following log; training PID={pid} is {state}]",
+            flush=True,
+        )
+        return state
+
+
 def latest_launcher_record(campaign: TrainingCampaign) -> tuple[int | None, Path | None, str]:
     """Return the newest PID, log path, and process state for a campaign."""
 

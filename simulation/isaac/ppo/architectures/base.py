@@ -51,13 +51,10 @@ CRITIC_PRIVILEGED_FIELD_DIMENSIONS = {
     # sequence of intermediate thrust scales.
     "realized_thruster_force": 8,
     "thruster_force_scale": 8,
-    # tau, delay, command-rate, resolution, dropout, wake loss, reaction
-    # torque coefficient.
-    "thruster_parameters": 7,
+    # tau, delay, command-rate, resolution, dropout, wake loss.
+    "thruster_parameters": 6,
     "battery_state": 2,
     "tether_slack_ratio": 1,
-    "high_order_residual_wrench_b": 6,
-    "physx_hydrodynamics_scale": 1,
 }
 
 
