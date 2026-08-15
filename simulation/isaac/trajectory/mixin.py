@@ -1,4 +1,4 @@
-"""Trajectory commands, curricula, and domain-randomization mixin.
+"""Trajectory commands and curriculum mixin.
 
 These methods decide task distribution and curriculum state. They deliberately
 do not duplicate reusable physics equations from sibling packages.
@@ -10,20 +10,14 @@ from collections.abc import Sequence
 import torch
 import isaaclab.utils.math as math_utils
 
-from environment.randomization import reset_current, reset_hydrodynamics
-from robot.randomization import reset_actuators, reset_battery
-from robot.randomization.rigid_body import (
-    apply_payload_hydrodynamics,
-    initialize_payload_domain,
-    reset_rigid_body,
-)
-from environment.profiles.features import domain_randomization_feature_enabled
 from robot.control.trajectory.guidance import (
     quaternion_align_body_x_with_velocity,
     quaternion_step_angular_velocity_body,
 )
-from robot.control.trajectory.kinematics import (
+from robot.control.trajectory import (
+    AXIS_SINE,
     LATERAL_SINE,
+    RANDOM_SMOOTH,
     RetimedTrajectoryTables,
     SPATIAL_HELIX,
     TrajectoryKinematicLimits,
@@ -33,10 +27,58 @@ from robot.control.trajectory.kinematics import (
     sample_retimed_phase,
     smooth_startup_time,
 )
+from .sampling_mixin import AUVTrajectorySamplingMixin
 
 
-class AUVTrajectoryMixin:
-    """Owns reset-time task sampling and trajectory/disturbance curricula."""
+class AUVTrajectoryMixin(AUVTrajectorySamplingMixin):
+    """Own reset-time task sampling and moving-reference generation."""
+
+    def _init_trajectory_state(self) -> None:
+        # Moving-target command buffers shared by training, evaluation, and
+        # debug visualization.
+        self._target_pos_w = torch.zeros(self.num_envs, 3, device=self.device)
+        self._target_lin_vel_w = torch.zeros(self.num_envs, 3, device=self.device)
+        self._target_lin_acc_w = torch.zeros(self.num_envs, 3, device=self.device)
+        self._target_lin_jerk_w = torch.zeros(self.num_envs, 3, device=self.device)
+        self._target_ang_vel_w = torch.zeros(self.num_envs, 3, device=self.device)
+        self._target_quat_w = torch.zeros(self.num_envs, 4, device=self.device)
+        self._previous_target_quat_w = torch.zeros(self.num_envs, 4, device=self.device)
+        self._target_derivative_step = torch.full(
+            (self.num_envs,), -1, dtype=torch.long, device=self.device
+        )
+        # A host-side generation marker makes repeated reward/observation/eval
+        # requests in the same policy step a zero-cost lookup. Partial reset
+        # updates remain explicit because their episode clocks restart at zero.
+        self._tracking_target_common_step: int | None = None
+        # Host-side superset of trajectory types currently present in the
+        # population. It lets the hot path omit impossible branches without a
+        # CUDA reduction or dynamic-size indexing operation.
+
+        # Per-environment trajectory parameters sampled at reset.  traj_type is
+        # 0=circle, 1=Lissajous, 2=single-axis sine, 3=wavy loop, 4=spiral,
+        # 5=chirp, 6=racetrack, 7=random smooth Fourier curve,
+        # 8=lateral sine, 9=vertical sine, 10=spatial helix.
+        self._traj_center_w = torch.zeros(self.num_envs, 3, device=self.device)
+        self._traj_type = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._traj_axis = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._traj_amp_x = torch.zeros(self.num_envs, device=self.device)
+        self._traj_amp_y = torch.zeros(self.num_envs, device=self.device)
+        self._traj_amp_z = torch.zeros(self.num_envs, device=self.device)
+        self._traj_period = torch.ones(self.num_envs, device=self.device)
+        self._traj_target_speed_mps = torch.zeros(self.num_envs, device=self.device)
+        self._traj_phase_x = torch.zeros(self.num_envs, device=self.device)
+        self._traj_phase_y = torch.zeros(self.num_envs, device=self.device)
+        retime_nodes = int(self.cfg.trajectory_retime_samples) + 1
+        self._traj_retime_phase = torch.zeros(self.num_envs, retime_nodes, device=self.device)
+        self._traj_retime_elapsed_s = torch.zeros(self.num_envs, retime_nodes, device=self.device)
+        self._traj_retime_phase_rate = torch.zeros(self.num_envs, retime_nodes, device=self.device)
+        self._traj_retime_phase_acceleration = torch.zeros(self.num_envs, retime_nodes, device=self.device)
+        self._traj_effective_period_s = torch.ones(self.num_envs, device=self.device)
+        self._traj_retimed = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        self._traj_curvature_m_inv = torch.zeros(self.num_envs, device=self.device)
+        self._traj_target_orientation_rate_radps = torch.zeros(self.num_envs, device=self.device)
+        self._default_root_state = torch.zeros(self.num_envs, 13, device=self.device)
+        self._default_env_origins = torch.zeros(self.num_envs, 3, device=self.device)
 
     def _trajectory_kinematic_limits(self) -> TrajectoryKinematicLimits:
         """Materialize the versioned simulator envelope from runtime config."""
@@ -54,10 +96,6 @@ class AUVTrajectoryMixin:
 
         if not self.cfg.trajectory_curriculum:
             return -1
-
-        forced_stage = int(getattr(self.cfg, "curriculum_gate_stage", -1))
-        if forced_stage >= 0:
-            return min(forced_stage, len(self.cfg.trajectory_curriculum_amp_scales) - 1)
 
         stage = 0
         for step_boundary in self.cfg.trajectory_curriculum_stage_steps:
@@ -100,166 +138,39 @@ class AUVTrajectoryMixin:
 
         return stage_types, amp_x_range, amp_y_range, amp_z_range, period_range
 
-    def _reset_trajectory(self, env_ids: Sequence[int]):
-        """Sample trajectory parameters for reset environments."""
-
-        num_env_ids = len(env_ids)
-        zeros = torch.zeros(num_env_ids, device=self.device)
-
-        # The trajectory center is the environment origin at the nominal
-        # starting depth, so the command stays local to each cloned env.
-        self._traj_center_w[env_ids, :] = self._default_env_origins[env_ids, :]
-        self._target_quat_w[env_ids, :] = math_utils.quat_from_euler_xyz(zeros, zeros, zeros)
-        self._target_lin_acc_w[env_ids, :] = 0.0
-        self._target_lin_jerk_w[env_ids, :] = 0.0
-        self._target_ang_vel_w[env_ids, :] = 0.0
+    def _initialize_trajectory_reset(self, env_ids: torch.Tensor) -> None:
+        count = int(env_ids.numel())
+        zeros = torch.zeros(count, device=self.device)
+        self._traj_center_w[env_ids] = self._default_env_origins[env_ids]
+        self._target_quat_w[env_ids] = math_utils.quat_from_euler_xyz(zeros, zeros, zeros)
+        self._target_lin_acc_w[env_ids] = 0.0
+        self._target_lin_jerk_w[env_ids] = 0.0
+        self._target_ang_vel_w[env_ids] = 0.0
         self._target_derivative_step[env_ids] = -1
         self._traj_target_speed_mps[env_ids] = 0.0
 
-        if self.cfg.trajectory_eval_mode:
-            # Fixed eval trajectories use deterministic parameters so repeated
-            # evaluations are comparable across checkpoints.
-            self._traj_type[env_ids] = self.cfg.trajectory_eval_type
-            self._traj_axis[env_ids] = 0
-            if self.cfg.trajectory_eval_type == 7:
-                amp_x_lower, amp_x_upper = self.cfg.trajectory_amp_x_range
-                amp_y_lower, amp_y_upper = self.cfg.trajectory_amp_y_range
-                amp_z_lower, amp_z_upper = self.cfg.trajectory_amp_z_range
-                period_lower, period_upper = self.cfg.trajectory_period_range
-                self._traj_amp_x[env_ids] = math_utils.sample_uniform(
-                    amp_x_lower, amp_x_upper, (num_env_ids,), device=self.device
-                )
-                self._traj_amp_y[env_ids] = math_utils.sample_uniform(
-                    amp_y_lower, amp_y_upper, (num_env_ids,), device=self.device
-                )
-                self._traj_amp_z[env_ids] = math_utils.sample_uniform(
-                    amp_z_lower, amp_z_upper, (num_env_ids,), device=self.device
-                )
-                self._traj_period[env_ids] = math_utils.sample_uniform(
-                    period_lower, period_upper, (num_env_ids,), device=self.device
-                )
-                self._traj_phase_x[env_ids] = math_utils.sample_uniform(
-                    0.0, 2.0 * torch.pi, (num_env_ids,), device=self.device
-                )
-                self._traj_phase_y[env_ids] = math_utils.sample_uniform(
-                    0.0, 2.0 * torch.pi, (num_env_ids,), device=self.device
-                )
-            else:
-                self._traj_amp_x[env_ids] = self.cfg.trajectory_eval_amp_x
-                self._traj_amp_y[env_ids] = self.cfg.trajectory_eval_amp_y
-                self._traj_amp_z[env_ids] = self.cfg.trajectory_eval_amp_z
-                self._traj_period[env_ids] = self.cfg.trajectory_eval_period
-                self._traj_phase_x[env_ids] = 0.0
-                self._traj_phase_y[env_ids] = 0.0
-            if self.cfg.trajectory_eval_type in (LATERAL_SINE, VERTICAL_SINE, SPATIAL_HELIX):
-                self._traj_target_speed_mps[env_ids] = float(self.cfg.trajectory_eval_speed_mps)
-        else:
-            # Random smooth trajectories form the RL training command
-            # distribution.  The shapes share one compact parameterization so
-            # the observation interface remains identical across all samples.
-            train_types, amp_x_range, amp_y_range, amp_z_range, period_range = self._get_trajectory_training_profile()
-            amp_x_lower, amp_x_upper = amp_x_range
-            amp_y_lower, amp_y_upper = amp_y_range
-            amp_z_lower, amp_z_upper = amp_z_range
-            period_lower, period_upper = period_range
-            train_types = torch.as_tensor(train_types, device=self.device, dtype=torch.long)
-            speed_levels = torch.as_tensor(
-                self.cfg.trajectory_speed_levels_mps, device=self.device, dtype=torch.float32
-            )
-            if speed_levels.ndim != 1 or speed_levels.numel() == 0 or bool(torch.any(speed_levels <= 0.0)):
-                raise ValueError("trajectory_speed_levels_mps must be a non-empty list of positive speeds.")
-            if bool(torch.any(speed_levels > float(self.cfg.trajectory_max_speed_mps))):
-                raise ValueError("trajectory_speed_levels_mps exceeds trajectory_max_speed_mps.")
-            controlled_type = (
-                (train_types == LATERAL_SINE)
-                | (train_types == VERTICAL_SINE)
-                | (train_types == SPATIAL_HELIX)
-            )
-            if bool(torch.all(controlled_type)):
-                # Draw from a shuffled Cartesian pool. A full 12-environment
-                # reset therefore contains every 3-shape x 4-speed pair once;
-                # smaller/asynchronous reset batches remain uniformly random.
-                combination_count = train_types.numel() * speed_levels.numel()
-                repeats = (num_env_ids + combination_count - 1) // combination_count
-                combinations = torch.arange(combination_count, device=self.device).repeat(repeats)
-                combinations = combinations[torch.randperm(combinations.numel(), device=self.device)[:num_env_ids]]
-                train_type_indices = torch.div(combinations, speed_levels.numel(), rounding_mode="floor")
-                speed_indices = torch.remainder(combinations, speed_levels.numel())
-            else:
-                train_type_indices = torch.randint(0, len(train_types), (num_env_ids,), device=self.device)
-                speed_indices = torch.randint(0, speed_levels.numel(), (num_env_ids,), device=self.device)
-            self._traj_type[env_ids] = train_types[train_type_indices]
-            self._traj_axis[env_ids] = torch.randint(0, 3, (num_env_ids,), device=self.device)
-            self._traj_amp_x[env_ids] = math_utils.sample_uniform(
-                amp_x_lower, amp_x_upper, (num_env_ids,), device=self.device
-            )
-            self._traj_amp_y[env_ids] = math_utils.sample_uniform(
-                amp_y_lower, amp_y_upper, (num_env_ids,), device=self.device
-            )
-            self._traj_amp_z[env_ids] = math_utils.sample_uniform(
-                amp_z_lower, amp_z_upper, (num_env_ids,), device=self.device
-            )
-            self._traj_period[env_ids] = math_utils.sample_uniform(
-                period_lower, period_upper, (num_env_ids,), device=self.device
-            )
-            self._traj_phase_x[env_ids] = math_utils.sample_uniform(
-                0.0, 2.0 * torch.pi, (num_env_ids,), device=self.device
-            )
-            self._traj_phase_y[env_ids] = math_utils.sample_uniform(
-                0.0, 2.0 * torch.pi, (num_env_ids,), device=self.device
-            )
 
-            speed_controlled = (
-                (self._traj_type[env_ids] == LATERAL_SINE)
-                | (self._traj_type[env_ids] == VERTICAL_SINE)
-                | (self._traj_type[env_ids] == SPATIAL_HELIX)
-            )
-            self._traj_target_speed_mps[env_ids] = torch.where(
-                speed_controlled,
-                speed_levels[speed_indices],
-                self._traj_target_speed_mps[env_ids],
-            )
 
+    def _apply_speed_controlled_geometry(self, env_ids: torch.Tensor) -> None:
         trajectory_types = self._traj_type[env_ids]
-        lateral = trajectory_types == LATERAL_SINE
-        vertical = trajectory_types == VERTICAL_SINE
-        helix = trajectory_types == SPATIAL_HELIX
-        self._traj_amp_y[env_ids] = torch.where(
-            lateral,
-            torch.full_like(self._traj_amp_y[env_ids], float(self.cfg.trajectory_lateral_sine_amplitude_m)),
-            self._traj_amp_y[env_ids],
+        overrides = (
+            (self._traj_amp_y, trajectory_types == LATERAL_SINE, self.cfg.trajectory_lateral_sine_amplitude_m),
+            (self._traj_amp_z, trajectory_types == VERTICAL_SINE, self.cfg.trajectory_vertical_sine_amplitude_m),
+            (self._traj_amp_x, trajectory_types == SPATIAL_HELIX, self.cfg.trajectory_spatial_helix_radius_x_m),
+            (self._traj_amp_y, trajectory_types == SPATIAL_HELIX, self.cfg.trajectory_spatial_helix_radius_y_m),
+            (self._traj_amp_z, trajectory_types == SPATIAL_HELIX, self.cfg.trajectory_spatial_helix_amplitude_z_m),
         )
-        self._traj_amp_z[env_ids] = torch.where(
-            vertical,
-            torch.full_like(self._traj_amp_z[env_ids], float(self.cfg.trajectory_vertical_sine_amplitude_m)),
-            self._traj_amp_z[env_ids],
-        )
-        self._traj_amp_x[env_ids] = torch.where(
-            helix,
-            torch.full_like(self._traj_amp_x[env_ids], float(self.cfg.trajectory_spatial_helix_radius_x_m)),
-            self._traj_amp_x[env_ids],
-        )
-        self._traj_amp_y[env_ids] = torch.where(
-            helix,
-            torch.full_like(self._traj_amp_y[env_ids], float(self.cfg.trajectory_spatial_helix_radius_y_m)),
-            self._traj_amp_y[env_ids],
-        )
-        self._traj_amp_z[env_ids] = torch.where(
-            helix,
-            torch.full_like(self._traj_amp_z[env_ids], float(self.cfg.trajectory_spatial_helix_amplitude_z_m)),
-            self._traj_amp_z[env_ids],
-        )
-
-        if self.cfg.trajectory_eval_mode and self.cfg.trajectory_eval_type == 7:
-            sampled_amplitudes = torch.stack(
-                (self._traj_amp_x[env_ids], self._traj_amp_y[env_ids], self._traj_amp_z[env_ids]), dim=-1
+        for target, selected, value in overrides:
+            target[env_ids] = torch.where(
+                selected,
+                torch.full_like(target[env_ids], float(value)),
+                target[env_ids],
             )
-            if bool(torch.any(sampled_amplitudes <= 0.0)):
-                raise ValueError(
-                    "random_smooth evaluation requires positive x/y/z amplitude ranges; "
-                    "a static reference is not a trajectory evaluation."
-                )
 
+    def _build_trajectory_tables(
+        self,
+        env_ids: torch.Tensor,
+    ) -> RetimedTrajectoryTables:
         tables = build_retimed_tables(
             self._traj_type[env_ids],
             self._traj_axis[env_ids],
@@ -283,39 +194,65 @@ class AUVTrajectoryMixin:
         self._traj_period[env_ids] = tables.requested_period_s
         self._traj_effective_period_s[env_ids] = tables.effective_period_s
         self._traj_retimed[env_ids] = tables.retimed
+        return tables
 
-        self._update_tracking_targets(env_ids)
-        # At t=0 the startup ramp deliberately makes velocity zero, so its
-        # direction is undefined. Use the unramped path tangent once at reset
-        # to point body +X along the direction in which motion will begin.
-        if self.cfg.trajectory_align_heading_with_velocity:
-            initial_time = torch.zeros(num_env_ids, dtype=torch.float32, device=self.device)
-            initial_phase, initial_phase_rate, initial_phase_acceleration = sample_retimed_phase(
-                tables,
-                initial_time,
-            )
-            _, initial_tangent_velocity_w, _, _ = evaluate_retimed_reference(
-                self._traj_type[env_ids],
-                self._traj_axis[env_ids],
-                self._traj_amp_x[env_ids],
-                self._traj_amp_y[env_ids],
-                self._traj_amp_z[env_ids],
-                self._traj_phase_x[env_ids],
-                self._traj_phase_y[env_ids],
-                initial_phase,
-                initial_phase_rate,
-                initial_phase_acceleration,
-                radius_min=float(self.cfg.trajectory_eval_radius_min),
-                radius_max=float(self.cfg.trajectory_eval_radius_max),
-                harmonic_ratio=float(self.cfg.trajectory_random_smooth_harmonic_ratio),
-            )
-            self._target_quat_w[env_ids, :] = quaternion_align_body_x_with_velocity(
-                initial_tangent_velocity_w,
-                self._target_quat_w[env_ids, :],
-                self.cfg.trajectory_heading_min_speed,
-            )
-            self._previous_target_quat_w[env_ids, :] = self._target_quat_w[env_ids, :]
+    def _align_initial_trajectory_heading(
+        self,
+        env_ids: torch.Tensor,
+        tables: RetimedTrajectoryTables,
+    ) -> None:
+        if not self.cfg.trajectory_align_heading_with_velocity:
+            return
+        initial_time = torch.zeros(env_ids.numel(), dtype=torch.float32, device=self.device)
+        phase, phase_rate, phase_acceleration = sample_retimed_phase(tables, initial_time)
+        _, tangent_velocity_w, _, _ = evaluate_retimed_reference(
+            self._traj_type[env_ids],
+            self._traj_axis[env_ids],
+            self._traj_amp_x[env_ids],
+            self._traj_amp_y[env_ids],
+            self._traj_amp_z[env_ids],
+            self._traj_phase_x[env_ids],
+            self._traj_phase_y[env_ids],
+            phase,
+            phase_rate,
+            phase_acceleration,
+            radius_min=float(self.cfg.trajectory_eval_radius_min),
+            radius_max=float(self.cfg.trajectory_eval_radius_max),
+            harmonic_ratio=float(self.cfg.trajectory_random_smooth_harmonic_ratio),
+        )
+        self._target_quat_w[env_ids] = quaternion_align_body_x_with_velocity(
+            tangent_velocity_w,
+            self._target_quat_w[env_ids],
+            self.cfg.trajectory_heading_min_speed,
+        )
+        self._previous_target_quat_w[env_ids] = self._target_quat_w[env_ids]
 
+    def _reset_trajectory(self, env_ids: Sequence[int]) -> None:
+        """Sample trajectory parameters and rebuild phase tables."""
+
+        selected = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
+        self._initialize_trajectory_reset(selected)
+        if self.cfg.trajectory_eval_mode:
+            self._sample_evaluation_trajectory(selected)
+        else:
+            self._sample_training_trajectory(selected)
+        self._apply_speed_controlled_geometry(selected)
+        if self.cfg.trajectory_eval_mode and self.cfg.trajectory_eval_type == RANDOM_SMOOTH:
+            amplitudes = torch.stack(
+                (
+                    self._traj_amp_x[selected],
+                    self._traj_amp_y[selected],
+                    self._traj_amp_z[selected],
+                ),
+                dim=-1,
+            )
+            if bool(torch.any(amplitudes <= 0.0)):
+                raise ValueError(
+                    "random_smooth evaluation requires positive x/y/z amplitude ranges."
+                )
+        tables = self._build_trajectory_tables(selected)
+        self._update_tracking_targets(selected)
+        self._align_initial_trajectory_heading(selected, tables)
     def _update_tracking_targets(self, env_ids: Sequence[int] | None = None):
         """Update target pose/velocity from the stored trajectory parameters."""
 
@@ -374,7 +311,7 @@ class AUVTrajectoryMixin:
         self._traj_curvature_m_inv[env_ids] = curvature
         if self.cfg.trajectory_align_heading_with_velocity:
             heading_velocity_w = target_lin_vel_w.clone()
-            heading_velocity_w[self._traj_type[env_ids] == 2] = 0.0
+            heading_velocity_w[self._traj_type[env_ids] == AXIS_SINE] = 0.0
             self._target_quat_w[env_ids, :] = quaternion_align_body_x_with_velocity(
                 heading_velocity_w,
                 self._target_quat_w[env_ids, :],
@@ -430,148 +367,3 @@ class AUVTrajectoryMixin:
             "effective_period_s": self._traj_effective_period_s,
             "retimed": self._traj_retimed,
         }
-
-    def _init_payload_domain(self) -> None:
-        """Prepare a categorical ensemble of physically correlated payloads."""
-
-        initialize_payload_domain(self)
-
-    def _reset_domain(self, env_ids: Sequence[int]):
-        env_ids_device = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
-        payload_enabled = reset_rigid_body(
-            self,
-            env_ids_device,
-            enabled=self._domain_randomization_feature_enabled("rigid_body"),
-        )
-        self._reset_disturbance_domain(env_ids_device)
-        if payload_enabled:
-            apply_payload_hydrodynamics(self, env_ids_device)
-        self._log_domain_randomization_state()
-
-    def _domain_randomization_enabled(self) -> bool:
-        return bool(self.cfg.domain_randomization.use_custom_randomization) and (
-            not self.cfg.eval_mode or bool(getattr(self.cfg, "eval_domain_randomization", False))
-        )
-
-    def _domain_randomization_feature_enabled(self, feature: str) -> bool:
-        """Return whether one independently managed DR feature is active."""
-
-        return domain_randomization_feature_enabled(self, feature)
-
-    def _log_domain_randomization_state(self) -> None:
-        """Expose effective sampled domains to RSL-RL/TensorBoard.
-
-        Statistics cover the full active vectorized environment after each
-        reset.  This makes it possible to audit the distribution that actually
-        reached PhysX instead of relying only on configured bounds.
-        """
-
-        interval = max(1, int(getattr(self.cfg, "domain_randomization_log_interval_steps", 250)))
-        last_step = getattr(self, "_last_domain_randomization_log_step", None)
-        if last_step is not None and self.common_step_counter - last_step < interval:
-            return
-        self._last_domain_randomization_log_step = self.common_step_counter
-
-        log = self.extras.setdefault("log", {})
-        # Keep terminal and TensorBoard fields compact. The surrounding
-        # episode/log context already identifies these as randomized-domain
-        # diagnostics, so a repeated ``DomainRandomization/`` namespace only
-        # makes the rollout summary harder to scan.
-        log["enabled"] = float(self._domain_randomization_enabled())
-        for feature in (
-            "rigid_body",
-            "current",
-            "hydrodynamics",
-            "actuators",
-            "battery",
-        ):
-            log[f"feature_{feature}_enabled"] = float(
-                self._domain_randomization_feature_enabled(feature)
-            )
-        if hasattr(self.cfg.domain_randomization, "water_current_max_by_stage"):
-            log["curriculum_stage"] = float(
-                self._get_disturbance_curriculum_stage()
-            )
-            log["curriculum_global_step"] = float(
-                self._disturbance_curriculum_global_step()
-            )
-            log["additional_hydrodynamics_scale"] = float(
-                self._additional_hydrodynamics_scale()
-            )
-
-        def add_stats(name: str, values: torch.Tensor) -> None:
-            flat = values.detach().to(dtype=torch.float32).reshape(-1)
-            if flat.numel() == 0:
-                return
-            log[f"{name}_mean"] = flat.mean()
-            log[f"{name}_std"] = flat.std(unbiased=False)
-            log[f"{name}_min"] = flat.min()
-            log[f"{name}_max"] = flat.max()
-
-        add_stats("mass_kg", self.masses)
-        add_stats("volume_m3", self.volumes)
-        add_stats("center_of_mass_offset_m", torch.linalg.vector_norm(self.center_of_mass_offsets, dim=1))
-        add_stats("com_to_cob_offset_m", torch.linalg.vector_norm(self.com_to_cob_offsets, dim=1))
-        add_stats("principal_inertia_kg_m2", self.inertia_principal_moments)
-        add_stats("added_mass_randomization_scale", self.added_mass_randomization_scale)
-        add_stats("added_mass_coefficient", self.added_mass_diag)
-        if self._payload_sample_count > 0:
-            add_stats("payload_sample_index", self.payload_sample_indices)
-        add_stats("water_current_mps", torch.linalg.vector_norm(self.water_current_w, dim=1))
-        add_stats("thruster_force_scale", self.thruster_force_scale)
-        add_stats("thruster_time_constant_s", self.thruster_time_constant)
-        add_stats("thruster_delay_steps", self.thruster_delay_steps)
-        add_stats("battery_voltage_v", self.battery_voltage)
-
-    def _disturbance_curriculum_global_step(self) -> int:
-        """Return the monotonic DR step count used by resumed campaigns."""
-
-        offset = int(getattr(self.cfg, "disturbance_curriculum_global_step_offset", 0))
-        if offset < 0:
-            raise ValueError("disturbance_curriculum_global_step_offset must be non-negative.")
-        return offset + int(self.common_step_counter)
-
-    def _get_disturbance_curriculum_stage(self) -> int:
-        forced_eval_stage = int(getattr(self.cfg, "eval_disturbance_stage", -1))
-        if self.cfg.eval_mode and forced_eval_stage >= 0:
-            return min(forced_eval_stage, len(self.cfg.domain_randomization.water_current_max_by_stage) - 1)
-        if not getattr(self.cfg.domain_randomization, "disturbance_curriculum", False):
-            return len(self.cfg.domain_randomization.water_current_max_by_stage) - 1
-
-        stage = 0
-        for step_boundary in self.cfg.domain_randomization.disturbance_curriculum_stage_steps:
-            if self._disturbance_curriculum_global_step() >= step_boundary:
-                stage += 1
-        return min(stage, len(self.cfg.domain_randomization.water_current_max_by_stage) - 1)
-
-    def _reset_disturbance_domain(self, env_ids: Sequence[int]) -> None:
-        if not isinstance(env_ids, torch.Tensor):
-            env_ids_device = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
-        else:
-            env_ids_device = env_ids.to(device=self.device, dtype=torch.long)
-        stage = self._get_disturbance_curriculum_stage()
-        reset_current(
-            self,
-            env_ids_device,
-            stage,
-            enabled=self._domain_randomization_feature_enabled("current"),
-        )
-        reset_hydrodynamics(
-            self,
-            env_ids_device,
-            stage,
-            enabled=self._domain_randomization_feature_enabled("hydrodynamics"),
-        )
-        reset_actuators(
-            self,
-            env_ids_device,
-            stage,
-            enabled=self._domain_randomization_feature_enabled("actuators"),
-        )
-        reset_battery(
-            self,
-            env_ids_device,
-            stage,
-            enabled=self._domain_randomization_feature_enabled("battery"),
-        )
-        self.tether_slack_length[env_ids_device] = self.cfg.tether_slack_length

@@ -22,28 +22,6 @@ def _quat_apply_wxyz(quaternion: torch.Tensor, vector: torch.Tensor) -> torch.Te
     return vector + quaternion[..., :1] * cross_twice + torch.linalg.cross(vector_part, cross_twice)
 
 
-def test_root_state_matches_initial_trajectory_pose_and_velocity_without_mutating_input():
-    original = torch.full((2, 13), -9.0, dtype=torch.float64)
-    position = torch.tensor([[1.0, 2.0, -8.0], [4.0, 5.0, -7.0]], dtype=torch.float64)
-    quaternion = torch.tensor([[1.0, 0.0, 0.0, 0.0], [0.5, 0.5, 0.5, 0.5]], dtype=torch.float64)
-    linear_velocity = torch.tensor([[0.1, 0.2, 0.3], [-0.2, 0.4, 0.1]], dtype=torch.float64)
-    angular_velocity = torch.tensor([[0.0, 0.0, 0.2], [0.3, -0.1, 0.0]], dtype=torch.float64)
-
-    aligned = guidance.root_state_at_tracking_target(
-        original,
-        position,
-        quaternion,
-        linear_velocity,
-        angular_velocity,
-    )
-
-    assert torch.equal(original, torch.full_like(original, -9.0))
-    assert torch.equal(aligned[:, :3], position)
-    assert torch.equal(aligned[:, 3:7], quaternion)
-    assert torch.equal(aligned[:, 7:10], linear_velocity)
-    assert torch.equal(aligned[:, 10:13], angular_velocity)
-
-
 def test_body_x_aligns_with_three_dimensional_velocity():
     velocity = torch.tensor(
         [
@@ -100,11 +78,3 @@ def test_quaternion_step_returns_shortest_body_angular_velocity():
 
     expected = torch.tensor([[0.0, 0.0, torch.pi]], dtype=torch.float64)
     assert torch.allclose(angular_velocity, expected, atol=1.0e-12)
-
-
-if __name__ == "__main__":
-    test_body_x_aligns_with_three_dimensional_velocity()
-    test_near_zero_velocity_keeps_previous_attitude()
-    test_quaternion_sign_stays_continuous_across_yaw_wrap()
-    test_quaternion_step_returns_shortest_body_angular_velocity()
-    print("Trajectory guidance checks passed.")

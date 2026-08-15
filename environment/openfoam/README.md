@@ -5,13 +5,12 @@
 **OpenCFD OpenFOAM v2512**；Foundation 版与其他 OpenCFD 版本的求解器和动态网格
 字典不能直接混用。
 
-## 当前几何门禁
+## 当前几何处理
 
-当前生产输入来自 [`验证机装配体.STEP`](验证机装配体.STEP)，源文件 SHA-256 为
-`9777be1c028d8ebb18f61118466d17671aee1f5860ea8144717c50bc65d6ba07`。处理流程不会
-修改源 STEP，并由
+当前生产输入来自 [`验证机装配体.STEP`](验证机装配体.STEP)。处理流程不会修改源 STEP，
+并由
 [`geometry/verification_assembly_repair.json`](geometry/verification_assembly_repair.json)
-记录源指纹并锁定经过复核的壳编号：保留外壳、主压力筒、螺丝孔、舱盖/窗口、推进器安装支架、
+记录经过复核的壳编号：保留外壳、主压力筒、螺丝孔、舱盖/窗口、推进器安装支架、
 尾翼以及 8 组外置螺旋桨/桨毂；删除压力舱内框架/拉杆及电机线缆、紧固件细节，并用 8 个
 单实体轴对称光滑包络替换详细电机。包络包含半径 `16.5 mm` 主壳、经 STEP 复核的多段鼻罩
 和锁桨轴；主壳向支架侧延伸 `5.5 mm`。它不是逐细节 CAD 复刻，而是保留湿表面主要截面积
@@ -21,7 +20,7 @@
 为 `2.0 mm`；包络内的细轴改为半径 `2.05 mm`，从桨毂前端多伸 `0.5 mm` 并连续进入鼻罩。
 额外 `0.05 mm` 只位于名义配合孔内。19 点旋转剖面对原 B-spline 最大径向误差
 `0.0752 mm`；生成包络体积 `36861.963 mm³`，相对 8 台原详细电机均约低 `0.2811%`，
-通过 `1%` 门禁。每组包络还必须与 mount/hub/prop 分别产生至少 `1 mm³` 的实体交叠；
+相对误差约 `0.2811%`。每组包络与 mount/hub/prop 分别产生至少 `1 mm³` 的实体交叠；
 实测最小值约为 `376.2/41.47/234.92 mm³`。
 8 台水平/竖直电机的实际倾轴和端点均由 STEP 逐台测量并写入 selection report，不硬编码
 世界轴。若实际试验是自由转桨，必须另建转子动力学工况，不能把本静态锁桨矩阵直接当作自由转结果。
@@ -55,19 +54,17 @@ buoyancy material**；由于扁平 STEP 没有保留原 SolidWorks 零件名，�
 独立诊断先用 `R=60 mm` 相切薄盘确认了筒口位置；正式版使用更稳健的
 `R=60.5 mm` 正交叠，并已从最终 repair 产物完成 `0.5 mm` wrap。正式结果为
 `11.460906875 L`，相对目标 `+1.38353%`，通过原定
-`11.304505834 L ±2%` 门禁；输出为单连通水密流形，boundary/non-manifold 边均为零。
+`11.304505834 L` 的误差为 `+1.38353%`；输出为单连通水密流形，boundary/non-manifold 边均为零。
 OpenFOAM v2512 进一步确认它无非法三角形、法向一致且无自相交。随后绕 COM 原点统一
 缩放 `0.001` 得到正式米制输入，范围为 `0.562 × 0.4025 × 0.191 m`。
 
-当前正式输入只来自 `geometry/validated_locked_rotor_v1/`，面数、哈希和范围均从该目录的
-重建报告读取。
+当前正式输入只来自 `geometry/validated_locked_rotor_v1/`，面数和范围均从该目录的重建报告读取。
 
 正式选择明细见
 [`selection_report.json`](geometry/validated_locked_rotor_v1/selection_report.json)，
-包络拓扑与体积门禁见
+包络拓扑与体积结果见
 [`wetted_body_mm.json`](geometry/validated_locked_rotor_v1/wetted_body_mm.json)，
-米制缩放、边界和哈希见
-[`wetted_body_m.provenance.json`](geometry/validated_locked_rotor_v1/wetted_body_m.provenance.json)。
+米制缩放与边界见 `wetted_body_m.transform.json`。
 这些均为可再生的大文件/报告，默认不进 Git。
 
 严格拓扑通过不等于几何已经物理收敛。voxel 报告中的 Euler 特征/genus
@@ -212,8 +209,7 @@ environment/openfoam/run_in_docker.sh bash
 ## 执行顺序
 
 1. 安装固定版本的 OCCT Python 运行时，然后从 STEP 生成经筛选和电机简化的体坐标
-   mm 制中间 STL。脚本会自动记录 STEP 指纹，但不把用户提供的 SHA 当作运行门禁；
-   输出仍是相交多实体，只能作为下一步的输入。所有新产物与当前正在运行的
+   mm 制中间 STL。输出仍是相交多实体，只能作为下一步的输入。所有新产物与当前正在运行的
    `environment/openfoam/cases` 物理隔离：
 
    ```bash
@@ -258,7 +254,7 @@ environment/openfoam/run_in_docker.sh bash
      environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_mm.stl
    ```
 
-3. 仅在 mm 表面通过上述严格门禁后，以流式方式绕已修正的 COM 原点缩放到 m。这个工具不会为
+3. 在检查 mm 表面后，以流式方式绕已修正的 COM 原点缩放到 m。这个工具不会为
    `16M+` 面表面构造内存巨大的 VTK 边图：
 
    ```bash
@@ -266,8 +262,8 @@ environment/openfoam/run_in_docker.sh bash
      environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_mm.stl \
      environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_m.stl \
      --scale 0.001 \
-     --provenance \
-     environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_m.provenance.json \
+     --report \
+     environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_m.transform.json \
      --force
 
    environment/openfoam/launch_openfoam.sh surfaceCheck \
@@ -276,9 +272,8 @@ environment/openfoam/run_in_docker.sh bash
    ```
 
 4. 最终文件已经是 m 制 body-FLU 湿表面，因此用 `--prepared-input` 跳过再次缩放和
-   大型 VTK 拓扑构图；缩放 provenance 已记录输入/输出 SHA，建网入口也会重新计算并在
-   运行摘要中打印实际输入 SHA，不要求用户手工提供哈希门禁。
-   OpenFOAM 严格表面门禁和排水体积门禁仍强制执行。先用 dry-run 核对命令，
+   大型 VTK 拓扑构图。建网入口检查 STL 后缀、表面拓扑、网格质量和排水体积，不再维护
+   文件哈希或 provenance 交叉校验。先用 dry-run 核对命令，
    再在独立 `cases_locked_rotor_v1` 中建共享网格；不得指向正在使用的 `environment/openfoam/cases`：
 
    ```bash
@@ -289,8 +284,6 @@ environment/openfoam/run_in_docker.sh bash
      --expected-displaced-volume-m3 0.011304505834 \
      --mesh-volume-relative-tolerance 0.055 \
      --cases-dir environment/openfoam/cases_locked_rotor_v1 \
-     --provenance \
-     environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_m.provenance.json \
      --mesh-only --dry-run
 
    source environment/openfoam/env.sh
@@ -300,12 +293,10 @@ environment/openfoam/run_in_docker.sh bash
      --repair-report environment/openfoam/geometry/validated_locked_rotor_v1/selection_report.json \
      --expected-displaced-volume-m3 0.011304505834 \
      --mesh-volume-relative-tolerance 0.055 \
-     --cases-dir environment/openfoam/cases_locked_rotor_v1 \
-     --provenance \
-     environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_m.provenance.json
+     --cases-dir environment/openfoam/cases_locked_rotor_v1
    ```
 
-   入口依次自动记录 SHA，再执行 `surfaceCheck -checkSelfIntersection`、`blockMesh`、
+   入口依次执行 `surfaceCheck -checkSelfIntersection`、`blockMesh`、
    `surfaceFeatureExtract`、`snappyHexMesh -overwrite` 和
    `checkMesh -allGeometry -allTopology -meshQuality`。网格硬门槛要求：两个工具日志均以
    `End` 正常结束，snappy/checkMesh 最后一组 `meshQualityDict` 配置阈值计数全部为零，
@@ -317,7 +308,7 @@ environment/openfoam/run_in_docker.sh bash
    `blockMesh` 外域体积减去 `checkMesh` 流体总体积，要求 snappy 排除体积相对
    `0.011304505834 m³` 的误差不超过 `5.5%`，再生成 24 个
    运动算例及一个静止 baseline，并以相对链接分发共享 `polyMesh`。表面门禁日志写入
-   `environment/openfoam/geometry/validated_locked_rotor_v1/surfaceCheck.log`，网格日志位于
+   `environment/openfoam/cases_locked_rotor_v1/surfaceCheck.log`，网格日志位于
    `environment/openfoam/cases_locked_rotor_v1/mesh_case/logs/`。`--allow-dirty` 只供调试，发布流程禁止使用。
 
    网格生成器从 selection report 的 8 条实际倾轴自动写入局部加密区：
@@ -357,27 +348,10 @@ environment/openfoam/run_in_docker.sh bash
      --output-dir environment/openfoam/results
    ```
 
-### 12 工况自动收尾
-
-正式的单频 `1.5 Hz`、每自由度双幅值实验可用持久监视器自动收尾：
-
-```bash
-python3 environment/openfoam/finish_cfd12.py \
-  --cases-dir environment/openfoam/cases_cfd12_no_layers_level6_v1 \
-  --config environment/openfoam/experiment_configs/cfd12_no_layers_level6_performance.json \
-  --output-dir environment/openfoam/results_cfd12_no_layers_level6_v1 \
-  --wait-seconds 30 \
-  --runner-log environment/openfoam/cfd12_runner.log
-```
-
-`--runner-log` 可重复指定。脚本只在精确 `12` 个工况的 schema-v2 `.completed` 全部通过
-`run_cases.py` 原始输出复验后才拟合；它也会观察明确指向该 cases 目录的 runner 进程。
-未完成时若 runner 日志出现失败，或已观察到的全部 runner 提前退出，脚本会退出并原子写入
-与输出目录同级的 `<output-dir>.failure.json`。成功路径在同级 staging 目录运行分析，默认用
-`200` 次周期 bootstrap、`10000` 次被动性抽样并投影 `M_A` 为 PSD；只有 case 数、每 DOF
-双幅值、秩 3、每工况 4 个完整周期、有限 `6×6` 矩阵、PSD、配置更新一致、被动性负分数为
-零且末两周期比较均可用时，才把整个 staging 目录原子改名为最终输出目录。现有非匹配输出
-目录不会被覆盖。
+完成指定算例后直接运行分析命令即可。旧的 `finish_cfd12.py` 将进程监控、固定 12 工况假设、
+重复输出校验、拟合和发布门禁绑定在一起，现已移除。需要抽样或 PSD 投影时直接向
+`environment.openfoam.analysis` 传入对应选项，分析结果本身保留秩、周期收敛、矩阵和被动性
+诊断，不再由第二套脚本决定是否允许发布。
 
 最终输出同时包含原始 `36` 项矩阵、可选物理投影矩阵、置信区间、设计秩/条件数、
 逐通道 RMS、附加质量对称误差/特征值和阻尼被动性抽样，并生成可直接合并到本项目的：
@@ -402,7 +376,7 @@ python3 environment/openfoam/finish_cfd12.py \
 - 平移和转动算例各真实运行一个 `pimpleFoam` 动态网格时间步，均正常结束并写出
   流体力与力矩；
 - 2 进程 MPI 平移动态网格时间步正常结束；
-- 几何、建网格门禁、载荷解析与完整 108 系数合成恢复测试全部通过。
+- 几何和网格检查、载荷解析与完整 108 系数合成恢复测试全部通过。
 
 这些验证证明部署语法和数据链可以闭合。正式湿表面来自上述独立 staging 链路；发布矩阵
 前仍需完成人工外形核对、网格收敛、时间步收敛和外域尺寸研究。

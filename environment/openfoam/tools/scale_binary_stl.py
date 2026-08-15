@@ -4,14 +4,12 @@
 This utility exists for final high-resolution surfaces whose topology has
 already passed ``surfaceCheck``.  It validates the exact binary STL layout,
 streams triangle records in NumPy chunks, preserves winding and normals, and
-writes bounds/digests to a provenance sidecar.
+writes transform parameters and bounds to a compact report.
 """
 
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import os
@@ -32,14 +30,6 @@ TRIANGLE_DTYPE = np.dtype(
     align=False,
 )
 RECORD_BYTES = 50
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _read_header(path: Path) -> tuple[bytes, int]:
@@ -68,69 +58,70 @@ def _bbox_payload(minimum: np.ndarray, maximum: np.ndarray) -> dict[str, list[fl
     }
 
 
-def scale_binary_stl(
+def _validated_paths(
     source: Path,
     output: Path,
-    provenance: Path,
+    report_path: Path,
     *,
-    expected_sha256: str | None = None,
     scale: float,
     chunk_triangles: int,
     force: bool,
-) -> dict:
-    source = source.resolve()
-    output = output.resolve()
-    provenance = provenance.resolve()
-    if source == output or provenance in (source, output):
-        raise ValueError("input, output and provenance paths must be distinct")
+) -> tuple[Path, Path, Path]:
+    source, output, report_path = source.resolve(), output.resolve(), report_path.resolve()
+    if source == output or report_path in (source, output):
+        raise ValueError("input, output and report paths must be distinct")
     if not source.is_file():
         raise FileNotFoundError(source)
     if not math.isfinite(scale) or scale <= 0.0:
         raise ValueError("scale must be finite and positive")
     if chunk_triangles < 1:
         raise ValueError("chunk size must be positive")
-    existing = [path for path in (output, provenance) if path.exists()]
+    existing = [path for path in (output, report_path) if path.exists()]
     if existing and not force:
         raise FileExistsError("refusing to overwrite: " + ", ".join(map(str, existing)))
+    return source, output, report_path
 
-    source_digest = _sha256(source)
-    if expected_sha256 is not None and source_digest != expected_sha256.lower():
-        raise ValueError(
-            f"source SHA-256 mismatch: expected {expected_sha256}, got {source_digest}"
-        )
-    _header, triangle_count = _read_header(source)
+
+def _temporary_path(destination: Path, suffix: str) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=suffix,
+    )
+    os.close(descriptor)
+    return Path(name)
+
+
+def _scale_triangle_records(
+    source: Path,
+    temporary: Path,
+    triangle_count: int,
+    scale: float,
+    chunk_triangles: int,
+) -> tuple[np.ndarray, np.ndarray]:
     source_map = np.memmap(
-        source, dtype=TRIANGLE_DTYPE, mode="r", offset=84, shape=(triangle_count,)
+        source,
+        dtype=TRIANGLE_DTYPE,
+        mode="r",
+        offset=84,
+        shape=(triangle_count,),
     )
-
-    output.parent.mkdir(parents=True, exist_ok=True)
-    provenance.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        dir=output.parent, prefix=f".{output.name}.", suffix=".stl"
+    header_text = f"AUV CFD wetted surface; uniform scale={scale:g}".encode("ascii")
+    with temporary.open("wb") as stream:
+        stream.write(header_text[:80].ljust(80, b"\0"))
+        stream.write(struct.pack("<I", triangle_count))
+        stream.truncate(84 + RECORD_BYTES * triangle_count)
+    output_map = np.memmap(
+        temporary,
+        dtype=TRIANGLE_DTYPE,
+        mode="r+",
+        offset=84,
+        shape=(triangle_count,),
     )
-    os.close(descriptor)
-    temporary = Path(temporary_name)
-    descriptor, temporary_report_name = tempfile.mkstemp(
-        dir=provenance.parent, prefix=f".{provenance.name}.", suffix=".json"
-    )
-    os.close(descriptor)
-    temporary_report = Path(temporary_report_name)
+    minimum = np.full(3, np.inf)
+    maximum = np.full(3, -np.inf)
     try:
-        header_text = f"AUV CFD wetted surface; uniform scale={scale:g}".encode("ascii")
-        header = header_text[:80].ljust(80, b"\0")
-        with temporary.open("wb") as stream:
-            stream.write(header)
-            stream.write(struct.pack("<I", triangle_count))
-            stream.truncate(84 + RECORD_BYTES * triangle_count)
-        output_map = np.memmap(
-            temporary,
-            dtype=TRIANGLE_DTYPE,
-            mode="r+",
-            offset=84,
-            shape=(triangle_count,),
-        )
-        minimum = np.full(3, np.inf)
-        maximum = np.full(3, -np.inf)
         for start in range(0, triangle_count, chunk_triangles):
             stop = min(start + chunk_triangles, triangle_count)
             block = source_map[start:stop]
@@ -144,46 +135,88 @@ def scale_binary_stl(
             output_map[start:stop]["vertices"] = vertices * scale
             output_map[start:stop]["attribute"] = block["attribute"]
         output_map.flush()
+    finally:
         del output_map
         del source_map
+    return minimum, maximum
 
-        output_minimum = minimum * scale
-        output_maximum = maximum * scale
-        output_digest = _sha256(temporary)
-        report = {
-            "schema_version": 1,
-            "created_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "operation": "streaming_uniform_scale_about_origin",
-            "source": {
-                "path": str(source),
-                "sha256": source_digest,
-                "size_bytes": source.stat().st_size,
-                "units": "mm",
-                "triangle_count": triangle_count,
-                "bbox": _bbox_payload(minimum, maximum),
-                "topology_gate": "OpenFOAM surfaceCheck -checkSelfIntersection passed before scaling",
-                "provided_expected_sha256": expected_sha256.lower() if expected_sha256 else None,
-                "provided_sha256_match": True if expected_sha256 else None,
-            },
-            "transform": {
-                "uniform_scale": scale,
-                "origin": [0.0, 0.0, 0.0],
-                "translation": [0.0, 0.0, 0.0],
-                "axis_map": ["x", "y", "z"],
-            },
-            "output": {
-                "path": str(output),
-                "sha256": output_digest,
-                "size_bytes": temporary.stat().st_size,
-                "units": "m",
-                "triangle_count": triangle_count,
-                "bbox": _bbox_payload(output_minimum, output_maximum),
-                "binary_stl_layout_valid": True,
-            },
-        }
+
+def _scale_report(
+    source: Path,
+    output: Path,
+    temporary: Path,
+    triangle_count: int,
+    scale: float,
+    minimum: np.ndarray,
+    maximum: np.ndarray,
+) -> dict:
+    return {
+        "schema_version": 1,
+        "operation": "streaming_uniform_scale_about_origin",
+        "source": {
+            "path": str(source),
+            "size_bytes": source.stat().st_size,
+            "units": "mm",
+            "triangle_count": triangle_count,
+            "bbox": _bbox_payload(minimum, maximum),
+        },
+        "transform": {
+            "uniform_scale": scale,
+            "origin": [0.0, 0.0, 0.0],
+            "translation": [0.0, 0.0, 0.0],
+            "axis_map": ["x", "y", "z"],
+        },
+        "output": {
+            "path": str(output),
+            "size_bytes": temporary.stat().st_size,
+            "units": "m",
+            "triangle_count": triangle_count,
+            "bbox": _bbox_payload(minimum * scale, maximum * scale),
+            "binary_stl_layout_valid": True,
+        },
+    }
+
+
+def scale_binary_stl(
+    source: Path,
+    output: Path,
+    report_path: Path,
+    *,
+    scale: float,
+    chunk_triangles: int,
+    force: bool,
+) -> dict:
+    source, output, report_path = _validated_paths(
+        source,
+        output,
+        report_path,
+        scale=scale,
+        chunk_triangles=chunk_triangles,
+        force=force,
+    )
+    _header, triangle_count = _read_header(source)
+    temporary = _temporary_path(output, ".stl")
+    temporary_report = _temporary_path(report_path, ".json")
+    try:
+        minimum, maximum = _scale_triangle_records(
+            source,
+            temporary,
+            triangle_count,
+            scale,
+            chunk_triangles,
+        )
+        report = _scale_report(
+            source,
+            output,
+            temporary,
+            triangle_count,
+            scale,
+            minimum,
+            maximum,
+        )
         temporary_report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         os.replace(temporary, output)
-        os.replace(temporary_report, provenance)
+        os.replace(temporary_report, report_path)
         return report
     finally:
         temporary.unlink(missing_ok=True)
@@ -194,12 +227,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
-    parser.add_argument(
-        "--expected-sha256",
-        help="optional digest check; the actual source/output digests are always recorded",
-    )
     parser.add_argument("--scale", type=float, default=0.001)
-    parser.add_argument("--provenance", type=Path, required=True)
+    parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--chunk-triangles", type=int, default=1_000_000)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
@@ -207,8 +236,7 @@ def main() -> int:
         report = scale_binary_stl(
             args.input,
             args.output,
-            args.provenance,
-            expected_sha256=args.expected_sha256,
+            args.report,
             scale=args.scale,
             chunk_triangles=args.chunk_triangles,
             force=args.force,

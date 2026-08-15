@@ -40,7 +40,7 @@ class AUVModel:
     center_of_buoyancy_from_com_m: tuple[float, float, float] = (0.003498, -0.000060, 0.018494)
 
     # SolidWorks reports positive products Lxy/Lxz/Lyz.  Standard mechanics,
-    # URDF, MuJoCo, and PhysX inertia matrices use their negatives off diagonal.
+    # URDF and PhysX inertia matrices use their negatives off diagonal.
     inertia_tensor_body_kg_m2: tuple[tuple[float, float, float], ...] = (
         (0.115628684, -0.000010883, -0.001001989),
         (-0.000010883, 0.201210129, -0.000004539),

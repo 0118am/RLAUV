@@ -103,22 +103,92 @@ class RolloutAdaptivePPO(PPO):
             actor_obs = self.policy.get_actor_obs(obs_batch)
             actor_obs = self.policy.actor_obs_normalizer(actor_obs)
             self.policy._update_distribution(actor_obs)
-            mu_batch = self.policy.action_mean[: old_mu_batch.shape[0]]
-            sigma_batch = self.policy.action_std[: old_sigma_batch.shape[0]]
-            epsilon = torch.finfo(sigma_batch.dtype).tiny
-            kl = torch.sum(
-                torch.log(sigma_batch.clamp_min(epsilon))
-                - torch.log(old_sigma_batch.clamp_min(epsilon))
-                + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch))
-                / (2.0 * torch.square(sigma_batch.clamp_min(epsilon)))
-                - 0.5,
-                dim=-1,
+            kl_mean = self._distribution_kl(old_mu_batch, old_sigma_batch)
+        return float(kl_mean.item())
+
+    def _distribution_kl(
+        self,
+        old_mu_batch: torch.Tensor,
+        old_sigma_batch: torch.Tensor,
+    ) -> torch.Tensor:
+        mu_batch = self.policy.action_mean[: old_mu_batch.shape[0]]
+        sigma_batch = self.policy.action_std[: old_sigma_batch.shape[0]]
+        epsilon = torch.finfo(sigma_batch.dtype).tiny
+        kl = torch.sum(
+            torch.log(sigma_batch.clamp_min(epsilon))
+            - torch.log(old_sigma_batch.clamp_min(epsilon))
+            + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch))
+            / (2.0 * torch.square(sigma_batch.clamp_min(epsilon)))
+            - 0.5,
+            dim=-1,
+        )
+        kl_mean = torch.clamp(torch.mean(kl), min=0.0)
+        if self.is_multi_gpu:
+            torch.distributed.all_reduce(kl_mean, op=torch.distributed.ReduceOp.SUM)
+            kl_mean /= self.gpu_world_size
+        return kl_mean
+
+    def _prepare_policy_distribution(
+        self,
+        obs_batch: torch.Tensor,
+        old_mu_batch: torch.Tensor,
+        old_sigma_batch: torch.Tensor,
+    ) -> float:
+        actor_obs = self.policy.get_actor_obs(obs_batch)
+        actor_obs = self.policy.actor_obs_normalizer(actor_obs)
+        self.policy._update_distribution(actor_obs)
+        with torch.inference_mode():
+            return float(self._distribution_kl(old_mu_batch, old_sigma_batch).item())
+
+    def _ppo_losses(
+        self,
+        *,
+        obs_batch: torch.Tensor,
+        actions_batch: torch.Tensor,
+        target_values_batch: torch.Tensor,
+        advantages_batch: torch.Tensor,
+        returns_batch: torch.Tensor,
+        old_actions_log_prob_batch: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.normalize_advantage_per_mini_batch:
+            with torch.no_grad():
+                advantages_batch = (advantages_batch - advantages_batch.mean()) / (
+                    advantages_batch.std() + 1.0e-8
+                )
+
+        actions_log_prob_batch = self.policy.get_actions_log_prob(actions_batch)
+        value_batch = self.policy.evaluate(obs_batch)
+        entropy = self.policy.entropy.mean()
+        ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
+        surrogate = -torch.squeeze(advantages_batch) * ratio
+        surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(
+            ratio,
+            1.0 - self.clip_param,
+            1.0 + self.clip_param,
+        )
+        surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
+
+        if self.use_clipped_value_loss:
+            value_clipped = target_values_batch + (value_batch - target_values_batch).clamp(
+                -self.clip_param,
+                self.clip_param,
             )
-            kl_mean = torch.clamp(torch.mean(kl), min=0.0)
-            if self.is_multi_gpu:
-                torch.distributed.all_reduce(kl_mean, op=torch.distributed.ReduceOp.SUM)
-                kl_mean /= self.gpu_world_size
-        return kl_mean.item()
+            value_loss = torch.max(
+                (value_batch - returns_batch).pow(2),
+                (value_clipped - returns_batch).pow(2),
+            ).mean()
+        else:
+            value_loss = (returns_batch - value_batch).pow(2).mean()
+        loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy
+        return loss, value_loss, surrogate_loss, entropy
+
+    def _apply_optimizer_step(self, loss: torch.Tensor) -> None:
+        self.optimizer.zero_grad()
+        loss.backward()
+        if self.is_multi_gpu:
+            self.reduce_parameters()
+        torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+        self.optimizer.step()
 
     def _set_learning_rate(self, learning_rate: float) -> None:
         self.learning_rate = learning_rate
@@ -180,75 +250,27 @@ class RolloutAdaptivePPO(PPO):
                 _,
             ) = batch
 
-            if self.normalize_advantage_per_mini_batch:
-                with torch.no_grad():
-                    advantages_batch = (advantages_batch - advantages_batch.mean()) / (
-                        advantages_batch.std() + 1.0e-8
-                    )
-
-            # One Actor forward supplies both the KL gate and PPO likelihood;
-            # no duplicate forward or unused stochastic action is generated.
-            actor_obs = self.policy.get_actor_obs(obs_batch)
-            actor_obs = self.policy.actor_obs_normalizer(actor_obs)
-            self.policy._update_distribution(actor_obs)
-            mu_batch = self.policy.action_mean[: old_mu_batch.shape[0]]
-            sigma_batch = self.policy.action_std[: old_sigma_batch.shape[0]]
-            epsilon = torch.finfo(sigma_batch.dtype).tiny
-            with torch.inference_mode():
-                kl = torch.sum(
-                    torch.log(sigma_batch.clamp_min(epsilon))
-                    - torch.log(old_sigma_batch.clamp_min(epsilon))
-                    + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch))
-                    / (2.0 * torch.square(sigma_batch.clamp_min(epsilon)))
-                    - 0.5,
-                    dim=-1,
-                )
-                kl_mean = torch.clamp(torch.mean(kl), min=0.0)
-                if self.is_multi_gpu:
-                    torch.distributed.all_reduce(kl_mean, op=torch.distributed.ReduceOp.SUM)
-                    kl_mean /= self.gpu_world_size
-            if updates_completed > 0 and float(kl_mean.item()) > self.rollout_kl_stop:
+            # One actor forward supplies both the KL measurement and the PPO likelihood.
+            kl_mean = self._prepare_policy_distribution(obs_batch, old_mu_batch, old_sigma_batch)
+            if updates_completed > 0 and kl_mean > self.rollout_kl_stop:
                 early_stop = True
                 break
 
             if probe_batch is None:
                 probe_batch = batch
-            actions_log_prob_batch = self.policy.get_actions_log_prob(actions_batch)
-            value_batch = self.policy.evaluate(obs_batch)
-            entropy_batch = self.policy.entropy
-
-            ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
-            surrogate = -torch.squeeze(advantages_batch) * ratio
-            surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(
-                ratio,
-                1.0 - self.clip_param,
-                1.0 + self.clip_param,
+            loss, value_loss, surrogate_loss, entropy = self._ppo_losses(
+                obs_batch=obs_batch,
+                actions_batch=actions_batch,
+                target_values_batch=target_values_batch,
+                advantages_batch=advantages_batch,
+                returns_batch=returns_batch,
+                old_actions_log_prob_batch=old_actions_log_prob_batch,
             )
-            surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
-
-            if self.use_clipped_value_loss:
-                value_clipped = target_values_batch + (value_batch - target_values_batch).clamp(
-                    -self.clip_param,
-                    self.clip_param,
-                )
-                value_loss = torch.max(
-                    (value_batch - returns_batch).pow(2),
-                    (value_clipped - returns_batch).pow(2),
-                ).mean()
-            else:
-                value_loss = (returns_batch - value_batch).pow(2).mean()
-            loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
-
-            self.optimizer.zero_grad()
-            loss.backward()
-            if self.is_multi_gpu:
-                self.reduce_parameters()
-            torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
-            self.optimizer.step()
+            self._apply_optimizer_step(loss)
 
             value_loss_total += value_loss.item()
             surrogate_loss_total += surrogate_loss.item()
-            entropy_total += entropy_batch.mean().item()
+            entropy_total += entropy.item()
             updates_completed += 1
 
         self.storage.clear()

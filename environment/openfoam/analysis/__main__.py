@@ -7,7 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .fit import analyze_cases, write_fit_outputs
+from .fit import analyze_cases
+from .output import write_fit_outputs
 
 
 def _parser() -> argparse.ArgumentParser:

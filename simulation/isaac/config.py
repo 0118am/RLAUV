@@ -15,6 +15,9 @@ from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.utils import configclass
 
 from environment.profiles.features import DOMAIN_RANDOMIZATION_FEATURES
+from robot.control.trajectory import LISSAJOUS
+from robot.control.trajectory.observation_contract import ACTION_DIM, BASE_OBSERVATION_DIM
+from simulation.isaac.trajectory.evaluation_cases import DEFAULT_EVALUATION_DURATION_S
 from .robot_asset import AUV_CFG
 from .visualization import AUVTrajEnvWindow
 
@@ -82,9 +85,9 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     # Gym Box through Hydra loses its dtype and IsaacLab 2.3 reconstructs its
     # bounds as float64, producing false precision-loss warnings. Runtime code
     # below materializes the exact bounded float32 spaces after Hydra parsing.
-    observation_space = 30
-    action_space = 8
-    state_space = 30
+    observation_space = BASE_OBSERVATION_DIM
+    action_space = ACTION_DIM
+    state_space = BASE_OBSERVATION_DIM
     # env
     decimation = 4
     cap_episode_length = True
@@ -94,7 +97,6 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     # integer number of laps in this horizon.
     episode_length_s = 40.0
     episode_length_before_reset = None
-    observation_base_dim = 30
     # Only ``mlp_architecture`` is user-selected. The two derived fields are
     # copied from its profile at environment construction and persisted in the
     # run config for auditability; do not override them independently.
@@ -141,15 +143,9 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     # Evaluation keeps deterministic initial conditions unless explicitly
     # asked to sample the selected training recipe.
     eval_domain_randomization = False
-    # ``-1`` preserves the normal step-based DR curriculum.  Checkpoint-based
-    # competence evaluation sets this explicitly so a fresh evaluator process
-    # can probe a chosen uncertainty level instead of always starting at zero.
+    # Evaluation may explicitly probe one DR level; ``-1`` keeps the normal
+    # step-based curriculum.
     eval_disturbance_stage = -1
-    # A checkpoint-gated campaign runs each segment in a fresh environment
-    # process.  The supervisor supplies the number of policy steps completed
-    # by earlier segments so the disturbance curriculum does not restart at
-    # stage zero on every resume.  Ordinary one-shot training keeps ``0``.
-    disturbance_curriculum_global_step_offset = 0
     domain_randomization_log_interval_steps = 250
 
     # By default every reset starts exactly at the trajectory's t=0 pose and
@@ -191,11 +187,8 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     trajectory_amp_z_range = [0.0, 0.0]
     trajectory_period_range = [24.0, 24.0]
     trajectory_curriculum = False
-    # A competence-gated campaign runs short, resumed training segments.  It
-    # selects this stage from held-out evaluation results rather than from the
-    # fresh process's local ``common_step_counter``.  ``-1`` keeps the original
-    # step-based behavior for ordinary one-shot training.
-    curriculum_gate_stage = -1
+    # Curriculum stages advance from the environment's global policy-step
+    # counter during one direct training run.
     trajectory_curriculum_stage_steps = []
     trajectory_curriculum_stage_0_types = [0]
     trajectory_curriculum_stage_1_types = [0]
@@ -211,12 +204,12 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     # 10=spatial_helix.
     # Training-stage type sets are supplied by simulation.isaac.training; eval
     # commands remain independent so held-out shapes can be selected here.
-    trajectory_eval_type = 1
+    trajectory_eval_type = LISSAJOUS
     trajectory_eval_amp_x = 0.75
     trajectory_eval_amp_y = 0.65
     trajectory_eval_amp_z = 0.16
     trajectory_eval_period = 12.0
-    trajectory_eval_duration_s = 32.0
+    trajectory_eval_duration_s = DEFAULT_EVALUATION_DURATION_S
     trajectory_eval_radius_min = 0.3
     trajectory_eval_radius_max = 1.2
     trajectory_eval_chirp_rate = 1.6
@@ -237,12 +230,6 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     trajectory_retime_samples = 256
     trajectory_eval_align_initial_target = True
     trajectory_train_types = [0]
-
-    # Fixed physical scales keep training and deployed observations identical.
-    observation_position_scale_m = 2.0
-    observation_linear_velocity_scale_mps = 1.0
-    observation_angular_velocity_scale_radps = 1.0
-    observation_linear_acceleration_scale_mps2 = 0.5
 
     # trajectory rewards
     rew_scale_terminated = 0.0

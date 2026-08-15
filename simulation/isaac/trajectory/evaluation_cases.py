@@ -7,6 +7,12 @@ import re
 from collections.abc import Sequence
 
 
+DEFAULT_EVALUATION_DURATION_S = 32.0
+DEFAULT_RANDOM_CURVE_COUNT = 8
+DEFAULT_CURRENT_TAU_S = 12.0
+DEFAULT_DYNAMICS_SCALE = 1.0
+
+
 def sanitize_evaluation_label(label: str) -> str:
     """Return the filesystem-safe representation used by every eval component."""
 
@@ -32,7 +38,7 @@ def validate_evaluation_parameters(
     thruster_scale: float = 1.0,
     thruster_tau_scale: float = 1.0,
     num_envs: int | None = None,
-    random_curve_count: int = 1,
+    random_curve_count: int = DEFAULT_RANDOM_CURVE_COUNT,
 ) -> None:
     """Reject non-finite or physically invalid evaluation requests early."""
 
@@ -59,6 +65,70 @@ def validate_evaluation_parameters(
         raise ValueError("num_envs must be a positive integer when provided.")
     if int(random_curve_count) != random_curve_count or int(random_curve_count) <= 0:
         raise ValueError("random_curve_count must be a positive integer.")
+
+
+def resolve_positive_scalar_or_range(
+    scalar: float | None,
+    value_range: Sequence[float] | None,
+    *,
+    scalar_name: str,
+    range_name: str,
+) -> tuple[float, float] | None:
+    """Resolve one positive scalar/range option without ambiguous overrides."""
+
+    if scalar is not None and value_range is not None:
+        raise ValueError(f"Specify only one of {scalar_name} or {range_name}.")
+    if scalar is not None:
+        value = float(scalar)
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError(f"{scalar_name} must be finite and positive.")
+        return value, value
+    if value_range is None:
+        return None
+    if len(value_range) != 2:
+        raise ValueError(f"{range_name} must contain exactly two values.")
+    lower, upper = float(value_range[0]), float(value_range[1])
+    if not math.isfinite(lower) or not math.isfinite(upper) or lower <= 0.0 or upper < lower:
+        raise ValueError(f"{range_name} must satisfy finite 0 < lower <= upper.")
+    return lower, upper
+
+
+def resolve_random_smooth_ranges(
+    *,
+    trajectory_amp_x: float | None,
+    trajectory_amp_y: float | None,
+    trajectory_amp_z: float | None,
+    trajectory_period: float | None,
+    trajectory_amp_x_range: Sequence[float] | None,
+    trajectory_amp_y_range: Sequence[float] | None,
+    trajectory_amp_z_range: Sequence[float] | None,
+    trajectory_period_range: Sequence[float] | None,
+) -> dict[str, tuple[float, float]]:
+    """Return the mandatory non-static random-smooth evaluation envelope."""
+
+    inputs = (
+        ("trajectory_amp_x", trajectory_amp_x, "trajectory_amp_x_range", trajectory_amp_x_range),
+        ("trajectory_amp_y", trajectory_amp_y, "trajectory_amp_y_range", trajectory_amp_y_range),
+        ("trajectory_amp_z", trajectory_amp_z, "trajectory_amp_z_range", trajectory_amp_z_range),
+        ("trajectory_period", trajectory_period, "trajectory_period_range", trajectory_period_range),
+    )
+    resolved = {
+        range_name: resolve_positive_scalar_or_range(
+            scalar,
+            value_range,
+            scalar_name=scalar_name,
+            range_name=range_name,
+        )
+        for scalar_name, scalar, range_name, value_range in inputs
+    }
+    missing = [name for name, value in resolved.items() if value is None]
+    if missing:
+        raise ValueError(
+            "random_smooth evaluation requires explicit positive amplitude and period ranges; missing "
+            + ", ".join(missing)
+            + "."
+        )
+    return {name: value for name, value in resolved.items() if value is not None}
 
 
 def build_evaluation_case_label(

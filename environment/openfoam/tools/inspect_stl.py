@@ -11,7 +11,6 @@ pass.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -32,16 +31,6 @@ _UINT32 = struct.Struct("<I")
 
 class STLInspectionError(ValueError):
     """Raised when a file is not a structurally valid STL."""
-
-
-def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
-    """Return the lowercase SHA-256 digest of *path*."""
-
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(chunk_size), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _empty_bounds() -> tuple[list[float], list[float]]:
@@ -306,7 +295,6 @@ def inspect_stl(path: str | os.PathLike[str], *, topology: bool = True) -> dict[
         "schema_version": REPORT_SCHEMA_VERSION,
         "path": str(source),
         "size_bytes": source.stat().st_size,
-        "sha256": sha256_file(source),
         "format": stl_format,
         **geometry,
     }

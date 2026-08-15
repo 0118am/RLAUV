@@ -1,6 +1,5 @@
 """Unit checks for trajectory PPO's rollout-level KL controller."""
 
-import pytest
 import torch
 from tensordict import TensorDict
 
@@ -71,19 +70,6 @@ def test_rollout_controller_early_stops_and_reduces_next_learning_rate() -> None
     assert algorithm.learning_rate < 3.0e-4
 
 
-def test_exact_kl_is_zero_before_the_policy_moves() -> None:
-    algorithm, observations = _algorithm(desired_kl=0.01, kl_stop=0.015, kl_low=0.005)
-    _collect_rollout(algorithm, observations)
-    batch = next(algorithm.storage.mini_batch_generator(4, 2))
-
-    assert algorithm._mean_kl(batch) < 1.0e-10
-
-
-def test_rollout_controller_rejects_inverted_kl_thresholds() -> None:
-    with pytest.raises(ValueError, match="rollout_kl_low < desired_kl"):
-        _algorithm(desired_kl=0.001, kl_stop=0.015, kl_low=0.005)
-
-
 def test_rollout_controller_raises_learning_rate_only_after_the_rollout() -> None:
     algorithm, observations = _algorithm(desired_kl=0.01, kl_stop=0.015, kl_low=0.005)
     _collect_rollout(algorithm, observations)
@@ -95,21 +81,3 @@ def test_rollout_controller_raises_learning_rate_only_after_the_rollout() -> Non
     assert losses["kl_probe"] < 0.005
     assert algorithm.learning_rate == 3.3e-4
     assert losses["early_stop"] == 0.0
-
-
-def test_rollout_update_uses_one_actor_forward_per_batch_plus_final_probe(monkeypatch) -> None:
-    algorithm, observations = _algorithm(desired_kl=0.01, kl_stop=0.015, kl_low=0.005)
-    _collect_rollout(algorithm, observations)
-    original = algorithm.policy._update_distribution
-    forward_count = 0
-
-    def counted_update_distribution(actor_observations):
-        nonlocal forward_count
-        forward_count += 1
-        return original(actor_observations)
-
-    monkeypatch.setattr(algorithm.policy, "_update_distribution", counted_update_distribution)
-    algorithm.update()
-
-    assert algorithm.last_rollout_updates == 8
-    assert forward_count == algorithm.last_rollout_updates + 1

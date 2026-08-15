@@ -10,7 +10,6 @@ rlpolicy/
 │   └── domain_randomization.json
 └── <architecture experiment>/
     ├── _launcher/
-    ├── _curriculum/
     └── <timestamp>_<RUN_NAME>/
         ├── model_*.pt
         ├── params/

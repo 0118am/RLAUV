@@ -16,6 +16,16 @@ class RectangularSloshingState:
     angular_frequencies_rad_s: torch.Tensor
 
 
+@dataclass(frozen=True)
+class _SloshingInputs:
+    bounds: torch.Tensor
+    frequencies: torch.Tensor
+    modes: torch.Tensor
+    amplitudes: torch.Tensor
+    phases: torch.Tensor
+    time: torch.Tensor
+
+
 def rectangular_sloshing_mode_frequencies(
     pool_bounds: torch.Tensor | Sequence[float],
     water_depth: float,
@@ -58,6 +68,125 @@ def rectangular_sloshing_mode_frequencies(
     )
 
 
+def _prepare_sloshing_inputs(
+    positions: torch.Tensor,
+    time_s: torch.Tensor | float,
+    pool_bounds: torch.Tensor | Sequence[float],
+    water_depth: float,
+    mode_numbers: torch.Tensor | Sequence[Sequence[int]],
+    amplitudes_m: torch.Tensor | Sequence[float],
+    phases_rad: torch.Tensor | Sequence[float],
+    gravity_magnitude: float,
+    angular_frequencies_rad_s: torch.Tensor | None,
+    validate: bool,
+) -> _SloshingInputs:
+    bounds = torch.as_tensor(
+        pool_bounds,
+        dtype=positions.dtype,
+        device=positions.device,
+    ).reshape(-1)
+    if validate and bounds.numel() not in (4, 6):
+        raise ValueError("pool_bounds must contain x/y bounds or full 3D box bounds.")
+    frequencies = (
+        rectangular_sloshing_mode_frequencies(
+            bounds,
+            water_depth,
+            mode_numbers,
+            gravity_magnitude,
+            dtype=positions.dtype,
+            device=positions.device,
+            validate=validate,
+        )
+        if angular_frequencies_rad_s is None
+        else torch.as_tensor(
+            angular_frequencies_rad_s,
+            dtype=positions.dtype,
+            device=positions.device,
+        ).reshape(-1)
+    )
+    modes = torch.as_tensor(mode_numbers, dtype=positions.dtype, device=positions.device)
+    amplitudes = torch.as_tensor(
+        amplitudes_m,
+        dtype=positions.dtype,
+        device=positions.device,
+    ).reshape(-1)
+    phases = torch.as_tensor(phases_rad, dtype=positions.dtype, device=positions.device).reshape(-1)
+    mode_count = modes.shape[0]
+    if validate and (amplitudes.shape != (mode_count,) or phases.shape != (mode_count,)):
+        raise ValueError("amplitudes_m and phases_rad must contain one value per mode.")
+    if validate and (not torch.all(torch.isfinite(amplitudes)) or torch.any(amplitudes < 0.0)):
+        raise ValueError("amplitudes_m must contain finite non-negative values.")
+    if validate and not torch.all(torch.isfinite(phases)):
+        raise ValueError("phases_rad must contain only finite values.")
+    time = torch.as_tensor(time_s, dtype=positions.dtype, device=positions.device)
+    if time.ndim == 0:
+        time = time.reshape(1).repeat(positions.shape[0])
+    elif time.ndim == 2 and time.shape == (positions.shape[0], 1):
+        time = time[:, 0]
+    elif validate and (time.ndim != 1 or time.shape[0] != positions.shape[0]):
+        raise ValueError("time_s must be scalar, shape (N,), or shape (N, 1).")
+    if validate and not torch.all(torch.isfinite(time)):
+        raise ValueError("time_s must contain only finite values.")
+    return _SloshingInputs(bounds, frequencies, modes, amplitudes, phases, time)
+
+
+def _sloshing_spatial_terms(
+    positions: torch.Tensor,
+    inputs: _SloshingInputs,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    length_x = inputs.bounds[1] - inputs.bounds[0]
+    length_y = inputs.bounds[3] - inputs.bounds[2]
+    kx = inputs.modes[:, 0] * torch.pi / length_x
+    ky = inputs.modes[:, 1] * torch.pi / length_y
+    wave_number = torch.sqrt(kx.square() + ky.square())
+    x_phase = (positions[:, 0:1] - inputs.bounds[0]) * kx.reshape(1, -1)
+    y_phase = (positions[:, 1:2] - inputs.bounds[2]) * ky.reshape(1, -1)
+    spatial = torch.cos(x_phase) * torch.cos(y_phase)
+    return kx, ky, wave_number, x_phase, y_phase, spatial
+
+
+def _sloshing_orbital_velocity(
+    inputs: _SloshingInputs,
+    spatial_terms: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+    sine_time: torch.Tensor,
+    submerged_depth: torch.Tensor,
+    water_depth: float,
+    gravity_magnitude: float,
+    depth_axis_sign: float,
+) -> torch.Tensor:
+    kx, ky, wave_number, x_phase, y_phase, spatial = spatial_terms
+    denominator = wave_number.reshape(1, -1) * float(water_depth)
+    numerator = wave_number.reshape(1, -1) * (float(water_depth) - submerged_depth)
+    horizontal_depth_factor = _stable_cosh_ratio(numerator, denominator)
+    vertical_depth_factor = _stable_sinh_over_cosh(numerator, denominator)
+    potential_scale = (
+        float(gravity_magnitude)
+        * inputs.amplitudes
+        / torch.clamp(inputs.frequencies, min=1.0e-8)
+    ).reshape(1, -1)
+    horizontal_common = potential_scale * horizontal_depth_factor * sine_time
+    velocity_x = torch.sum(
+        horizontal_common * kx.reshape(1, -1) * torch.sin(x_phase) * torch.cos(y_phase),
+        dim=-1,
+        keepdim=True,
+    )
+    velocity_y = torch.sum(
+        horizontal_common * ky.reshape(1, -1) * torch.cos(x_phase) * torch.sin(y_phase),
+        dim=-1,
+        keepdim=True,
+    )
+    velocity_up = torch.sum(
+        -potential_scale
+        * wave_number.reshape(1, -1)
+        * vertical_depth_factor
+        * spatial
+        * sine_time,
+        dim=-1,
+        keepdim=True,
+    )
+    return torch.cat((velocity_x, velocity_y, -float(depth_axis_sign) * velocity_up), dim=-1)
+
+
 def calculate_rectangular_pool_sloshing_state(
     positions: torch.Tensor,
     time_s: torch.Tensor | float,
@@ -87,101 +216,50 @@ def calculate_rectangular_pool_sloshing_state(
         raise ValueError("positions must contain only finite values.")
     if validate and float(depth_axis_sign) not in (-1.0, 1.0):
         raise ValueError("depth_axis_sign must be -1 or 1.")
-    bounds = torch.as_tensor(pool_bounds, dtype=positions.dtype, device=positions.device).reshape(-1)
-    if validate and bounds.numel() not in (4, 6):
-        raise ValueError("pool_bounds must contain x/y bounds or full 3D box bounds.")
-    if angular_frequencies_rad_s is None:
-        frequencies = rectangular_sloshing_mode_frequencies(
-            bounds,
-            water_depth,
-            mode_numbers,
-            gravity_magnitude,
-            dtype=positions.dtype,
-            device=positions.device,
-            validate=validate,
-        )
-    else:
-        frequencies = torch.as_tensor(
-            angular_frequencies_rad_s,
-            dtype=positions.dtype,
-            device=positions.device,
-        ).reshape(-1)
-    modes = torch.as_tensor(mode_numbers, dtype=positions.dtype, device=positions.device)
-    amplitudes = torch.as_tensor(amplitudes_m, dtype=positions.dtype, device=positions.device).reshape(-1)
-    phases = torch.as_tensor(phases_rad, dtype=positions.dtype, device=positions.device).reshape(-1)
-    mode_count = modes.shape[0]
-    if validate and (amplitudes.shape != (mode_count,) or phases.shape != (mode_count,)):
-        raise ValueError("amplitudes_m and phases_rad must contain one value per mode.")
-    if validate and (not torch.all(torch.isfinite(amplitudes)) or torch.any(amplitudes < 0.0)):
-        raise ValueError("amplitudes_m must contain finite non-negative values.")
-    if validate and not torch.all(torch.isfinite(phases)):
-        raise ValueError("phases_rad must contain only finite values.")
-
-    time = torch.as_tensor(time_s, dtype=positions.dtype, device=positions.device)
-    if time.ndim == 0:
-        time = time.reshape(1).repeat(positions.shape[0])
-    elif time.ndim == 2 and time.shape == (positions.shape[0], 1):
-        time = time[:, 0]
-    elif validate and (time.ndim != 1 or time.shape[0] != positions.shape[0]):
-        raise ValueError("time_s must be scalar, shape (N,), or shape (N, 1).")
-    if validate and not torch.all(torch.isfinite(time)):
-        raise ValueError("time_s must contain only finite values.")
-
-    length_x = bounds[1] - bounds[0]
-    length_y = bounds[3] - bounds[2]
-    modes_float = modes.to(dtype=positions.dtype)
-    kx = modes_float[:, 0] * torch.pi / length_x
-    ky = modes_float[:, 1] * torch.pi / length_y
-    wave_number = torch.sqrt(kx.square() + ky.square())
-    x_phase = (positions[:, 0:1] - bounds[0]) * kx.reshape(1, -1)
-    y_phase = (positions[:, 1:2] - bounds[2]) * ky.reshape(1, -1)
-    spatial = torch.cos(x_phase) * torch.cos(y_phase)
-    temporal_phase = time.reshape(-1, 1) * frequencies.reshape(1, -1) + phases.reshape(1, -1)
+    inputs = _prepare_sloshing_inputs(
+        positions,
+        time_s,
+        pool_bounds,
+        water_depth,
+        mode_numbers,
+        amplitudes_m,
+        phases_rad,
+        gravity_magnitude,
+        angular_frequencies_rad_s,
+        validate,
+    )
+    spatial_terms = _sloshing_spatial_terms(positions, inputs)
+    spatial = spatial_terms[-1]
+    temporal_phase = (
+        inputs.time.reshape(-1, 1) * inputs.frequencies.reshape(1, -1)
+        + inputs.phases.reshape(1, -1)
+    )
     cosine_time = torch.cos(temporal_phase)
     sine_time = torch.sin(temporal_phase)
 
-    elevation_up = torch.sum(amplitudes.reshape(1, -1) * spatial * cosine_time, dim=-1, keepdim=True)
+    elevation_up = torch.sum(
+        inputs.amplitudes.reshape(1, -1) * spatial * cosine_time,
+        dim=-1,
+        keepdim=True,
+    )
     surface_z = float(base_surface_z) - float(depth_axis_sign) * elevation_up
     submerged_depth = float(depth_axis_sign) * (positions[:, 2:3] - float(base_surface_z))
     submerged_depth = torch.clamp(submerged_depth, min=0.0, max=float(water_depth))
-    b = wave_number.reshape(1, -1) * float(water_depth)
-    a = wave_number.reshape(1, -1) * (float(water_depth) - submerged_depth)
-    horizontal_depth_factor = _stable_cosh_ratio(a, b)
-    vertical_depth_factor = _stable_sinh_over_cosh(a, b)
-    potential_scale = (
-        float(gravity_magnitude) * amplitudes / torch.clamp(frequencies, min=1.0e-8)
-    ).reshape(1, -1)
-    horizontal_common = potential_scale * horizontal_depth_factor * sine_time
-    velocity_x = torch.sum(
-        horizontal_common
-        * kx.reshape(1, -1)
-        * torch.sin(x_phase)
-        * torch.cos(y_phase),
-        dim=-1,
-        keepdim=True,
+    orbital_velocity_w = _sloshing_orbital_velocity(
+        inputs,
+        spatial_terms,
+        sine_time,
+        submerged_depth,
+        water_depth,
+        gravity_magnitude,
+        depth_axis_sign,
     )
-    velocity_y = torch.sum(
-        horizontal_common
-        * ky.reshape(1, -1)
-        * torch.cos(x_phase)
-        * torch.sin(y_phase),
-        dim=-1,
-        keepdim=True,
+    return RectangularSloshingState(
+        surface_z,
+        elevation_up,
+        orbital_velocity_w,
+        inputs.frequencies,
     )
-    velocity_up = torch.sum(
-        -potential_scale
-        * wave_number.reshape(1, -1)
-        * vertical_depth_factor
-        * spatial
-        * sine_time,
-        dim=-1,
-        keepdim=True,
-    )
-    orbital_velocity_w = torch.cat(
-        (velocity_x, velocity_y, -float(depth_axis_sign) * velocity_up),
-        dim=-1,
-    )
-    return RectangularSloshingState(surface_z, elevation_up, orbital_velocity_w, frequencies)
 
 
 def _stable_cosh_ratio(numerator_argument: torch.Tensor, denominator_argument: torch.Tensor) -> torch.Tensor:

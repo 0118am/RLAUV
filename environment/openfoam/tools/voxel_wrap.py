@@ -10,18 +10,14 @@ The implementation is deliberately conservative:
 * remaining digital non-manifold configurations are repaired locally; and
 * topology and bidirectional surface-distance metrics are written to JSON.
 
-The JSON report does not claim to audit triangle self-intersection.  The final
-CFD gate remains ``surfaceCheck -checkSelfIntersection`` from OpenFOAM.
+The JSON report does not claim to audit triangle self-intersection; use
+``surfaceCheck -checkSelfIntersection`` from OpenFOAM for that check.
 Coordinates and ``--voxel-size`` use the STL's native unit.
 """
 
 from __future__ import annotations
 
 import argparse
-import contextlib
-from datetime import datetime, timezone
-import hashlib
-import io
 import json
 import math
 import os
@@ -31,6 +27,41 @@ import tempfile
 import time
 from typing import Any, Sequence
 
+try:
+    from .voxel_backend import (
+        VoxelWrapError,
+        backend_status,
+        connected_regions as _connected_regions,
+        distribution as _distribution,
+        extract_surface as _extract_surface,
+        feature_edge_count as _feature_edge_count,
+        geometry_metrics as _geometry_metrics,
+        non_manifold_edges as _non_manifold_edges,
+        orient_normals as _orient_normals,
+        point_distances as _point_distances,
+        read_surface as _read_surface,
+        require_backend as _require_backend,
+        topology as _topology,
+        write_stl as _write_stl,
+    )
+except ImportError:  # pragma: no cover - exercised by direct CLI use
+    from voxel_backend import (
+        VoxelWrapError,
+        backend_status,
+        connected_regions as _connected_regions,
+        distribution as _distribution,
+        extract_surface as _extract_surface,
+        feature_edge_count as _feature_edge_count,
+        geometry_metrics as _geometry_metrics,
+        non_manifold_edges as _non_manifold_edges,
+        orient_normals as _orient_normals,
+        point_distances as _point_distances,
+        read_surface as _read_surface,
+        require_backend as _require_backend,
+        topology as _topology,
+        write_stl as _write_stl,
+    )
+
 
 REPORT_SCHEMA_VERSION = 1
 DEFAULT_CLOSING_ITERATIONS = 1
@@ -39,190 +70,6 @@ DEFAULT_REPAIR_ITERATIONS = 8
 DEFAULT_REPAIR_RADIUS = 1
 DEFAULT_MAX_VOXELS = 100_000_000
 DEFAULT_VOLUME_RELATIVE_TOLERANCE = 0.02
-
-
-class VoxelWrapError(RuntimeError):
-    """Raised when a safe voxel wrap cannot be produced."""
-
-
-def _utc_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def backend_status() -> dict[str, Any]:
-    """Return availability details without making import-time VTK mandatory."""
-
-    status: dict[str, Any] = {"ready": False}
-    try:
-        import numpy as np  # noqa: F401
-
-        status["numpy_version"] = str(np.__version__)
-    except Exception as exc:  # pragma: no cover - depends on local Python
-        status["reason"] = f"NumPy unavailable: {exc}"
-        return status
-    try:
-        # Some hosts have an incompatible binary SciPy beside NumPy. Suppress
-        # its import-time ABI diagnostic and return it as structured status.
-        with contextlib.redirect_stderr(io.StringIO()):
-            from scipy import ndimage  # noqa: F401
-            import scipy
-
-        status["scipy_version"] = str(scipy.__version__)
-    except Exception as exc:  # pragma: no cover - depends on local Python
-        status["reason"] = f"SciPy ndimage unavailable or incompatible: {exc}"
-        return status
-    try:
-        import vtk
-
-        status["vtk_version"] = str(vtk.vtkVersion.GetVTKVersion())
-        if not hasattr(vtk, "vtkSurfaceNets3D"):
-            status["reason"] = "VTK lacks vtkSurfaceNets3D (VTK 9.3 or newer is required)"
-            return status
-    except Exception as exc:  # pragma: no cover - depends on local Python
-        status["reason"] = f"VTK unavailable: {exc}"
-        return status
-    status["ready"] = True
-    return status
-
-
-def _require_backend() -> tuple[Any, Any, Any, Any, Any]:
-    status = backend_status()
-    if not status["ready"]:
-        raise VoxelWrapError(str(status.get("reason", "voxel backend unavailable")))
-    import numpy as np
-    from scipy import ndimage
-    import vtk
-    from vtk.util.numpy_support import numpy_to_vtk, vtk_to_numpy
-
-    return np, ndimage, vtk, numpy_to_vtk, vtk_to_numpy
-
-
-def _read_surface(path: Path, vtk: Any) -> Any:
-    reader = vtk.vtkSTLReader()
-    reader.SetFileName(str(path))
-    reader.MergingOn()
-    reader.Update()
-    if reader.GetOutput().GetNumberOfPolys() <= 0:
-        raise VoxelWrapError(f"VTK read no triangles from {path}")
-
-    triangles = vtk.vtkTriangleFilter()
-    triangles.SetInputConnection(reader.GetOutputPort())
-    triangles.PassLinesOff()
-    triangles.PassVertsOff()
-
-    clean = vtk.vtkCleanPolyData()
-    clean.SetInputConnection(triangles.GetOutputPort())
-    clean.PointMergingOn()
-    clean.Update()
-    surface = vtk.vtkPolyData()
-    surface.ShallowCopy(clean.GetOutput())
-    if surface.GetNumberOfCells() <= 0:
-        raise VoxelWrapError(f"cleaned input contains no triangles: {path}")
-    return surface
-
-
-def _connected_regions(surface: Any, vtk: Any) -> int:
-    connectivity = vtk.vtkPolyDataConnectivityFilter()
-    connectivity.SetInputData(surface)
-    connectivity.SetExtractionModeToAllRegions()
-    connectivity.Update()
-    return int(connectivity.GetNumberOfExtractedRegions())
-
-
-def _feature_edge_count(
-    surface: Any,
-    vtk: Any,
-    *,
-    boundary: bool = False,
-    non_manifold: bool = False,
-) -> int:
-    edges = vtk.vtkFeatureEdges()
-    edges.SetInputData(surface)
-    edges.BoundaryEdgesOff()
-    edges.FeatureEdgesOff()
-    edges.ManifoldEdgesOff()
-    edges.NonManifoldEdgesOff()
-    if boundary:
-        edges.BoundaryEdgesOn()
-    if non_manifold:
-        edges.NonManifoldEdgesOn()
-    edges.Update()
-    return int(edges.GetOutput().GetNumberOfCells())
-
-
-def _non_manifold_edges(surface: Any, vtk: Any) -> Any:
-    edges = vtk.vtkFeatureEdges()
-    edges.SetInputData(surface)
-    edges.BoundaryEdgesOff()
-    edges.FeatureEdgesOff()
-    edges.ManifoldEdgesOff()
-    edges.NonManifoldEdgesOn()
-    edges.ColoringOff()
-    edges.Update()
-    output = vtk.vtkPolyData()
-    output.ShallowCopy(edges.GetOutput())
-    return output
-
-
-def _image_from_mask(
-    mask: Any,
-    origin: Sequence[float],
-    spacing: float,
-    vtk: Any,
-    numpy_to_vtk: Any,
-) -> Any:
-    nz, ny, nx = mask.shape
-    image = vtk.vtkImageData()
-    image.SetDimensions(nx, ny, nz)
-    image.SetOrigin(*origin)
-    image.SetSpacing(spacing, spacing, spacing)
-    scalars = numpy_to_vtk(
-        mask.astype("uint8").ravel(order="C"),
-        deep=True,
-        array_type=vtk.VTK_UNSIGNED_CHAR,
-    )
-    scalars.SetName("solid")
-    image.GetPointData().SetScalars(scalars)
-    return image
-
-
-def _extract_surface(
-    mask: Any,
-    origin: Sequence[float],
-    spacing: float,
-    vtk: Any,
-    numpy_to_vtk: Any,
-) -> Any:
-    image = _image_from_mask(mask, origin, spacing, vtk, numpy_to_vtk)
-    surface_nets = vtk.vtkSurfaceNets3D()
-    surface_nets.SetInputData(image)
-    surface_nets.SetValue(0, 1)
-    surface_nets.SetBackgroundLabel(0)
-    surface_nets.SetOutputStyleToBoundary()
-    surface_nets.SetOutputMeshTypeToTriangles()
-    # Smoothing created self-intersections in the representative AUV mesh.
-    # Keep this topology-preserving reconstruction intentionally unsmoothed.
-    surface_nets.SmoothingOff()
-
-    clean = vtk.vtkCleanPolyData()
-    clean.SetInputConnection(surface_nets.GetOutputPort())
-    clean.PointMergingOn()
-    triangles = vtk.vtkTriangleFilter()
-    triangles.SetInputConnection(clean.GetOutputPort())
-    triangles.PassLinesOff()
-    triangles.PassVertsOff()
-    triangles.Update()
-    output = vtk.vtkPolyData()
-    output.ShallowCopy(triangles.GetOutput())
-    return output
 
 
 def _six_neighbour_structure(ndimage: Any) -> Any:
@@ -380,100 +227,6 @@ def _repair_non_manifold(
     )
 
 
-def _orient_normals(surface: Any, vtk: Any) -> Any:
-    normals = vtk.vtkPolyDataNormals()
-    normals.SetInputData(surface)
-    normals.ConsistencyOn()
-    normals.AutoOrientNormalsOn()
-    normals.SplittingOff()
-    normals.ComputePointNormalsOff()
-    normals.ComputeCellNormalsOn()
-    normals.Update()
-    output = vtk.vtkPolyData()
-    output.ShallowCopy(normals.GetOutput())
-    return output
-
-
-def _distribution(values: Any, np: Any) -> dict[str, float | int]:
-    if values.size == 0:
-        raise VoxelWrapError("distance filter produced an empty array")
-    return {
-        "count": int(values.size),
-        "mean": float(np.mean(values)),
-        "rms": float(np.sqrt(np.mean(values * values))),
-        "p50": float(np.percentile(values, 50)),
-        "p95": float(np.percentile(values, 95)),
-        "p99": float(np.percentile(values, 99)),
-        "max": float(np.max(values)),
-    }
-
-
-def _point_distances(source: Any, target: Any, vtk: Any, vtk_to_numpy: Any) -> Any:
-    distances = vtk.vtkDistancePolyDataFilter()
-    distances.SetInputData(0, source)
-    distances.SetInputData(1, target)
-    distances.SignedDistanceOff()
-    distances.ComputeSecondDistanceOff()
-    distances.ComputeCellCenterDistanceOff()
-    distances.Update()
-    array = distances.GetOutput().GetPointData().GetArray("Distance")
-    if array is None:
-        raise VoxelWrapError("VTK failed to compute point-to-surface distances")
-    return vtk_to_numpy(array)
-
-
-def _bounds(surface: Any) -> dict[str, list[float]]:
-    raw = surface.GetBounds()
-    minimum = [float(raw[0]), float(raw[2]), float(raw[4])]
-    maximum = [float(raw[1]), float(raw[3]), float(raw[5])]
-    return {
-        "min": minimum,
-        "max": maximum,
-        "size": [maximum[index] - minimum[index] for index in range(3)],
-    }
-
-
-def _topology(surface: Any, vtk: Any) -> dict[str, Any]:
-    boundary_edges = _feature_edge_count(surface, vtk, boundary=True)
-    non_manifold_edges = _feature_edge_count(surface, vtk, non_manifold=True)
-    connected_regions = _connected_regions(surface, vtk)
-    extract_edges = vtk.vtkExtractEdges()
-    extract_edges.SetInputData(surface)
-    extract_edges.Update()
-    vertices = int(surface.GetNumberOfPoints())
-    edges = int(extract_edges.GetOutput().GetNumberOfCells())
-    faces = int(surface.GetNumberOfCells())
-    euler = vertices - edges + faces
-    genus: int | None = None
-    if boundary_edges == 0 and non_manifold_edges == 0 and connected_regions == 1:
-        candidate = (2 - euler) / 2
-        if candidate >= 0 and candidate.is_integer():
-            genus = int(candidate)
-    return {
-        "boundary_edges": boundary_edges,
-        "non_manifold_edges": non_manifold_edges,
-        "connected_regions": connected_regions,
-        "vertices": vertices,
-        "edges": edges,
-        "faces": faces,
-        "euler_characteristic": euler,
-        "genus": genus,
-        "watertight_manifold": boundary_edges == 0 and non_manifold_edges == 0,
-        "single_component": connected_regions == 1,
-    }
-
-
-def _geometry_metrics(surface: Any, vtk: Any) -> dict[str, Any]:
-    mass = vtk.vtkMassProperties()
-    mass.SetInputData(surface)
-    mass.Update()
-    return {
-        "bounds": _bounds(surface),
-        "surface_area_source_units_squared": float(mass.GetSurfaceArea()),
-        "enclosed_volume_source_units_cubed": float(mass.GetVolume()),
-    }
-
-
 def _volume_validation(
     actual_volume: float,
     expected_volume: float | None,
@@ -509,35 +262,7 @@ def _temporary_path(parent: Path, suffix: str) -> Path:
     return Path(name)
 
 
-def _write_stl(surface: Any, path: Path, vtk: Any) -> None:
-    writer = vtk.vtkSTLWriter()
-    writer.SetFileName(str(path))
-    writer.SetInputData(surface)
-    writer.SetFileTypeToBinary()
-    if int(writer.Write()) != 1 or not path.is_file() or path.stat().st_size <= 84:
-        raise VoxelWrapError(f"VTK failed to write {path}")
-
-
-def wrap_surface(
-    input_path: str | os.PathLike[str],
-    output_path: str | os.PathLike[str],
-    *,
-    voxel_size: float,
-    report_path: str | os.PathLike[str] | None = None,
-    closing_iterations: int = DEFAULT_CLOSING_ITERATIONS,
-    pad_voxels: int = DEFAULT_PAD_VOXELS,
-    repair_iterations: int = DEFAULT_REPAIR_ITERATIONS,
-    repair_radius: int = DEFAULT_REPAIR_RADIUS,
-    max_voxels: int = DEFAULT_MAX_VOXELS,
-    require_single_component: bool = True,
-    expected_volume: float | None = None,
-    volume_relative_tolerance: float = DEFAULT_VOLUME_RELATIVE_TOLERANCE,
-    force: bool = False,
-    invocation: Sequence[str] | None = None,
-) -> dict[str, Any]:
-    """Create a watertight exterior STL and an atomic JSON audit report."""
-
-    start = time.monotonic()
+def _resolve_wrap_paths(input_path, output_path, report_path, force: bool):
     source = Path(input_path).expanduser().resolve()
     output = Path(output_path).expanduser().resolve()
     report = (
@@ -560,6 +285,20 @@ def wrap_surface(
         raise VoxelWrapError(
             "refusing to overwrite existing output(s): " + ", ".join(str(path) for path in existing)
         )
+    return source, output, report
+
+
+def _validate_wrap_parameters(
+    *,
+    voxel_size: float,
+    closing_iterations: int,
+    pad_voxels: int,
+    repair_iterations: int,
+    repair_radius: int,
+    max_voxels: int,
+    expected_volume: float | None,
+    volume_relative_tolerance: float,
+) -> None:
     if not math.isfinite(voxel_size) or voxel_size <= 0.0:
         raise VoxelWrapError("voxel size must be finite and greater than zero")
     if closing_iterations < 0:
@@ -577,6 +316,17 @@ def wrap_surface(
     if not math.isfinite(volume_relative_tolerance) or not 0.0 < volume_relative_tolerance < 1.0:
         raise VoxelWrapError("volume relative tolerance must lie in (0, 1)")
 
+
+def _rebuild_voxel_surface(
+    source: Path,
+    *,
+    voxel_size: float,
+    closing_iterations: int,
+    pad_voxels: int,
+    repair_iterations: int,
+    repair_radius: int,
+    max_voxels: int,
+) -> dict[str, Any]:
     np, ndimage, vtk, numpy_to_vtk, vtk_to_numpy = _require_backend()
     input_surface = _read_surface(source, vtk)
     input_topology = _topology(input_surface, vtk)
@@ -603,101 +353,213 @@ def wrap_surface(
         numpy_to_vtk,
     )
     rebuilt = _orient_normals(rebuilt, vtk)
-    output_topology = _topology(rebuilt, vtk)
-    topology_failed = not output_topology["watertight_manifold"]
-    component_failed = require_single_component and not output_topology["single_component"]
-    if topology_failed or component_failed:
+    return {
+        "np": np,
+        "vtk": vtk,
+        "vtk_to_numpy": vtk_to_numpy,
+        "input_surface": input_surface,
+        "input_topology": input_topology,
+        "rebuilt": rebuilt,
+        "solid": solid,
+        "solid_components": int(solid_components),
+        "solid_before_repair": solid_before_repair,
+        "voxel_report": voxel_report,
+        "repair_history": repair_history,
+    }
+
+
+def _validate_rebuilt_surface(
+    rebuilt: Any,
+    vtk: Any,
+    *,
+    require_single_component: bool,
+    expected_volume: float | None,
+    volume_relative_tolerance: float,
+):
+    topology = _topology(rebuilt, vtk)
+    if not topology["watertight_manifold"] or (
+        require_single_component and not topology["single_component"]
+    ):
         raise VoxelWrapError(
-            "rebuilt surface failed the VTK topology gate: "
-            f"boundary={output_topology['boundary_edges']}, "
-            f"non-manifold={output_topology['non_manifold_edges']}, "
-            f"components={output_topology['connected_regions']}"
+            "rebuilt surface failed topology validation: "
+            f"boundary={topology['boundary_edges']}, "
+            f"non-manifold={topology['non_manifold_edges']}, "
+            f"components={topology['connected_regions']}"
         )
-    output_geometry = _geometry_metrics(rebuilt, vtk)
-    volume_validation = _volume_validation(
-        output_geometry["enclosed_volume_source_units_cubed"],
+    geometry = _geometry_metrics(rebuilt, vtk)
+    volume = _volume_validation(
+        geometry["enclosed_volume_source_units_cubed"],
         expected_volume,
         volume_relative_tolerance,
     )
-    if volume_validation.get("enabled") and not volume_validation["passed"]:
+    if volume.get("enabled") and not volume["passed"]:
         raise VoxelWrapError(
-            "rebuilt surface displaced-volume gate failed: "
-            f"actual={volume_validation['actual_volume_source_units_cubed']:.12g}, "
-            f"expected={volume_validation['expected_volume_source_units_cubed']:.12g}, "
-            f"relative_error={volume_validation['relative_error']:.6g} exceeds "
-            f"tolerance={volume_validation['relative_tolerance']:.6g}"
+            "rebuilt surface displaced volume failed: "
+            f"actual={volume['actual_volume_source_units_cubed']:.12g}, "
+            f"expected={volume['expected_volume_source_units_cubed']:.12g}, "
+            f"relative_error={volume['relative_error']:.6g} exceeds "
+            f"tolerance={volume['relative_tolerance']:.6g}"
         )
+    return topology, geometry, volume
 
-    distances = {
+
+def _surface_distance_report(state: dict[str, Any]) -> dict[str, Any]:
+    return {
         "input_points_to_output_surface": _distribution(
-            _point_distances(input_surface, rebuilt, vtk, vtk_to_numpy), np
+            _point_distances(
+                state["input_surface"],
+                state["rebuilt"],
+                state["vtk"],
+                state["vtk_to_numpy"],
+            ),
+            state["np"],
         ),
         "output_points_to_input_surface": _distribution(
-            _point_distances(rebuilt, input_surface, vtk, vtk_to_numpy), np
+            _point_distances(
+                state["rebuilt"],
+                state["input_surface"],
+                state["vtk"],
+                state["vtk_to_numpy"],
+            ),
+            state["np"],
         ),
         "unit": "source_coordinate_unit",
     }
 
+
+def _wrap_payload(
+    *,
+    source: Path,
+    output: Path,
+    temporary_stl: Path,
+    state: dict[str, Any],
+    output_topology: dict[str, Any],
+    output_geometry: dict[str, Any],
+    volume_validation: dict[str, Any],
+    distances: dict[str, Any],
+    parameters: dict[str, Any],
+    elapsed_seconds: float,
+) -> dict[str, Any]:
+    input_surface = state["input_surface"]
+    rebuilt = state["rebuilt"]
+    return {
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "backend": backend_status(),
+        "input": {
+            "path": str(source),
+            "size_bytes": source.stat().st_size,
+            "points": int(input_surface.GetNumberOfPoints()),
+            "triangles": int(input_surface.GetNumberOfCells()),
+            "geometry": _geometry_metrics(input_surface, state["vtk"]),
+            "topology": state["input_topology"],
+        },
+        "parameters": parameters,
+        "voxel_grid": {
+            **state["voxel_report"],
+            "solid_components_before_repair": state["solid_components"],
+            "solid_voxels_before_repair": state["solid_before_repair"],
+            "solid_voxels_after_repair": int(state["solid"].sum()),
+        },
+        "repair_history": state["repair_history"],
+        "output": {
+            "path": str(output),
+            "size_bytes": temporary_stl.stat().st_size,
+            "points": int(rebuilt.GetNumberOfPoints()),
+            "triangles": int(rebuilt.GetNumberOfCells()),
+            "geometry": output_geometry,
+            "topology": output_topology,
+            "normals": {"consistent_and_auto_oriented": True},
+            "self_intersection": {
+                "audited": False,
+                "value": None,
+                "recommended_check": "surfaceCheck -checkSelfIntersection",
+            },
+        },
+        "volume_validation": volume_validation,
+        "distance": distances,
+        "elapsed_seconds": elapsed_seconds,
+    }
+
+
+def wrap_surface(
+    input_path: str | os.PathLike[str],
+    output_path: str | os.PathLike[str],
+    *,
+    voxel_size: float,
+    report_path: str | os.PathLike[str] | None = None,
+    closing_iterations: int = DEFAULT_CLOSING_ITERATIONS,
+    pad_voxels: int = DEFAULT_PAD_VOXELS,
+    repair_iterations: int = DEFAULT_REPAIR_ITERATIONS,
+    repair_radius: int = DEFAULT_REPAIR_RADIUS,
+    max_voxels: int = DEFAULT_MAX_VOXELS,
+    require_single_component: bool = True,
+    expected_volume: float | None = None,
+    volume_relative_tolerance: float = DEFAULT_VOLUME_RELATIVE_TOLERANCE,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Create a watertight exterior STL and an atomic JSON audit report."""
+
+    start = time.monotonic()
+    source, output, report = _resolve_wrap_paths(input_path, output_path, report_path, force)
+    _validate_wrap_parameters(
+        voxel_size=voxel_size,
+        closing_iterations=closing_iterations,
+        pad_voxels=pad_voxels,
+        repair_iterations=repair_iterations,
+        repair_radius=repair_radius,
+        max_voxels=max_voxels,
+        expected_volume=expected_volume,
+        volume_relative_tolerance=volume_relative_tolerance,
+    )
+    state = _rebuild_voxel_surface(
+        source,
+        voxel_size=voxel_size,
+        closing_iterations=closing_iterations,
+        pad_voxels=pad_voxels,
+        repair_iterations=repair_iterations,
+        repair_radius=repair_radius,
+        max_voxels=max_voxels,
+    )
+    output_topology, output_geometry, volume_validation = _validate_rebuilt_surface(
+        state["rebuilt"],
+        state["vtk"],
+        require_single_component=require_single_component,
+        expected_volume=expected_volume,
+        volume_relative_tolerance=volume_relative_tolerance,
+    )
+    distances = _surface_distance_report(state)
     output.parent.mkdir(parents=True, exist_ok=True)
     report.parent.mkdir(parents=True, exist_ok=True)
     temporary_stl = _temporary_path(output.parent, ".stl")
     temporary_json = _temporary_path(report.parent, ".json")
     try:
-        _write_stl(rebuilt, temporary_stl, vtk)
-        payload: dict[str, Any] = {
-            "schema_version": REPORT_SCHEMA_VERSION,
-            "created_at_utc": _utc_timestamp(),
-            "invocation": list(invocation) if invocation is not None else None,
-            "backend": backend_status(),
-            "input": {
-                "path": str(source),
-                "sha256": _sha256_file(source),
-                "size_bytes": source.stat().st_size,
-                "points": int(input_surface.GetNumberOfPoints()),
-                "triangles": int(input_surface.GetNumberOfCells()),
-                "geometry": _geometry_metrics(input_surface, vtk),
-                "topology": input_topology,
-            },
-            "parameters": {
-                "voxel_size_source_units": voxel_size,
-                "outside_connectivity": 6,
-                "closing_iterations": closing_iterations,
-                "closing_kernel": [3, 3, 3],
-                "pad_voxels": pad_voxels,
-                "repair_iterations": repair_iterations,
-                "repair_radius_voxels": repair_radius,
-                "max_voxels": max_voxels,
-                "require_single_component": require_single_component,
-                "expected_volume_source_units_cubed": expected_volume,
-                "volume_relative_tolerance": volume_relative_tolerance,
-                "surface_smoothing": False,
-            },
-            "voxel_grid": {
-                **voxel_report,
-                "solid_components_before_repair": int(solid_components),
-                "solid_voxels_before_repair": solid_before_repair,
-                "solid_voxels_after_repair": int(solid.sum()),
-            },
-            "repair_history": repair_history,
-            "output": {
-                "path": str(output),
-                "sha256": _sha256_file(temporary_stl),
-                "size_bytes": temporary_stl.stat().st_size,
-                "points": int(rebuilt.GetNumberOfPoints()),
-                "triangles": int(rebuilt.GetNumberOfCells()),
-                "geometry": output_geometry,
-                "topology": output_topology,
-                "normals": {"consistent_and_auto_oriented": True},
-                "self_intersection": {
-                    "audited": False,
-                    "value": None,
-                    "required_gate": "surfaceCheck -checkSelfIntersection",
-                },
-            },
-            "volume_validation": volume_validation,
-            "distance": distances,
-            "elapsed_seconds": float(time.monotonic() - start),
+        _write_stl(state["rebuilt"], temporary_stl, state["vtk"])
+        parameters = {
+            "voxel_size_source_units": voxel_size,
+            "outside_connectivity": 6,
+            "closing_iterations": closing_iterations,
+            "closing_kernel": [3, 3, 3],
+            "pad_voxels": pad_voxels,
+            "repair_iterations": repair_iterations,
+            "repair_radius_voxels": repair_radius,
+            "max_voxels": max_voxels,
+            "require_single_component": require_single_component,
+            "expected_volume_source_units_cubed": expected_volume,
+            "volume_relative_tolerance": volume_relative_tolerance,
+            "surface_smoothing": False,
         }
+        payload = _wrap_payload(
+            source=source,
+            output=output,
+            temporary_stl=temporary_stl,
+            state=state,
+            output_topology=output_topology,
+            output_geometry=output_geometry,
+            volume_validation=volume_validation,
+            distances=distances,
+            parameters=parameters,
+            elapsed_seconds=float(time.monotonic() - start),
+        )
         temporary_json.write_text(
             json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n",
             encoding="utf-8",
@@ -784,7 +646,6 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     arguments = parser.parse_args(argv)
-    invocation = [sys.argv[0], *(list(argv) if argv is not None else sys.argv[1:])]
     try:
         result = wrap_surface(
             arguments.input,
@@ -800,7 +661,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_volume=arguments.expected_volume,
             volume_relative_tolerance=arguments.volume_relative_tolerance,
             force=arguments.force,
-            invocation=invocation,
         )
     except VoxelWrapError as exc:
         print(f"voxel_wrap: error: {exc}", file=sys.stderr)

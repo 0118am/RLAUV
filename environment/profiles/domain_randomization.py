@@ -6,17 +6,168 @@ import copy
 from dataclasses import dataclass, field, fields
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from collections.abc import Mapping, Sequence
+from typing import Any
 
-from .features import DOMAIN_RANDOMIZATION_FEATURES
 from .environment_profile import EnvironmentProfile
-from .pool_profile import (
-    DomainRandomizationProfile,
-    PoolDynamicsProfile,
+from ._validation import (
+    validate_integer_sequence,
+    validate_nonnegative,
+    validate_nonnegative_sequence,
+    validate_payload_samples,
+    validate_range,
 )
 
 
 DOMAIN_RANDOMIZATION_SCHEMA_VERSION = 1
+
+
+NumberSequence = Sequence[float]
+
+
+@dataclass(frozen=True)
+class DomainRandomizationProfile:
+    """Optional reset-time randomization ranges for calibrated uncertainty."""
+
+    use_custom_randomization: bool | None = None
+    enabled_features: Sequence[str] | None = None
+    com_to_cob_offset_radius: float | None = None
+    volume_range: NumberSequence | None = None
+    mass_range: NumberSequence | None = None
+    payload_samples: Sequence[Mapping[str, Any]] | None = None
+    thruster_command_delay_steps_range: NumberSequence | None = None
+    thruster_max_command_rate_range: NumberSequence | None = None
+    thruster_command_resolution_range: NumberSequence | None = None
+    thruster_command_dropout_probability_range: NumberSequence | None = None
+    thruster_wake_loss_coefficient_scale_range: NumberSequence | None = None
+    thruster_reaction_torque_coeff_scale_range: NumberSequence | None = None
+    damping_speed_linear_scale_range: NumberSequence | None = None
+    damping_speed_quadratic_scale_range: NumberSequence | None = None
+    battery_voltage_range: NumberSequence | None = None
+    battery_voltage_drop_per_s_range: NumberSequence | None = None
+    disturbance_curriculum: bool | None = None
+    disturbance_curriculum_stage_steps: Sequence[int] | None = None
+    water_current_smooth: bool | None = None
+    water_current_tau_range: NumberSequence | None = None
+    water_current_max_by_stage: NumberSequence | None = None
+    water_current_vertical_max_by_stage: NumberSequence | None = None
+    water_current_variation_std_by_stage: NumberSequence | None = None
+    damping_scale_by_stage: NumberSequence | None = None
+    added_mass_log_std_by_stage: NumberSequence | None = None
+    thruster_scale_by_stage: NumberSequence | None = None
+    thruster_tau_scale_by_stage: NumberSequence | None = None
+    additional_hydrodynamics_scale_by_stage: NumberSequence | None = None
+
+    def _validate_optional_ranges(self) -> None:
+        for name in (
+            "volume_range",
+            "mass_range",
+            "thruster_max_command_rate_range",
+            "thruster_command_resolution_range",
+            "thruster_command_dropout_probability_range",
+            "thruster_wake_loss_coefficient_scale_range",
+            "thruster_reaction_torque_coeff_scale_range",
+            "damping_speed_linear_scale_range",
+            "damping_speed_quadratic_scale_range",
+            "battery_voltage_range",
+            "battery_voltage_drop_per_s_range",
+            "water_current_tau_range",
+        ):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            validate_range(value, f"domain_randomization.{name}")
+            if name in {"mass_range", "volume_range", "battery_voltage_range", "water_current_tau_range"}:
+                if float(value[0]) <= 0.0:
+                    raise ValueError(f"domain_randomization.{name} must be positive.")
+            elif float(value[0]) < 0.0:
+                raise ValueError(f"domain_randomization.{name} must be non-negative.")
+            if name == "thruster_command_dropout_probability_range" and (
+                float(value[0]) < 0.0 or float(value[1]) > 1.0
+            ):
+                raise ValueError(
+                    "domain_randomization.thruster_command_dropout_probability_range must be in [0, 1]."
+                )
+        if self.thruster_command_delay_steps_range is not None:
+            validate_range(
+                self.thruster_command_delay_steps_range,
+                "domain_randomization.thruster_command_delay_steps_range",
+                integer=True,
+            )
+            if int(self.thruster_command_delay_steps_range[0]) < 0:
+                raise ValueError(
+                    "domain_randomization.thruster_command_delay_steps_range must be non-negative."
+                )
+
+    def _validate_curriculum_arrays(self) -> None:
+        stage_names = (
+            "water_current_max_by_stage",
+            "water_current_vertical_max_by_stage",
+            "water_current_variation_std_by_stage",
+            "damping_scale_by_stage",
+            "added_mass_log_std_by_stage",
+            "thruster_scale_by_stage",
+            "thruster_tau_scale_by_stage",
+            "additional_hydrodynamics_scale_by_stage",
+        )
+        for name in stage_names:
+            value = getattr(self, name)
+            if value is None:
+                continue
+            validate_nonnegative_sequence(value, f"domain_randomization.{name}")
+            if name in {
+                "damping_scale_by_stage",
+                "thruster_scale_by_stage",
+                "thruster_tau_scale_by_stage",
+                "additional_hydrodynamics_scale_by_stage",
+            } and any(float(item) > 1.0 for item in value):
+                raise ValueError(
+                    f"domain_randomization.{name} must not exceed 1.0 because it is used as a ± amplitude."
+                )
+        stage_lengths = [len(value) for name in stage_names if (value := getattr(self, name)) is not None]
+        if stage_lengths and any(length != stage_lengths[0] for length in stage_lengths):
+            raise ValueError("disturbance by-stage arrays must have matching lengths.")
+        if self.disturbance_curriculum and stage_lengths and self.disturbance_curriculum_stage_steps is None:
+            raise ValueError(
+                "domain_randomization.disturbance_curriculum_stage_steps is required when curriculum is enabled."
+            )
+        if self.disturbance_curriculum_stage_steps is not None:
+            validate_integer_sequence(
+                self.disturbance_curriculum_stage_steps,
+                "domain_randomization.disturbance_curriculum_stage_steps",
+                nonnegative=True,
+            )
+            if (
+                self.disturbance_curriculum
+                and stage_lengths
+                and len(self.disturbance_curriculum_stage_steps) != stage_lengths[0] - 1
+            ):
+                raise ValueError(
+                    "domain_randomization.disturbance_curriculum_stage_steps must have one fewer entry "
+                    "than disturbance by-stage arrays."
+                )
+
+    def validate(self) -> None:
+        if self.enabled_features is not None:
+            from .features import normalize_domain_randomization_features
+
+            normalize_domain_randomization_features(self.enabled_features)
+        for name in ("use_custom_randomization", "disturbance_curriculum", "water_current_smooth"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, bool):
+                raise ValueError(f"domain_randomization.{name} must be boolean.")
+        if self.payload_samples is not None:
+            validate_payload_samples(self.payload_samples, "domain_randomization.payload_samples")
+        if self.com_to_cob_offset_radius is not None:
+            validate_nonnegative(
+                self.com_to_cob_offset_radius,
+                "domain_randomization.com_to_cob_offset_radius",
+            )
+        self._validate_optional_ranges()
+        self._validate_curriculum_arrays()
+
+    def to_cfg_updates(self) -> dict[str, Any]:
+        return {key: value for key, value in self.__dict__.items() if value is not None}
 
 
 def domain_randomization_parameter_names() -> frozenset[str]:
@@ -203,81 +354,9 @@ def resolve_domain_randomization_spec(
     return load_domain_randomization_spec_json(value)
 
 
-def complete_domain_randomization_profile(
-    parameters: DomainRandomizationProfile,
-    base_profile: PoolDynamicsProfile,
-) -> DomainRandomizationProfile:
-    """Fill a partial overlay with explicit neutral values.
-
-    Standalone recipes must not inherit hidden training ranges from an
-    environment config. Absolute mass/volume/battery values are centered on
-    the bound deterministic profile; all other missing entries are neutral.
-    """
-
-    base_profile.validate()
-    parameters.validate()
-    provided = parameters.to_cfg_updates()
-    stage_count = max(
-        (
-            len(value)
-            for name in (
-                "water_current_max_by_stage",
-                "water_current_vertical_max_by_stage",
-                "water_current_variation_std_by_stage",
-                "damping_scale_by_stage",
-                "added_mass_log_std_by_stage",
-                "thruster_scale_by_stage",
-                "thruster_tau_scale_by_stage",
-                "additional_hydrodynamics_scale_by_stage",
-            )
-            if (value := provided.get(name)) is not None
-        ),
-        default=1,
-    )
-    thrusters = base_profile.thrusters
-    battery = base_profile.battery
-    neutral: dict[str, Any] = {
-        "use_custom_randomization": False,
-        "enabled_features": list(DOMAIN_RANDOMIZATION_FEATURES),
-        "com_to_cob_offset_radius": 0.0,
-        "volume_range": [base_profile.rigid_body.volume, base_profile.rigid_body.volume],
-        "mass_range": [base_profile.rigid_body.mass, base_profile.rigid_body.mass],
-        "payload_samples": [],
-        "thruster_command_delay_steps_range": [thrusters.command_delay_steps, thrusters.command_delay_steps],
-        "thruster_max_command_rate_range": [thrusters.max_command_rate, thrusters.max_command_rate],
-        "thruster_command_resolution_range": [thrusters.command_resolution, thrusters.command_resolution],
-        "thruster_command_dropout_probability_range": [
-            thrusters.command_dropout_probability,
-            thrusters.command_dropout_probability,
-        ],
-        "thruster_wake_loss_coefficient_scale_range": [1.0, 1.0],
-        "thruster_reaction_torque_coeff_scale_range": [1.0, 1.0],
-        "damping_speed_linear_scale_range": [1.0, 1.0],
-        "damping_speed_quadratic_scale_range": [1.0, 1.0],
-        "battery_voltage_range": [battery.initial_voltage, battery.initial_voltage],
-        "battery_voltage_drop_per_s_range": [battery.voltage_drop_per_s, battery.voltage_drop_per_s],
-        "disturbance_curriculum": False,
-        "disturbance_curriculum_stage_steps": [],
-        "water_current_smooth": False,
-        "water_current_tau_range": [12.0, 12.0],
-        "water_current_max_by_stage": [0.0] * stage_count,
-        "water_current_vertical_max_by_stage": [0.0] * stage_count,
-        "water_current_variation_std_by_stage": [0.0] * stage_count,
-        "damping_scale_by_stage": [0.0] * stage_count,
-        "added_mass_log_std_by_stage": [0.0] * stage_count,
-        "thruster_scale_by_stage": [0.0] * stage_count,
-        "thruster_tau_scale_by_stage": [0.0] * stage_count,
-        "additional_hydrodynamics_scale_by_stage": [0.0] * stage_count,
-    }
-    neutral.update(copy.deepcopy(provided))
-    completed = DomainRandomizationProfile(**neutral)
-    completed.validate()
-    return completed
-
-
 def validate_domain_randomization_base_profile(
     spec: DomainRandomizationSpec,
-    base_profile: PoolDynamicsProfile | EnvironmentProfile,
+    base_profile: EnvironmentProfile,
 ) -> None:
     """Reject a recipe accidentally paired with a different measured profile."""
 
@@ -293,7 +372,7 @@ def apply_domain_randomization_spec(
     cfg: Any,
     spec: DomainRandomizationSpec,
     *,
-    base_profile: PoolDynamicsProfile | EnvironmentProfile | None = None,
+    base_profile: EnvironmentProfile | None = None,
 ) -> Any:
     """Apply a domain-randomization recipe to an AUV config."""
 

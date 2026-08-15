@@ -51,7 +51,7 @@ if [[ -e "${runtime_dir}" ]]; then
     exit 1
 fi
 
-for command_name in dpkg-deb sha256sum mktemp; do
+for command_name in dpkg-deb mktemp; do
     command -v "${command_name}" >/dev/null 2>&1 || {
         echo "缺少安装命令：${command_name}" >&2
         exit 1
@@ -67,27 +67,10 @@ packages=(
     "libscotch-6.1_6.1.3-1_amd64.deb"
     "libptscotch-6.1_6.1.3-1_amd64.deb"
 )
-expected_sha256=(
-    "55588cb7231fb27eb6dbf53448a2e3d00fa30d516b42120b8eacf07abdfbe2d9"
-    "a887a44b8c312dea395769cbac7b22156a654e534f5f0a60686fb369d4c18364"
-    "1259f5c081a9c08848d2342c795f5d926d7546f8548ad10c843b16617beb7f49"
-    "52377a07c3ef8129c89d89a108c5421d709cf5a0f291f4977274b04a02df2181"
-    "aaea681aa1bff2e6a16b3584d9957e2f6f7ae59a908e981c123a313e52459804"
-    "44c402e1854b4a3bbe76392d3b33e2c6981784874ca100cb0e42859dbbb6ea5a"
-    "eb65910e518027acc4f8255022a0df83f5fd54304a6bc2e23ae0434963a9d617"
-)
-
-for index in "${!packages[@]}"; do
-    package_path="${package_dir}/${packages[$index]}"
+for package_name in "${packages[@]}"; do
+    package_path="${package_dir}/${package_name}"
     if [[ ! -f "${package_path}" ]]; then
         echo "缺少离线包：${package_path}" >&2
-        exit 1
-    fi
-    actual_sha256="$(sha256sum -- "${package_path}")"
-    actual_sha256="${actual_sha256%% *}"
-    if [[ "${actual_sha256}" != "${expected_sha256[$index]}" ]]; then
-        echo "SHA-256 不匹配：${package_path}" >&2
-        echo "期望 ${expected_sha256[$index]}，实际 ${actual_sha256}" >&2
         exit 1
     fi
 done

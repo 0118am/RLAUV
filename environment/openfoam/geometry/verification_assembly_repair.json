@@ -2,9 +2,7 @@
   "schema_version": 1,
   "source": {
     "basename": "验证机装配体.STEP",
-    "sha256": "9777be1c028d8ebb18f61118466d17671aee1f5860ea8144717c50bc65d6ba07",
-    "units": "mm",
-    "expected_shell_count": 275
+    "units": "mm"
   },
   "output_frame": {
     "name": "body_flu_com",

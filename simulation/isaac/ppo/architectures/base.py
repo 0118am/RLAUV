@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
-BASE_OBSERVATION_DIM = 30
+from robot.control.trajectory.observation_contract import (
+    BASE_OBSERVATION_DIM,
+    OBSERVATION_FIELD_DIMENSIONS,
+)
 
 
 # These are simulator-only terms used by the PPO value baseline.  They are
@@ -79,14 +81,7 @@ class MlpArchitecture:
 
     @property
     def history_feature_dim(self) -> int:
-        field_dimensions = {
-            "position_error_b": 3,
-            "linear_velocity_error_b": 3,
-            "attitude_error_quat": 4,
-            "angular_velocity_b": 3,
-            "applied_action": 8,
-        }
-        return sum(field_dimensions[name] for name in self.history_fields)
+        return sum(OBSERVATION_FIELD_DIMENSIONS[name] for name in self.history_fields)
 
     @property
     def observation_dim(self) -> int:

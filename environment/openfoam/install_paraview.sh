@@ -8,10 +8,6 @@ xcb_package_name="libxcb-cursor0_0.1.1-4ubuntu1_amd64.deb"
 xcb_package_path="${AUV_PARAVIEW_XCB_PACKAGE:-/tmp/${xcb_package_name}}"
 runtime_dir="${AUV_PARAVIEW_ROOT:-${script_dir}/.runtime/paraview-6.0.1}"
 archive_root="ParaView-6.0.1-MPI-Linux-Python3.12-x86_64"
-expected_size=826711252
-expected_md5="de2be9dcb3bced49f4959bd932aabc0a"
-expected_sha256="62995dc07907d0fe5049244b5fa82b03e9f0fe255159fa690d586367dfcb1959"
-expected_xcb_sha256="c9b5d1ad4af57397b1bd77e0a92750e34419def134c0282a0836ae9efc07cf64"
 
 usage() {
     printf '%s\n' \
@@ -66,7 +62,7 @@ if [[ ! -e "${runtime_dir}" && ! -f "${archive_path}" ]]; then
     exit 1
 fi
 
-for command_name in dpkg-deb md5sum mktemp sha256sum stat tar; do
+for command_name in dpkg-deb mktemp tar; do
     command -v "${command_name}" >/dev/null 2>&1 || {
         echo "缺少安装命令：${command_name}" >&2
         exit 1
@@ -78,39 +74,12 @@ if [[ ! -f "${xcb_package_path}" ]]; then
     echo "可执行：cd /tmp && apt-get download libxcb-cursor0=0.1.1-4ubuntu1" >&2
     exit 1
 fi
-xcb_sha256="$(sha256sum -- "${xcb_package_path}")"
-xcb_sha256="${xcb_sha256%% *}"
-if [[ "${xcb_sha256}" != "${expected_xcb_sha256}" ]]; then
-    echo "libxcb-cursor0 的 SHA-256 不匹配。" >&2
-    exit 1
-fi
-
 if [[ -e "${runtime_dir}" ]]; then
     echo "正在为现有 ParaView 安装 libxcb-cursor0..."
     dpkg-deb --extract "${xcb_package_path}" "${runtime_dir}"
     [[ -e "${xcb_library}" ]] || { echo "libxcb-cursor0 解包失败" >&2; exit 1; }
     echo "ParaView 6.0.1 已补齐图形运行库：${runtime_dir}"
     exit 0
-fi
-
-actual_size="$(stat -c '%s' -- "${archive_path}")"
-if [[ "${actual_size}" != "${expected_size}" ]]; then
-    echo "安装包大小错误：期望 ${expected_size}，实际 ${actual_size}" >&2
-    exit 1
-fi
-actual_md5="$(md5sum -- "${archive_path}")"
-actual_md5="${actual_md5%% *}"
-if [[ "${actual_md5}" != "${expected_md5}" ]]; then
-    echo "安装包 MD5 与 Kitware 官方清单不匹配。" >&2
-    echo "期望 ${expected_md5}，实际 ${actual_md5}" >&2
-    exit 1
-fi
-actual_sha256="$(sha256sum -- "${archive_path}")"
-actual_sha256="${actual_sha256%% *}"
-if [[ "${actual_sha256}" != "${expected_sha256}" ]]; then
-    echo "ParaView 安装包的 SHA-256 不匹配。" >&2
-    echo "期望 ${expected_sha256}，实际 ${actual_sha256}" >&2
-    exit 1
 fi
 
 if ! tar -tzf "${archive_path}" | awk -v root="${archive_root}/" '

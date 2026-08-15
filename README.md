@@ -1,7 +1,7 @@
 # T60 AUV 水动力、轨迹控制与强化学习
 
 本仓库只面向 T60 AUV，统一管理机器人本体、水池与水动力模型、Isaac Lab
-强化学习训练、策略评估，以及 MuJoCo 跨模拟器验证。当前 Isaac Lab Direct Task 为
+强化学习训练和策略评估。当前 Isaac Lab Direct Task 为
 `Isaac-AUV-Traj-Direct-v1`。
 
 项目采用明确的领域边界：机器人自身性质归 `robot/`，水和水动力物理归
@@ -16,7 +16,6 @@
 | `robot/` | T60 质量、惯量、浮力中心、推进器、执行器、电池、系缆、PID 和可部署轨迹几何 | 水流、水池边界、Isaac 生命周期 |
 | `environment/` | 水流场、水动力方程、池壁/自由液面效应、OpenFOAM/PMM 数据和环境随机化 | 机器人控制器、Isaac 场景代码 |
 | `simulation/isaac/` | Isaac 配置、场景生命周期、PhysX 适配、观测、奖励、PPO、训练与评估 worker | 机器人或水动力参数副本、模拟传感器滤波链 |
-| `simulation/mujoco/` | 使用相同机器人和环境契约进行独立策略回归 | 另一套策略输入或物理参数 |
 | `train.ipynb` | 单次训练的人工数值选择和启动动作 | 可复用函数、物理实现、进程实现 |
 
 核心数据流如下：
@@ -31,14 +30,14 @@ train.ipynb ──生成本次运行的环境/DR 快照──> Isaac 任务配�
                          environment/ 力模型 ─┤
                          robot/ 推进器模型 ────┤
                                               ▼
-                           physics_adapter.py → PhysX
+                 physics_adapter.py + force_composition.py → PhysX
                                               │
                                               ▼
                                PPO checkpoint / 评估结果
 ```
 
-`composition.py` 只解析、校验和组合外部数据源；`physics_adapter.py` 只完成 Isaac 张量、
-共享物理模型与 PhysX wrench 之间的转换。二者都不是物理参数的数据源。
+`composition.py` 只解析、校验和组合外部数据源；`physics_adapter.py` 计算 Isaac 水动力状态，
+`force_composition.py` 合成推进器、缆绳与流体 wrench。它们都不是物理参数的数据源。
 
 ## 目录结构
 
@@ -62,7 +61,6 @@ environment/                        水与水动力领域
 
 robot/                              T60 机器人领域
 ├── assets/isaac/t60_auv.usd        Isaac 资产
-├── assets/mujoco/t60_auv.xml       MuJoCo 资产
 ├── dynamics/                       本体参数、刚体变换和系缆模型
 ├── propulsion/                     T1–T8 实测三分量推力曲线与推力合成
 ├── control/
@@ -72,20 +70,20 @@ robot/                              T60 机器人领域
 └── runtime.py                      执行器、电池和系缆运行参数
 
 simulation/
-├── isaac/
-│   ├── config.py                   策略空间、任务参数和 Isaac 配置契约
-│   ├── env.py                      DirectRLEnv 生命周期和状态推进
-│   ├── composition.py              环境与机器人数据源的显式合成
-│   ├── physics_adapter.py          共享物理模型到 PhysX 的适配层
-│   ├── observations.py             当前观测、归一化和因果历史
-│   ├── robot_asset.py              T60 USD 与 Isaac prim 的绑定
-│   ├── visualization*.py           Isaac 调试可视化
-│   ├── ppo/                        PPO 算法、runner 和 MLP 架构注册表
-│   ├── rewards/                    版本化奖励函数
-│   ├── training.py                 快照生成与训练进程管理
-│   ├── trajectory/                 Isaac 任务 mixin、train/eval worker 和报告工具
-│   └── rlpolicy/                   本地运行、评估和导出产物
-└── mujoco/                         独立策略验证后端
+└── isaac/
+    ├── config.py                   策略空间、任务参数和 Isaac 配置契约
+    ├── env.py                      DirectRLEnv 生命周期和状态推进
+    ├── composition.py              环境与机器人数据源的显式合成
+    ├── physics_adapter.py          水流、池体效应与有效水动力状态
+    ├── force_composition.py        推进器、缆绳和流体 wrench 合成
+    ├── observations.py             当前观测、归一化和因果历史
+    ├── robot_asset.py              T60 USD 与 Isaac prim 的绑定
+    ├── visualization*.py           Isaac 调试可视化
+    ├── ppo/                        PPO 算法、runner 和 MLP 架构注册表
+    ├── rewards/                    版本化奖励函数
+    ├── training.py                 快照生成与训练进程管理
+    ├── trajectory/                 Isaac 任务 mixin、train/eval worker 和报告工具
+    └── rlpolicy/                   本地运行、评估和导出产物
 
 tests/                               与生产代码相同的领域归属
 ```
@@ -99,7 +97,7 @@ tests/                               与生产代码相同的领域归属
 - T60 质量、惯量、排水体积、质心和浮心：
   [`robot/dynamics/parameters.py`](robot/dynamics/parameters.py)
 - T1–T8 安装位置、PWM 映射和实测三分量推力曲线：
-  [`robot/propulsion/thrusters.py`](robot/propulsion/thrusters.py)
+  [`robot/propulsion/curves.py`](robot/propulsion/curves.py)
 - 执行器、电池和系缆名义运行参数：[`robot/runtime.py`](robot/runtime.py)
 - 水池名义水动力配置：
   [`environment/hydrodynamics/coefficients/auv_pool_openfoam_hydrodynamics_v1.json`](environment/hydrodynamics/coefficients/auv_pool_openfoam_hydrodynamics_v1.json)
@@ -115,7 +113,7 @@ tests/                               与生产代码相同的领域归属
 [`train.ipynb`](train.ipynb) 是训练人员唯一需要编辑的入口。它显式列出本次运行所需的：
 
 - 训练身份：`RUN_NAME`、`SEED`、`MLP_ARCHITECTURE`、`REWARD_PROFILE`；
-- 训练规模：`NUM_ENVS`、`MAX_ITERATIONS`、`ROLLOUT_STEPS`、`SEGMENT_ITERATIONS`；
+- 训练规模：`NUM_ENVS`、`MAX_ITERATIONS`、`ROLLOUT_STEPS`；
 - 确定性水流：世界坐标系常值流、周期流，以及可选空间流场；
 - 水池效应：池壁边界、自由液面和晃荡参数；
 - 全部 DR 数值：刚体、水流、水动力、推进器和电池的范围与分阶段强度；
@@ -208,13 +206,12 @@ Notebook 会验证当前工作目录是否为仓库根目录。默认 `ISAACLAB_
 
 | 值 | 行为 |
 | --- | --- |
-| `preview` | 生成并校验快照，打印完整 worker 命令和 campaign JSON，不启动训练 |
-| `start` | 写入 campaign 配置并以独立进程启动训练/能力门控 supervisor |
-| `status` | 查找属于该 campaign 的 supervisor、训练和评估进程，并显示日志尾部 |
+| `preview` | 生成并校验快照，打印完整 worker 命令，不启动训练 |
+| `start` | 以独立进程直接启动训练 worker |
+| `status` | 查找属于该 campaign 的训练和评估进程，并显示日志尾部 |
 | `stop` | 只终止该 campaign 的匹配进程，并清理失效 PID 记录 |
 
-建议先运行 `preview`，确认环境/DR 快照和打印命令，再改为 `start`。需要明确重启能力门控状态时
-再设置 `RESTART_GATE=True`。
+建议先运行 `preview`，确认环境/DR 快照和打印命令，再改为 `start`。
 
 `simulation/isaac/trajectory/train.py` 是 Isaac Sim 隔离 worker，不是人工配置入口；不应手工
 在其中维护实验数值。`simulation/isaac/training.py` 是 Notebook 调用的无 Isaac Sim 导入的
@@ -234,7 +231,6 @@ simulation/isaac/rlpolicy/
 ├── _configs/<RUN_NAME>/                 本次环境与 DR 快照
 └── <architecture experiment>/
     ├── _launcher/                       PID 和启动日志
-    ├── _curriculum/                     campaign 与能力门控状态
     └── <timestamp>_<RUN_NAME>/
         ├── model_*.pt                   checkpoint
         ├── params/                      RSL-RL/环境解析配置
@@ -302,7 +298,7 @@ Notebook 支持：
 结果写入 `<POLICY_RUN_DIR>/evaluation/`。训练和评估必须选择相同的 MLP 架构、奖励版本以及
 相容的环境/DR 配方。
 
-## ONNX 导出与 MuJoCo 验证
+## ONNX 导出
 
 ONNX 默认写入 checkpoint 所在运行的 `exports/`：
 
@@ -311,18 +307,6 @@ python simulation/isaac/rlpolicy/export_onnx.py \
   --checkpoint simulation/isaac/rlpolicy/auv_traj_mlp_history_5/<run>/model_480.pt \
   --mlp_architecture mlp_history_5
 ```
-
-安装 MuJoCo 附加依赖并运行跨模拟器验证：
-
-```bash
-python -m pip install -r simulation/mujoco/requirements.txt
-python simulation/mujoco/validate_policy.py \
-  --policy simulation/isaac/rlpolicy/auv_traj_mlp_history_5/<run>/exports/<policy>.onnx \
-  --mlp-architecture mlp_history_5
-```
-
-详细契约见 [`simulation/mujoco/README.md`](simulation/mujoco/README.md)。MuJoCo 回归用于发现
-策略输入、推进器或物理适配差异，不能替代 Isaac Lab 评估和真实水池试验。
 
 ## OpenFOAM 与 PMM
 
@@ -338,32 +322,15 @@ OpenFOAM/PMM 结果经过检查后，应更新 `environment/hydrodynamics/coeffi
 
 ## 测试
 
-主测试集不启动 Isaac Sim，覆盖领域模型、配置合成、训练命令、奖励、评估工具和 MuJoCo
-桥接：
+精简测试集不启动 Isaac Sim，只保留实验主链路的数值与接口回归：PMM 拟合、共享物理、
+PID/轨迹、PPO、训练快照和 Isaac 适配。
 
 ```bash
 conda run -n env_isaaclab python -m pytest -q tests
 ```
 
-共享动力学用例：
-
-```bash
-conda run -n env_isaaclab python -m pytest -q tests/integration/dynamics_cases.py
-```
-
-长时间训练前运行快速策略门禁：
-
-```bash
-conda run -n env_isaaclab python tests/run_policy_preflight.py
-```
-
-OpenFOAM 自带测试单独运行：
-
-```bash
-conda run -n env_isaaclab python -m pytest -q environment/openfoam/tests
-```
-
-这些检查不启动 Isaac Sim。完整 GPU 训练前仍应执行一次 Isaac Lab 短迭代 smoke test。
+完整 GPU 训练前仍应执行一次 Isaac Lab 短迭代 smoke test；OpenFOAM 的几何与网格质量由
+实际工具链输出判定，不再维护一套独立的 Python 门禁测试。
 
 ## 修改内容应放在哪里
 

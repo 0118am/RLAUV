@@ -14,13 +14,11 @@ repository. Human-facing numeric selection lives in the repository-root
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import importlib.metadata as metadata
 import os
 from pathlib import Path
 import platform
 import sys
-import time
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -98,29 +96,25 @@ def _build_parser(app_launcher_type: type) -> argparse.ArgumentParser:
 def _run_training(args_cli: argparse.Namespace, app_launcher: object) -> None:
     """Resolve Hydra configuration and execute one RSL-RL training process."""
 
-    import gymnasium as gym
     import torch
-    from rsl_rl.runners import DistillationRunner
     import rsl_rl.runners.on_policy_runner as on_policy_runner_module
 
     from isaaclab.envs import (
-        DirectMARLEnv,
         DirectMARLEnvCfg,
         DirectRLEnvCfg,
         ManagerBasedRLEnvCfg,
-        multi_agent_to_single_agent,
     )
-    from isaaclab.utils.dict import print_dict
-    from isaaclab.utils.io import dump_yaml
-    from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper
+    from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg
 
     import isaaclab_tasks  # noqa: F401
-    from isaaclab_tasks.utils import get_checkpoint_path
     from isaaclab_tasks.utils.hydra import hydra_task_config
 
     from simulation.isaac.ppo.algorithm import RolloutAdaptivePPO
-    from simulation.isaac.ppo.runner import GpuBatchedOnPolicyRunner
     from simulation.isaac.trajectory import cli as cli_args
+    from simulation.isaac.trajectory.training_worker import (
+        configure_torch_runtime,
+        execute_training,
+    )
 
     _require_rsl_rl_version()
 
@@ -128,106 +122,14 @@ def _run_training(args_cli: argparse.Namespace, app_launcher: object) -> None:
     # local OnPolicyRunner subclass.
     on_policy_runner_module.RolloutAdaptivePPO = RolloutAdaptivePPO
 
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-    torch.backends.cudnn.deterministic = False
-    torch.backends.cudnn.benchmark = False
+    configure_torch_runtime(torch)
 
     @hydra_task_config(args_cli.task, args_cli.agent)
     def train(
         env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg,
         agent_cfg: RslRlBaseRunnerCfg,
     ) -> None:
-        agent_cfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
-        if args_cli.num_envs is not None:
-            env_cfg.scene.num_envs = args_cli.num_envs
-        if args_cli.max_iterations is not None:
-            agent_cfg.max_iterations = args_cli.max_iterations
-
-        env_cfg.seed = agent_cfg.seed
-        if args_cli.device is not None:
-            env_cfg.sim.device = args_cli.device
-        if args_cli.distributed and args_cli.device is not None and "cpu" in args_cli.device:
-            raise ValueError("Distributed training requires a CUDA device.")
-        if args_cli.distributed:
-            env_cfg.sim.device = f"cuda:{app_launcher.local_rank}"
-            agent_cfg.device = f"cuda:{app_launcher.local_rank}"
-            distributed_seed = agent_cfg.seed + app_launcher.local_rank
-            env_cfg.seed = distributed_seed
-            agent_cfg.seed = distributed_seed
-
-        # ``agent.experiment_name`` may be absolute. os.path.join deliberately
-        # preserves that contract and otherwise follows the IsaacLab default.
-        log_root_path = os.path.abspath(os.path.join("logs", "rsl_rl", agent_cfg.experiment_name))
-        print(f"[INFO] Logging experiment in directory: {log_root_path}")
-        run_directory_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        print(f"Exact experiment name requested from command line: {run_directory_name}")
-        if agent_cfg.run_name:
-            run_directory_name += f"_{agent_cfg.run_name}"
-        log_dir = os.path.join(log_root_path, run_directory_name)
-
-        if isinstance(env_cfg, ManagerBasedRLEnvCfg):
-            env_cfg.export_io_descriptors = args_cli.export_io_descriptors
-        env_cfg.log_dir = log_dir
-
-        env = gym.make(
-            args_cli.task,
-            cfg=env_cfg,
-            render_mode="rgb_array" if args_cli.video else None,
-        )
-        try:
-            if isinstance(env.unwrapped, DirectMARLEnv):
-                env = multi_agent_to_single_agent(env)
-
-            resume_path = None
-            if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
-                resume_path = get_checkpoint_path(
-                    log_root_path,
-                    agent_cfg.load_run,
-                    agent_cfg.load_checkpoint,
-                )
-
-            if args_cli.video:
-                video_kwargs = {
-                    "video_folder": os.path.join(log_dir, "videos", "train"),
-                    "step_trigger": lambda step: step % args_cli.video_interval == 0,
-                    "video_length": args_cli.video_length,
-                    "disable_logger": True,
-                }
-                print("[INFO] Recording videos during training.")
-                print_dict(video_kwargs, nesting=4)
-                env = gym.wrappers.RecordVideo(env, **video_kwargs)
-
-            start_time = time.time()
-            env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-            if agent_cfg.class_name == "OnPolicyRunner":
-                runner = GpuBatchedOnPolicyRunner(
-                    env,
-                    agent_cfg.to_dict(),
-                    log_dir=log_dir,
-                    device=agent_cfg.device,
-                )
-            elif agent_cfg.class_name == "DistillationRunner":
-                runner = DistillationRunner(
-                    env,
-                    agent_cfg.to_dict(),
-                    log_dir=log_dir,
-                    device=agent_cfg.device,
-                )
-            else:
-                raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
-
-            runner.add_git_repo_to_log(__file__)
-            if resume_path is not None:
-                print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-                runner.load(resume_path)
-
-            dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
-            dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
-            runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
-            print(f"Training time: {round(time.time() - start_time, 2)} seconds")
-        finally:
-            env.close()
+        execute_training(env_cfg, agent_cfg, args_cli, app_launcher, cli_args, __file__)
 
     train()
 

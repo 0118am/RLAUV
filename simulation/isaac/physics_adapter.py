@@ -8,8 +8,6 @@ called here rather than reimplemented.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Tuple
 import torch
 
 from environment.randomization.current import update_smooth_current
@@ -24,157 +22,20 @@ from environment.hydrodynamics.pool_effects import (
     calculate_rectangular_pool_sloshing_state,
 )
 from environment.hydrodynamics.models import (
-    HydrodynamicForceModels,
     calculate_speed_dependent_damping_scale,
-    quat_apply_wxyz as quat_apply,
-    quat_conjugate_wxyz as quat_conjugate,
     scale_hydrodynamic_coefficients,
 )
-from robot.propulsion.thrusters import (
-    calculate_axial_inflow_thrust_scale,
-    calculate_reaction_torques,
-    calculate_thruster_wake_interaction_scale,
-    calculate_voltage_thrust_scale,
-    measured_thruster_body_forces,
-    reduce_point_forces_to_wrench,
+from robot.propulsion.effects import calculate_voltage_thrust_scale
+from .dynamics_state import AUVDynamicsStateMixin
+from .force_composition import AUVForceCompositionMixin
+from .hydrodynamic_state import (
+    EffectiveHydrodynamicState,
+    PhysxHydrodynamicWrenchCfg,
+    PhysxHydrodynamicWrenchManager,
 )
-from robot.dynamics.tether import calculate_multisegment_tether_wrench, update_rate_limited_winch_slack_length
-
-def _nominal_hydro_coeff_tensor(values, device: torch.device, name: str) -> torch.Tensor:
-    """Normalize 6-DOF hydrodynamic coefficients to a single-env tensor."""
-
-    tensor = torch.as_tensor(values, dtype=torch.float32, device=device)
-    if tensor.ndim == 1 and tensor.shape[0] == 6:
-        return tensor.reshape(1, 6)
-    if tensor.ndim == 2:
-        if tensor.shape == (6, 6):
-            return tensor.reshape(1, 6, 6)
-        if tensor.shape == (1, 6):
-            return tensor
-    if tensor.ndim == 3 and tensor.shape == (1, 6, 6):
-        return tensor
-    raise ValueError(f"{name} must be a 6-vector or 6x6 matrix, got shape {tuple(tensor.shape)}.")
 
 
-def _repeat_hydro_coeff_for_envs(nominal: torch.Tensor, num_envs: int) -> torch.Tensor:
-    repeats = (num_envs,) + tuple(1 for _ in range(nominal.ndim - 1))
-    return nominal.repeat(repeats)
-
-
-@dataclass
-class EffectiveHydrodynamicState:
-    """Effective quantities shared by the force path and asymmetric Critic."""
-
-    water_current_w: torch.Tensor
-    linear_damping: torch.Tensor
-    quadratic_damping: torch.Tensor
-    added_mass: torch.Tensor
-    buoyancy_scale: torch.Tensor
-    thruster_scale: torch.Tensor
-
-
-@dataclass(frozen=True)
-class PhysxHydrodynamicWrenchCfg:
-    """Configuration for the optional high-order wrench sent to PhysX."""
-
-    enabled: bool = False
-    base_scale: float = 1.0
-    modulation_amplitude: float = 0.0
-    modulation_frequency_hz: float = 0.0
-    modulation_phase_rad: float = 0.0
-
-
-class PhysxHydrodynamicWrenchManager:
-    """Own the state of a residual fluid wrench applied by the adapter."""
-
-    def __init__(
-        self,
-        force_model: HydrodynamicForceModels,
-        cfg: PhysxHydrodynamicWrenchCfg,
-        *,
-        added_mass_factor: torch.Tensor,
-        linear_damping_factor: torch.Tensor,
-        quadratic_damping_factor: torch.Tensor,
-        cubic_damping_factor: torch.Tensor,
-    ) -> None:
-        self.force_model = force_model
-        self.cfg = cfg
-        self.added_mass_factor = added_mass_factor
-        self.linear_damping_factor = linear_damping_factor
-        self.quadratic_damping_factor = quadratic_damping_factor
-        self.cubic_damping_factor = cubic_damping_factor
-        self.enabled = bool(cfg.enabled)
-        self._manual_scale = torch.ones(
-            force_model.num_envs,
-            1,
-            dtype=torch.float32,
-            device=force_model.device,
-        )
-        self.last_scale = torch.zeros_like(self._manual_scale)
-        self.last_wrench_b = torch.zeros(
-            force_model.num_envs,
-            6,
-            dtype=torch.float32,
-            device=force_model.device,
-        )
-
-    def set_enabled(self, enabled: bool) -> None:
-        self.enabled = bool(enabled)
-
-    def set_environment_scale(self, env_ids: torch.Tensor, scale: torch.Tensor | float) -> None:
-        values = torch.as_tensor(
-            scale,
-            dtype=self._manual_scale.dtype,
-            device=self._manual_scale.device,
-        )
-        self._manual_scale[env_ids] = values.reshape(-1, 1) if values.numel() > 1 else values
-
-    def reset(self, env_ids: torch.Tensor) -> None:
-        self._manual_scale[env_ids] = 1.0
-        self.last_scale[env_ids] = 0.0
-        self.last_wrench_b[env_ids] = 0.0
-
-    def scale_at(self, physics_time_s: float | torch.Tensor) -> torch.Tensor:
-        """Return the active non-negative gain for every environment."""
-
-        time = torch.as_tensor(
-            physics_time_s,
-            dtype=self.last_scale.dtype,
-            device=self.last_scale.device,
-        )
-        phase = (
-            2.0 * torch.pi * self.cfg.modulation_frequency_hz * time
-            + self.cfg.modulation_phase_rad
-        )
-        scheduled = self.cfg.base_scale + self.cfg.modulation_amplitude * torch.sin(phase)
-        return (self._manual_scale * torch.clamp(scheduled, min=0.0)).reshape(-1, 1)
-
-    def compute_wrench(
-        self,
-        nu_relative_b: torch.Tensor,
-        relative_acceleration_b: torch.Tensor | None,
-        physics_time_s: float | torch.Tensor,
-    ) -> torch.Tensor:
-        """Evaluate and cache a 6-D body wrench for the PhysX force path."""
-
-        if not self.enabled:
-            self.last_scale.zero_()
-            self.last_wrench_b.zero_()
-            return self.last_wrench_b
-        self.last_scale[:] = self.scale_at(physics_time_s)
-        residual = self.force_model.calculate_high_order_residual_wrench(
-            nu_relative_b,
-            relative_acceleration_b,
-            added_mass_factor=self.added_mass_factor,
-            linear_damping_factor=self.linear_damping_factor,
-            quadratic_damping_factor=self.quadratic_damping_factor,
-            cubic_damping_factor=self.cubic_damping_factor,
-        )
-        self.last_wrench_b[:] = residual * self.last_scale
-        return self.last_wrench_b
-
-
-class AUVDynamicsMixin:
+class AUVDynamicsMixin(AUVForceCompositionMixin, AUVDynamicsStateMixin):
     """Composes configured environmental effects into body force and torque."""
 
     def _additional_hydrodynamics_scale(self) -> float:
@@ -237,6 +98,8 @@ class AUVDynamicsMixin:
             self._current_free_surface_z[:] = sloshing_state.surface_z
         else:
             self._current_free_surface_z[env_ids] = sloshing_state.surface_z
+        if not self.cfg.free_surface_sloshing_enabled or additional_scale == 0.0:
+            return total_current_w
         return total_current_w + sloshing_state.orbital_velocity_w
 
     def _calculate_surface_sloshing_state(
@@ -272,17 +135,11 @@ class AUVDynamicsMixin:
             validate=False,
         )
 
-    def _update_relative_acceleration_b(self, water_current_w: torch.Tensor) -> torch.Tensor:
+    def _update_relative_acceleration_b(self, nu_r: torch.Tensor) -> torch.Tensor:
         """Estimate filtered body-frame ``dot(nu_r)`` for added-mass inertia."""
 
-        nu_r = self.force_calculation_functions.calculate_relative_velocity(
-            self._robot.data.root_quat_w,
-            self._robot.data.root_lin_vel_b,
-            self._robot.data.root_ang_vel_b,
-            water_current_w,
-        )
-        if nu_r.shape[0] != water_current_w.shape[0]:
-            raise RuntimeError("Relative-acceleration state and water-current batch sizes differ.")
+        if nu_r.shape != self._previous_nu_r.shape:
+            raise RuntimeError("Relative-acceleration state has an unexpected batch shape.")
         has_previous = self._has_previous_nu_r.unsqueeze(-1)
         previous_nu_r = torch.where(has_previous, self._previous_nu_r, nu_r)
         raw_nu_r_dot = (nu_r - previous_nu_r) / max(float(self.physics_dt), 1.0e-6)
@@ -298,7 +155,7 @@ class AUVDynamicsMixin:
         self._has_previous_nu_r[:] = True
         return self._filtered_nu_r_dot
 
-    def _update_battery_voltage_scale(self) -> torch.Tensor:
+    def _update_battery_voltage_scale(self) -> None:
         episode_time = (
             self.episode_length_buf.to(dtype=torch.float32).reshape(self.num_envs, 1)
             * self.physics_dt
@@ -308,13 +165,12 @@ class AUVDynamicsMixin:
             self.battery_initial_voltage - self.battery_voltage_drop_per_s * episode_time,
             min=self.cfg.battery_min_voltage,
         )
-        scale = calculate_voltage_thrust_scale(
+        self._battery_voltage_scale[:] = calculate_voltage_thrust_scale(
             self.battery_voltage,
             self.cfg.battery_voltage_nominal,
             self.cfg.battery_voltage_thrust_exponent,
             self.cfg.battery_min_voltage,
-        )
-        return scale.to(device=self.device, dtype=torch.float32)
+        ).to(device=self.device, dtype=torch.float32)
 
     def _calculate_pool_boundary_scales(
         self,
@@ -385,11 +241,11 @@ class AUVDynamicsMixin:
 
     def _calculate_speed_dependent_damping_scales(
         self,
-        water_current_w: torch.Tensor,
+        nu_r: torch.Tensor,
         *,
         env_ids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        ones = self._runtime_ones_env_6[: water_current_w.shape[0]]
+        ones = self._runtime_ones_env_6[: nu_r.shape[0]]
         if not self.cfg.speed_dependent_damping_enabled:
             return ones, ones
 
@@ -401,21 +257,6 @@ class AUVDynamicsMixin:
                 "speed_dependent_damping_enabled=True."
             )
 
-        root_quat_w = self._robot.data.root_quat_w
-        root_lin_vel_b = self._robot.data.root_lin_vel_b
-        root_ang_vel_b = self._robot.data.root_ang_vel_b
-        if env_ids is not None:
-            root_quat_w = root_quat_w[env_ids]
-            root_lin_vel_b = root_lin_vel_b[env_ids]
-            root_ang_vel_b = root_ang_vel_b[env_ids]
-        nu_r = self.force_calculation_functions.calculate_relative_velocity(
-            root_quat_w,
-            root_lin_vel_b,
-            root_ang_vel_b,
-            water_current_w,
-        )
-        if nu_r.shape[0] != water_current_w.shape[0]:
-            raise RuntimeError("Speed-dependent damping state and water-current batch sizes differ.")
         linear_scale = ones
         quadratic_scale = ones
         if has_linear_curve:
@@ -447,16 +288,98 @@ class AUVDynamicsMixin:
             ),
         )
 
+    def _hydrodynamic_local_positions(
+        self,
+        env_ids: torch.Tensor | None,
+        additional_scale: float,
+    ) -> torch.Tensor:
+        spatial_effects_active = bool(
+            self.cfg.water_current_field_enabled
+            or additional_scale != 0.0
+            and (
+                self.cfg.free_surface_sloshing_enabled
+                or self.cfg.pool_boundary_effects_enabled
+                or self.cfg.free_surface_effects_enabled
+            )
+        )
+        count = self.num_envs if env_ids is None else env_ids.numel()
+        if not spatial_effects_active:
+            return self._runtime_zeros_env_3[:count]
+        positions = self._robot.data.root_pos_w - self.scene.env_origins
+        return positions if env_ids is None else positions[env_ids]
+
+    def _selected_root_kinematics(
+        self,
+        env_ids: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        root_state = (
+            self._robot.data.root_quat_w,
+            self._robot.data.root_lin_vel_b,
+            self._robot.data.root_ang_vel_b,
+        )
+        if env_ids is None:
+            return root_state
+        return tuple(value[env_ids] for value in root_state)
+
+    def _effective_hydrodynamic_coefficients(
+        self,
+        relative_velocity_b: torch.Tensor,
+        sloshing_state: RectangularSloshingState,
+        local_positions: torch.Tensor,
+        env_ids: torch.Tensor | None,
+        additional_scale: float,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        pool_damping, pool_added_mass, pool_thruster = self._calculate_pool_boundary_scales(
+            local_positions,
+            additional_scale=additional_scale,
+        )
+        surface_damping, surface_added_mass, buoyancy, surface_thruster = (
+            self._calculate_free_surface_scales(
+                sloshing_state,
+                local_positions=local_positions,
+                env_ids=env_ids,
+                additional_scale=additional_scale,
+            )
+        )
+        linear_scale, quadratic_scale = self._calculate_speed_dependent_damping_scales(
+            relative_velocity_b,
+            env_ids=env_ids,
+        )
+        linear = self.linear_damping if env_ids is None else self.linear_damping[env_ids]
+        quadratic = self.quadratic_damping if env_ids is None else self.quadratic_damping[env_ids]
+        added_mass = self.added_mass_diag if env_ids is None else self.added_mass_diag[env_ids]
+        boundary_effects_active = bool(
+            additional_scale != 0.0
+            and (self.cfg.pool_boundary_effects_enabled or self.cfg.free_surface_effects_enabled)
+        )
+        damping_effects_active = bool(
+            self.cfg.speed_dependent_damping_enabled or boundary_effects_active
+        )
+        if boundary_effects_active:
+            linear_scale = linear_scale * pool_damping * surface_damping
+            quadratic_scale = quadratic_scale * pool_damping * surface_damping
+            added_mass = scale_hydrodynamic_coefficients(
+                added_mass,
+                pool_added_mass * surface_added_mass,
+            )
+        if damping_effects_active:
+            linear = scale_hydrodynamic_coefficients(linear, linear_scale)
+            quadratic = scale_hydrodynamic_coefficients(quadratic, quadratic_scale)
+        thruster = (
+            pool_thruster * surface_thruster
+            if boundary_effects_active
+            else self._runtime_ones_env_1[: relative_velocity_b.shape[0]]
+        )
+        return linear, quadratic, added_mass, buoyancy, thruster
+
     def _calculate_effective_hydrodynamic_state(
         self,
         env_ids: torch.Tensor | None = None,
     ) -> EffectiveHydrodynamicState:
         """Evaluate the force-path state once for all or selected environments."""
 
-        local_positions = self._robot.data.root_pos_w - self.scene.env_origins
-        if env_ids is not None:
-            local_positions = local_positions[env_ids]
         additional_scale = self._additional_hydrodynamics_scale()
+        local_positions = self._hydrodynamic_local_positions(env_ids, additional_scale)
         sloshing_state = self._calculate_surface_sloshing_state(
             local_positions,
             env_ids=env_ids,
@@ -468,47 +391,34 @@ class AUVDynamicsMixin:
             env_ids=env_ids,
             additional_scale=additional_scale,
         )
-        pool_damping_scale, pool_added_mass_scale, pool_thruster_scale = (
-            self._calculate_pool_boundary_scales(
-                local_positions,
-                additional_scale=additional_scale,
-            )
+        root_quat_w, root_lin_vel_b, root_ang_vel_b = self._selected_root_kinematics(env_ids)
+        relative_velocity_b = self.force_calculation_functions.calculate_relative_velocity(
+            root_quat_w,
+            root_lin_vel_b,
+            root_ang_vel_b,
+            water_current_w,
         )
         (
-            surface_damping_scale,
-            surface_added_mass_scale,
-            surface_buoyancy_scale,
-            surface_thruster_scale,
-        ) = self._calculate_free_surface_scales(
+            linear_damping,
+            quadratic_damping,
+            added_mass,
+            buoyancy_scale,
+            thruster_scale,
+        ) = self._effective_hydrodynamic_coefficients(
+            relative_velocity_b,
             sloshing_state,
-            local_positions=local_positions,
-            env_ids=env_ids,
-            additional_scale=additional_scale,
+            local_positions,
+            env_ids,
+            additional_scale,
         )
-        linear_speed_scale, quadratic_speed_scale = self._calculate_speed_dependent_damping_scales(
-            water_current_w,
-            env_ids=env_ids,
-        )
-        linear_damping = self.linear_damping if env_ids is None else self.linear_damping[env_ids]
-        quadratic_damping = self.quadratic_damping if env_ids is None else self.quadratic_damping[env_ids]
-        added_mass = self.added_mass_diag if env_ids is None else self.added_mass_diag[env_ids]
-        damping_scale = pool_damping_scale * surface_damping_scale
         return EffectiveHydrodynamicState(
             water_current_w=water_current_w,
-            linear_damping=scale_hydrodynamic_coefficients(
-                linear_damping,
-                damping_scale * linear_speed_scale,
-            ),
-            quadratic_damping=scale_hydrodynamic_coefficients(
-                quadratic_damping,
-                damping_scale * quadratic_speed_scale,
-            ),
-            added_mass=scale_hydrodynamic_coefficients(
-                added_mass,
-                pool_added_mass_scale * surface_added_mass_scale,
-            ),
-            buoyancy_scale=surface_buoyancy_scale,
-            thruster_scale=pool_thruster_scale * surface_thruster_scale,
+            relative_velocity_b=relative_velocity_b,
+            linear_damping=linear_damping,
+            quadratic_damping=quadratic_damping,
+            added_mass=added_mass,
+            buoyancy_scale=buoyancy_scale,
+            thruster_scale=thruster_scale,
         )
 
     def _store_effective_hydrodynamic_state(
@@ -520,15 +430,21 @@ class AUVDynamicsMixin:
             self._effective_hydrodynamic_state = state
         else:
             cached = self._effective_hydrodynamic_state
-            # Identity stage-zero states are views of preallocated tensors.
-            # Clone only reset rows so an in-place scatter never aliases its
-            # source; the full physics-step cache remains allocation-free.
-            cached.water_current_w[env_ids] = state.water_current_w.clone()
-            cached.linear_damping[env_ids] = state.linear_damping.clone()
-            cached.quadratic_damping[env_ids] = state.quadratic_damping.clone()
-            cached.added_mass[env_ids] = state.added_mass.clone()
-            cached.buoyancy_scale[env_ids] = state.buoyancy_scale.clone()
-            cached.thruster_scale[env_ids] = state.thruster_scale.clone()
+            # Identity fast paths may cache aliases of nominal/runtime state.
+            # Detach the full cache before the rare reset-row scatter so base
+            # coefficients and current state are never mutated indirectly.
+            for name in (
+                "water_current_w",
+                "relative_velocity_b",
+                "linear_damping",
+                "quadratic_damping",
+                "added_mass",
+                "buoyancy_scale",
+                "thruster_scale",
+            ):
+                target = getattr(cached, name).clone()
+                target[env_ids] = getattr(state, name)
+                setattr(cached, name, target)
 
     def _effective_hydrodynamic_state_for_critic(self) -> EffectiveHydrodynamicState:
         """Return cached force-path state, refreshing only freshly reset rows."""
@@ -543,261 +459,3 @@ class AUVDynamicsMixin:
             )
         self._pending_critic_hydrodynamic_env_ids = None
         return self._effective_hydrodynamic_state
-
-    def _calculate_tether_wrench(self, water_current_w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if not self.cfg.tether_enabled:
-            return self._runtime_zeros_env_3, self._runtime_zeros_env_3
-        if water_current_w.ndim == 1:
-            water_current_w = water_current_w.reshape(1, 3).repeat(self.num_envs, 1)
-        if self.cfg.tether_winch_enabled:
-            self.tether_slack_length[:] = update_rate_limited_winch_slack_length(
-                self.tether_slack_length,
-                self.cfg.tether_winch_target_length,
-                self.cfg.tether_winch_reel_speed,
-                self.physics_dt,
-                self.cfg.tether_winch_min_length,
-                self.cfg.tether_winch_max_length,
-            )
-        anchor_local = torch.as_tensor(
-            self.cfg.tether_anchor_pos_w,
-            dtype=self._robot.data.root_pos_w.dtype,
-            device=self.device,
-        ).reshape(1, 3)
-        anchor_w = self.scene.env_origins + anchor_local
-        force_w, torque_b = calculate_multisegment_tether_wrench(
-            self._robot.data.root_pos_w,
-            self._robot.data.root_quat_w,
-            self._robot.data.root_lin_vel_w,
-            water_current_w,
-            anchor_w,
-            self.cfg.tether_attach_offset_b,
-            self.tether_slack_length,
-            self.cfg.tether_stiffness,
-            self.cfg.tether_damping,
-            self.cfg.tether_drag_coeff,
-            self.cfg.tether_num_segments,
-            self.cfg.tether_segment_diameter,
-            self.cfg.tether_segment_density,
-            self.cfg.tether_segment_buoyancy_density,
-            self._gravity_w,
-            quat_conjugate,
-            quat_apply,
-        )
-        curriculum_scale = self._additional_hydrodynamics_scale()
-        return force_w * curriculum_scale, torque_b * curriculum_scale
-
-    @staticmethod
-    def _calculate_thruster_axes_b(thruster_forces_b: torch.Tensor) -> torch.Tensor:
-        """Return instantaneous measured force directions for optional effects."""
-
-        magnitudes = torch.linalg.vector_norm(thruster_forces_b, dim=-1, keepdim=True)
-        return thruster_forces_b / magnitudes.clamp_min(1.0e-8)
-
-    def _calculate_thruster_axial_inflow(
-        self,
-        water_current_w: torch.Tensor,
-        thruster_axes_b: torch.Tensor,
-    ) -> torch.Tensor:
-        nu_r = self.force_calculation_functions.calculate_relative_velocity(
-            self._robot.data.root_quat_w,
-            self._robot.data.root_lin_vel_b,
-            self._robot.data.root_ang_vel_b,
-            water_current_w,
-        )
-        relative_linvel_b = nu_r[:, 0:3]
-        return torch.sum(relative_linvel_b.unsqueeze(1) * thruster_axes_b, dim=-1)
-
-    def _calculate_thruster_inflow_scale(
-        self,
-        thruster_magnitudes: torch.Tensor,
-        water_current_w: torch.Tensor,
-        thruster_axes_b: torch.Tensor,
-    ) -> torch.Tensor:
-        if not self.cfg.thruster_inflow_loss_enabled:
-            return self._runtime_ones_thrusters
-
-        axial_inflow_along_axis = self._calculate_thruster_axial_inflow(water_current_w, thruster_axes_b)
-        return calculate_axial_inflow_thrust_scale(
-            axial_inflow_along_axis,
-            self.cfg.thruster_inflow_loss_coefficient,
-            self.cfg.thruster_inflow_reference_speed,
-            self.cfg.thruster_inflow_min_scale,
-        )
-
-    def _calculate_thruster_wake_scale(
-        self,
-        thruster_magnitudes: torch.Tensor,
-        thruster_axes_b: torch.Tensor,
-    ) -> torch.Tensor:
-        if not self.cfg.thruster_wake_interaction_enabled:
-            return self._runtime_ones_thrusters
-
-        return calculate_thruster_wake_interaction_scale(
-            self.thruster_com_offsets,
-            thruster_axes_b,
-            thruster_magnitudes,
-            self.cfg.thruster_wake_length,
-            self.cfg.thruster_wake_radius,
-            self.thruster_wake_loss_coefficient,
-            self.cfg.thruster_wake_expansion_rate,
-            self.cfg.thruster_wake_min_scale,
-            self._thruster_wake_reference_force_n,
-        )
-
-    def _sample_from_sphere(self, num_env_ids, r):
-        coords = torch.randn((num_env_ids, 3), device=self.device)
-        norms = torch.norm(coords, dim=1).unsqueeze(1)
-        coords /= norms
-
-        radii = r * torch.pow(torch.rand((num_env_ids, 1), device=self.device), 1/3)
-
-        return radii * coords
-
-    def _compute_dynamics(self, actions) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compute dynamics from normalized measured T60 commands.
-
-        ``-1`` maps to 1300 µs and ``+1`` maps to 1700 µs.  Each T1...T8
-        command evaluates one measured body-frame ``(Fx, Fy, Fz)`` curve;
-        there is no separate command polarity or fixed thrust direction.
-
-        Args:
-            actions (torch.Tensor): Actions shape (num_envs, num_actions)
-
-        Returns:
-            [torch.Tensor]: Forces sent to the simulation
-            [torch.Tensor]: Torques sent to the simulation
-        """
-
-        if self._debug: print("actions: ", actions)
-
-        thruster_commands = actions
-
-        if self._debug: print("thruster commands: ", thruster_commands)
-
-        thruster_commands = self.thruster_command_processor.process(
-            thruster_commands,
-            self.thruster_delay_steps,
-            self.thruster_max_command_rate,
-            self.physics_dt,
-            self.thruster_command_resolution,
-            self.thruster_command_dropout_probability,
-            dropout_enabled=self._thruster_command_dropout_enabled,
-        )
-
-        thruster_force_cmd_b = measured_thruster_body_forces(
-            thruster_commands,
-            self._thruster_force_curve_coefficients,
-        )
-
-        # Update first-order thrust dynamics at the actual physics clock.
-        # DirectRLEnv may run several physics steps per policy step (decimation),
-        # so episode_length_buf * dt would under-count time and freeze dynamics
-        # inside the decimation loop.
-        physics_time = self._sim_step_counter * self.physics_dt
-        thruster_forces_b = self.thruster_response.advance(thruster_force_cmd_b, physics_time)
-
-        voltage_scale = self._update_battery_voltage_scale()
-        effective_hydrodynamics = self._calculate_effective_hydrodynamic_state()
-        self._store_effective_hydrodynamic_state(effective_hydrodynamics)
-        self._pending_critic_hydrodynamic_env_ids = None
-        water_current_w = effective_hydrodynamics.water_current_w
-        common_thruster_scale = (
-            self.thruster_force_scale
-            * voltage_scale
-            * effective_hydrodynamics.thruster_scale
-        )
-        thruster_forces_b = thruster_forces_b * common_thruster_scale.unsqueeze(-1)
-        thruster_magnitudes = torch.linalg.vector_norm(thruster_forces_b, dim=-1)
-        thruster_axes_b = self._calculate_thruster_axes_b(thruster_forces_b)
-        inflow_scale = self._calculate_thruster_inflow_scale(
-            thruster_magnitudes,
-            water_current_w,
-            thruster_axes_b,
-        )
-        thruster_forces_b = thruster_forces_b * inflow_scale.unsqueeze(-1)
-        thruster_magnitudes = torch.linalg.vector_norm(thruster_forces_b, dim=-1)
-
-        wake_scale = self._calculate_thruster_wake_scale(thruster_magnitudes, thruster_axes_b)
-        thruster_forces_b = thruster_forces_b * wake_scale.unsqueeze(-1)
-        thruster_magnitudes = torch.linalg.vector_norm(thruster_forces_b, dim=-1)
-        # Persist the exact actuator force passed to the wrench composition.
-        # This is exposed only to the asymmetric training Critic; the Actor
-        # receives the deployable, rate-limited normalized command instead.
-        self.realized_thruster_forces_b[:] = thruster_forces_b
-        self.realized_thruster_force_n[:] = thruster_magnitudes
-
-        # IsaacLab receives one body-frame wrench at the RigidObject COM, so
-        # reduce the eight point forces here.  The COM-relative arms enter
-        # exactly once through r x F; do not pass positions downstream.
-        thruster_wrench_b = reduce_point_forces_to_wrench(self.thruster_com_offsets, thruster_forces_b)
-        thruster_forces = thruster_wrench_b[:, 0:3]
-        thruster_torques = thruster_wrench_b[:, 3:6]
-        if self._thruster_reaction_torque_enabled:
-            thruster_torques = thruster_torques + calculate_reaction_torques(
-                thruster_magnitudes,
-                thruster_axes_b,
-                self.thruster_reaction_torque_coeff,
-                self._thruster_spin_directions,
-            ).sum(dim=-2)
-
-        added_mass_inertia_scale = float(getattr(self.cfg, "added_mass_inertia_scale", 1.0))
-        relative_acceleration_b = self._update_relative_acceleration_b(water_current_w)
-        if added_mass_inertia_scale <= 0.0:
-            relative_acceleration_b = None
-        else:
-            relative_acceleration_b = relative_acceleration_b * added_mass_inertia_scale
-
-        ## Calculate hydrodynamics
-        if self._debug: print("gravity magnitude: ", self._gravity_magnitude)
-        volumes = self.volumes * effective_hydrodynamics.buoyancy_scale
-        fluid_forces, fluid_torques = self.force_calculation_functions.calculate_fossen_fluid_forces(
-          self._robot.data.root_quat_w,
-          self._robot.data.root_lin_vel_b,
-          self._robot.data.root_ang_vel_b,
-          self._gravity_w,
-          self.cfg.water_rho,
-          volumes,
-          self.com_to_cob_offsets,
-          effective_hydrodynamics.linear_damping,
-          effective_hydrodynamics.quadratic_damping,
-          water_current_w,
-          effective_hydrodynamics.added_mass,
-          relative_acceleration_b,
-          # High-order terms are managed separately and added below as an
-          # explicit external PhysX wrench. This avoids double application.
-          False,
-          self.high_order_residual_added_mass_factor,
-          self.high_order_residual_linear_damping_factor,
-          self.high_order_residual_quadratic_damping_factor,
-          self.high_order_residual_cubic_damping_factor,
-          added_mass_enabled=self._added_mass_enabled,
-        )
-
-        nu_relative_b = self.force_calculation_functions.calculate_relative_velocity(
-            self._robot.data.root_quat_w,
-            self._robot.data.root_lin_vel_b,
-            self._robot.data.root_ang_vel_b,
-            water_current_w,
-        )
-        high_order_wrench_b = self.physx_hydrodynamic_wrench_manager.compute_wrench(
-            nu_relative_b,
-            relative_acceleration_b,
-            physics_time,
-        )
-        fluid_forces = fluid_forces + high_order_wrench_b[:, 0:3]
-        fluid_torques = fluid_torques + high_order_wrench_b[:, 3:6]
-        if self._debug: print("fluid forces: ", fluid_forces)
-        if self._debug: print("fluid torques: ", fluid_torques)
-
-        if self._debug: print("thruster forces: ", thruster_forces)
-        if self._debug: print("thruster torques: ", thruster_torques)
-
-        tether_forces, tether_torques = self._calculate_tether_wrench(water_current_w)
-
-        forces = fluid_forces + thruster_forces + tether_forces
-        torques = fluid_torques + thruster_torques + tether_torques
-
-        if self._debug: print("final forces", forces)
-        if self._debug: print("final torques", torques)
-
-        return forces, torques
