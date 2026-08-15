@@ -133,7 +133,7 @@ class RobotRuntimeProfile:
             raise ValueError("physics_dt_s must be positive.")
         return int(round(self.thruster_command_delay_s / float(physics_dt_s)))
 
-    def to_isaac_cfg_updates(self, physics_dt_s: float = 1.0 / 200.0) -> dict[str, Any]:
+    def to_runtime_cfg_updates(self, physics_dt_s: float = 1.0 / 100.0) -> dict[str, Any]:
         """Return adapter fields without creating a second physical source."""
 
         self.validate()

@@ -4,127 +4,119 @@ from __future__ import annotations
 
 import torch
 
-from environment.hydrodynamics.models import scale_hydrodynamic_coefficients
 from environment.profiles.random_sampling import sample_bounded_normal, sample_isotropic_bounded_normal
 from robot.dynamics.rigid_body import physx_principal_inertia_and_com_quat_xyzw
 
 
-def initialize_payload_domain(env) -> None:
+def initialize_payload_domain(state, cfg) -> None:
     """Prepare categorical payload tensors once at environment construction."""
 
-    samples = list(getattr(env.cfg.domain_randomization, "payload_samples", []))
-    env.payload_sample_indices = torch.full(
-        (env.num_envs,), -1, dtype=torch.long, device=env.device
+    samples = list(getattr(cfg.domain_randomization, "payload_samples", []))
+    state.payload_sample_indices = torch.full(
+        (state.num_envs,), -1, dtype=torch.long, device=state.device
     )
-    env._payload_sample_count = len(samples)
+    state.payload_sample_count = len(samples)
     if not samples:
         return
 
     def six_scale(sample, name: str) -> torch.Tensor:
-        value = torch.as_tensor(sample.get(name, 1.0), dtype=torch.float32, device=env.device).reshape(-1)
+        value = torch.as_tensor(sample.get(name, 1.0), dtype=torch.float32, device=state.device).reshape(-1)
         return value.repeat(6) if value.numel() == 1 else value
 
-    env._payload_weights = torch.as_tensor(
-        [sample.get("weight", 1.0) for sample in samples], dtype=torch.float32, device=env.device
+    state.payload_weights = torch.as_tensor(
+        [sample.get("weight", 1.0) for sample in samples], dtype=torch.float32, device=state.device
     )
-    env._payload_masses = torch.as_tensor(
-        [sample["mass"] for sample in samples], dtype=torch.float32, device=env.device
+    state.payload_masses = torch.as_tensor(
+        [sample["mass"] for sample in samples], dtype=torch.float32, device=state.device
     )
-    env._payload_volumes = torch.as_tensor(
-        [sample["volume"] for sample in samples], dtype=torch.float32, device=env.device
+    state.payload_volumes = torch.as_tensor(
+        [sample["volume"] for sample in samples], dtype=torch.float32, device=state.device
     )
     principal_properties = [
-        physx_principal_inertia_and_com_quat_xyzw(sample["inertia"], env.device) for sample in samples
+        physx_principal_inertia_and_com_quat_xyzw(sample["inertia"], state.device) for sample in samples
     ]
-    env._payload_principal_moments = torch.stack([properties[0] for properties in principal_properties])
-    env._payload_principal_axes_xyzw = torch.stack([properties[1] for properties in principal_properties])
-    env._payload_center_of_mass_offsets = torch.as_tensor(
-        [sample["center_of_mass_offset"] for sample in samples], dtype=torch.float32, device=env.device
+    state.payload_principal_moments = torch.stack([properties[0] for properties in principal_properties])
+    state.payload_principal_axes_xyzw = torch.stack([properties[1] for properties in principal_properties])
+    state.payload_center_of_mass_offsets = torch.as_tensor(
+        [sample["center_of_mass_offset"] for sample in samples], dtype=torch.float32, device=state.device
     )
-    env._payload_com_to_cob_offsets = torch.as_tensor(
-        [sample["com_to_cob_offset"] for sample in samples], dtype=torch.float32, device=env.device
+    state.payload_com_to_cob_offsets = torch.as_tensor(
+        [sample["com_to_cob_offset"] for sample in samples], dtype=torch.float32, device=state.device
     )
-    env._payload_linear_damping_scales = torch.stack(
+    state.payload_linear_damping_scales = torch.stack(
         [six_scale(sample, "linear_damping_scale") for sample in samples]
     )
-    env._payload_quadratic_damping_scales = torch.stack(
+    state.payload_quadratic_damping_scales = torch.stack(
         [six_scale(sample, "quadratic_damping_scale") for sample in samples]
     )
-    env._payload_added_mass_scales = torch.stack(
+    state.payload_added_mass_scales = torch.stack(
         [six_scale(sample, "added_mass_scale") for sample in samples]
     )
 
 
-def reset_rigid_body(env, env_ids: torch.Tensor, *, enabled: bool) -> bool:
+def reset_rigid_body(state, cfg, env_ids: torch.Tensor, stage: int, *, enabled: bool):
     """Restore nominal rigid-body state and sample the selected feature.
 
     Returns whether a correlated payload sample was selected so its
     hydrodynamic factors can be composed after hydro DR is reset.
     """
 
+    del stage  # Rigid-body sampling is not curriculum staged yet.
     randomized = enabled
-    payload_enabled = randomized and env._payload_sample_count > 0
-    env.payload_sample_indices[env_ids] = -1
+    payload_enabled = randomized and state.payload_sample_count > 0
+    state.payload_sample_indices[env_ids] = -1
 
     if payload_enabled:
-        payload_indices = torch.multinomial(env._payload_weights, len(env_ids), replacement=True)
-        env.payload_sample_indices[env_ids] = payload_indices
-        env.masses[env_ids, 0] = env._payload_masses[payload_indices]
-        env.volumes[env_ids, 0] = env._payload_volumes[payload_indices]
-        env.inertia_principal_moments[env_ids] = env._payload_principal_moments[payload_indices]
-        env.inertia_principal_axes_xyzw[env_ids] = env._payload_principal_axes_xyzw[payload_indices]
-        env.center_of_mass_offsets[env_ids] = env._payload_center_of_mass_offsets[payload_indices]
-        env.com_to_cob_offsets[env_ids] = env._payload_com_to_cob_offsets[payload_indices]
+        payload_indices = torch.multinomial(state.payload_weights, len(env_ids), replacement=True)
+        state.payload_sample_indices[env_ids] = payload_indices
+        state.masses[env_ids, 0] = state.payload_masses[payload_indices]
+        state.volumes[env_ids, 0] = state.payload_volumes[payload_indices]
+        state.inertia_principal_moments[env_ids] = state.payload_principal_moments[payload_indices]
+        state.inertia_principal_axes_xyzw[env_ids] = state.payload_principal_axes_xyzw[payload_indices]
+        state.center_of_mass_offsets[env_ids] = state.payload_center_of_mass_offsets[payload_indices]
+        state.com_to_cob_offsets[env_ids] = state.payload_com_to_cob_offsets[payload_indices]
     else:
-        env.center_of_mass_offsets[env_ids] = torch.as_tensor(
-            env.cfg.center_of_mass_offset, dtype=torch.float32, device=env.device
+        state.center_of_mass_offsets[env_ids] = torch.as_tensor(
+            cfg.center_of_mass_offset, dtype=torch.float32, device=state.device
         )
         if randomized:
-            mass_lower, mass_upper = env.cfg.domain_randomization.mass_range
-            env.masses[env_ids] = sample_bounded_normal(
-                mass_lower, mass_upper, env.masses[env_ids].shape, env.device
+            mass_lower, mass_upper = cfg.domain_randomization.mass_range
+            state.masses[env_ids] = sample_bounded_normal(
+                mass_lower, mass_upper, state.masses[env_ids].shape, state.device
             )
         else:
-            env.masses[env_ids] = float(env.cfg.mass)
-        mass_ratio = env.masses[env_ids].reshape(-1, 1) / float(env.cfg.mass)
-        env.inertia_principal_moments[env_ids] = env._nominal_principal_inertia.reshape(1, 3) * mass_ratio
-        env.inertia_principal_axes_xyzw[env_ids] = env._nominal_principal_axes_xyzw.reshape(1, 4)
+            state.masses[env_ids] = float(cfg.mass)
+        mass_ratio = state.masses[env_ids].reshape(-1, 1) / float(cfg.mass)
+        state.inertia_principal_moments[env_ids] = state.nominal_principal_inertia.reshape(1, 3) * mass_ratio
+        state.inertia_principal_axes_xyzw[env_ids] = state.nominal_principal_axes_xyzw.reshape(1, 4)
 
         nominal_offset = torch.as_tensor(
-            env.cfg.com_to_cob_offset, device=env.device, dtype=env.com_to_cob_offsets.dtype
+            cfg.com_to_cob_offset, device=state.device, dtype=state.com_to_cob_offsets.dtype
         ).reshape(1, 3)
-        env.com_to_cob_offsets[env_ids] = nominal_offset
+        state.com_to_cob_offsets[env_ids] = nominal_offset
         if randomized:
-            env.com_to_cob_offsets[env_ids] += sample_isotropic_bounded_normal(
-                env.cfg.domain_randomization.com_to_cob_offset_radius,
+            state.com_to_cob_offsets[env_ids] += sample_isotropic_bounded_normal(
+                cfg.domain_randomization.com_to_cob_offset_radius,
                 len(env_ids),
                 3,
-                env.device,
+                state.device,
             )
 
         if randomized:
-            volume_lower, volume_upper = env.cfg.domain_randomization.volume_range
-            env.volumes[env_ids] = sample_bounded_normal(
-                volume_lower, volume_upper, env.volumes[env_ids].shape, env.device
+            volume_lower, volume_upper = cfg.domain_randomization.volume_range
+            state.volumes[env_ids] = sample_bounded_normal(
+                volume_lower, volume_upper, state.volumes[env_ids].shape, state.device
             )
         else:
-            env.volumes[env_ids] = float(env.cfg.volume)
+            state.volumes[env_ids] = float(cfg.volume)
 
-    env._apply_runtime_mass_properties(env_ids)
-    env._apply_runtime_center_of_mass(env_ids)
-    return payload_enabled
+    if not payload_enabled:
+        return None
+    from robot.runtime_state import PayloadHydrodynamicScale
 
-
-def apply_payload_hydrodynamics(env, env_ids: torch.Tensor) -> None:
-    """Compose selected payload's correlated hydro factors after baseline DR."""
-
-    payload_indices = env.payload_sample_indices[env_ids]
-    env.linear_damping[env_ids] = scale_hydrodynamic_coefficients(
-        env.linear_damping[env_ids], env._payload_linear_damping_scales[payload_indices]
-    )
-    env.quadratic_damping[env_ids] = scale_hydrodynamic_coefficients(
-        env.quadratic_damping[env_ids], env._payload_quadratic_damping_scales[payload_indices]
-    )
-    env.added_mass_diag[env_ids] = scale_hydrodynamic_coefficients(
-        env.added_mass_diag[env_ids], env._payload_added_mass_scales[payload_indices]
+    payload_indices = state.payload_sample_indices[env_ids]
+    return PayloadHydrodynamicScale(
+        state.payload_linear_damping_scales[payload_indices],
+        state.payload_quadratic_damping_scales[payload_indices],
+        state.payload_added_mass_scales[payload_indices],
     )

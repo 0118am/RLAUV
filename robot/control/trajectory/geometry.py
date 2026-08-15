@@ -140,7 +140,9 @@ def evaluate_geometry(
     """Evaluate closed trajectory geometry at a phase tensor ``[env, sample]``.
 
     The phase offsets are reset-time parameters rather than a separate time
-    state.  The returned position is local to the trajectory center.
+    state. The returned position is a signed offset from the trajectory center;
+    the simulator adds the positive pool-center coordinate before publishing a
+    pool-local FLU target.
     """
 
     if phase.ndim != 2:
@@ -295,4 +297,3 @@ def _orientation_rate_per_phase(first: torch.Tensor, second: torch.Tensor) -> to
     # commanded heading/pitch rate; dividing by phase speed here would apply
     # curvature once more and severely over-slow otherwise benign curves.
     return torch.linalg.vector_norm(tangent_rate, dim=-1)
-

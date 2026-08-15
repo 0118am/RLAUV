@@ -1,1 +1,1 @@
-"""Simulation backends for the shared environment and robot models."""
+"""Single Isaac assembly and its training workflow."""

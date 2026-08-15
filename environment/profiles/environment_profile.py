@@ -43,7 +43,7 @@ class HydrodynamicsProfile:
     water_current_periodic_period_s: NumberSequence = (20.0, 20.0, 20.0)
     water_current_periodic_phase_rad: NumberSequence = (0.0, 0.0, 0.0)
     water_current_field_enabled: bool = False
-    water_current_field_bounds: NumberSequence = (-7.0, 7.0, -7.0, 7.0, -15.0, -1.0)
+    water_current_field_bounds: NumberSequence = (0.0, 5.0, 0.0, 3.5, 0.0, 0.75)
     water_current_field_shape: Sequence[int] = (1, 1, 1)
     water_current_field_values: Sequence[Any] = field(default_factory=tuple)
 
@@ -140,7 +140,7 @@ class HydrodynamicsProfile:
 @dataclass(frozen=True)
 class PoolBoundaryProfile:
     enabled: bool = False
-    bounds: NumberSequence = (-7.0, 7.0, -7.0, 7.0, -15.0, -1.0)
+    bounds: NumberSequence = (0.0, 5.0, 0.0, 3.5, 0.0, 0.75)
     effect_distance: float = 0.75
     damping_scale_at_boundary: float = 1.5
     added_mass_scale_at_boundary: float = 1.2
@@ -173,16 +173,16 @@ class PoolBoundaryProfile:
 @dataclass(frozen=True)
 class FreeSurfaceProfile:
     enabled: bool = False
-    surface_z: float = -1.0
+    surface_z: float = 0.75
     effect_distance: float = 0.5
     heave_damping_scale: float = 1.4
     roll_pitch_damping_scale: float = 1.2
     added_mass_scale: float = 1.15
-    buoyancy_scale: float = 0.95
+    buoyancy_scale: float = 1.0
     thrust_scale: float = 0.90
     sloshing_enabled: bool = False
-    sloshing_pool_bounds: NumberSequence = (-7.0, 7.0, -7.0, 7.0)
-    sloshing_water_depth: float = 14.0
+    sloshing_pool_bounds: NumberSequence = (0.0, 5.0, 0.0, 3.5)
+    sloshing_water_depth: float = 0.75
     sloshing_mode_numbers: Sequence[Any] = ((1, 0),)
     sloshing_amplitudes_m: NumberSequence = (0.0,)
     sloshing_phases_rad: NumberSequence = (0.0,)

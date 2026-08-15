@@ -26,10 +26,10 @@ class AUVModel:
     mass_kg: float = 11.301
     water_density_kg_m3: float = 1000.0
     # SolidWorks reports material volume, not the closed external volume that
-    # displaces water.  Keep the independently identified displacement used by
-    # the nearly neutrally buoyant assembled vehicle.
+    # displaces water. Pool measurement shows buoyancy exceeds weight by a
+    # 0.24 kg-equivalent at rho=1000 kg/m^3: V=(11.301+0.24)/1000.
     solid_material_volume_m3: float = 0.008690716111
-    displaced_volume_m3: float = 0.011304505834
+    displaced_volume_m3: float = 0.011541
     surface_area_m2: float = 2.514359189
     visual_bounds_size_m: tuple[float, float, float] = (0.561500000, 0.401999756, 0.190621773)
 

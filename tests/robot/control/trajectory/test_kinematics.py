@@ -86,3 +86,45 @@ def test_periodic_reference_is_continuous_at_wrap() -> None:
 
     for before_value, after_value in zip(before[:3], after[:3], strict=True):
         assert torch.allclose(before_value, after_value, atol=2.0e-3, rtol=2.0e-3)
+
+
+def test_nominal_trajectory_envelope_fits_target_pool() -> None:
+    trajectory_types = torch.tensor(
+        [
+            kinematics.CIRCLE,
+            kinematics.LISSAJOUS,
+            kinematics.AXIS_SINE,
+            kinematics.AXIS_SINE,
+            kinematics.AXIS_SINE,
+            kinematics.WAVY_LOOP,
+            kinematics.BREATHING_LOOP,
+            kinematics.CHIRP,
+            kinematics.RACETRACK,
+            kinematics.RANDOM_SMOOTH,
+            kinematics.LATERAL_SINE,
+            kinematics.VERTICAL_SINE,
+            kinematics.SPATIAL_HELIX,
+        ],
+        dtype=torch.long,
+    )
+    count = trajectory_types.numel()
+    phase = torch.linspace(0.0, 2.0 * torch.pi, 4097).repeat(count, 1)
+    offsets = kinematics.evaluate_geometry(
+        trajectory_types,
+        torch.tensor([0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0]),
+        torch.full((count,), 0.78),
+        torch.full((count,), 0.75),
+        torch.full((count,), 0.20),
+        torch.zeros(count),
+        torch.zeros(count),
+        phase,
+        radius_min=0.30,
+        radius_max=1.20,
+        harmonic_ratio=0.08,
+    )
+    targets = offsets + torch.tensor([2.5, 1.75, 0.375])
+    lower = torch.tensor([0.0, 0.0, 0.0])
+    upper = torch.tensor([5.0, 3.5, 0.75])
+
+    assert torch.all(targets > lower)
+    assert torch.all(targets < upper)

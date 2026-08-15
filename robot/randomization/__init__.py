@@ -2,10 +2,9 @@
 
 from .actuators import reset_actuators
 from .battery import reset_battery
-from .rigid_body import apply_payload_hydrodynamics, initialize_payload_domain, reset_rigid_body
+from .rigid_body import initialize_payload_domain, reset_rigid_body
 
 __all__ = [
-    "apply_payload_hydrodynamics",
     "initialize_payload_domain",
     "reset_actuators",
     "reset_battery",

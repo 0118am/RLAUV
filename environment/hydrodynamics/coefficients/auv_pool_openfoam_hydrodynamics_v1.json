@@ -1,6 +1,6 @@
 {
   "name": "auv-openfoam-pool-hydrodynamics-v1",
-  "description": "The unique nominal hydrodynamic baseline for training and evaluation. Full 6x6 added-mass, linear-damping, and quadratic-damping matrices are identified by the OpenFOAM results_jn2_port_starboard_symmetric_minimal_level6_v1 case. Coefficients use body FLU axes at the moving COM, wrench rows [X,Y,Z,K,M,N], velocity columns [u,v,w,p,q,r], and tau_h=-M_A*nu_dot-C_A(nu,M_A)*nu-D_L*nu-D_Q*(abs(nu)*nu). Raw fitted asymmetry and coefficient signs are retained without symmetry or passivity projection; no legacy angle-based hydrodynamic wrench is superimposed.",
+  "description": "The unique nominal hydrodynamic baseline for training and evaluation in the 5.0 m x 3.5 m x 0.75 m pool. Pool-local coordinates use FLU axes with the lower corner as the origin, so x is in [0,5], y is in [0,3.5], and z is in [0,0.75]. Full 6x6 added-mass, linear-damping, and quadratic-damping matrices are identified by the OpenFOAM results_jn2_port_starboard_symmetric_minimal_level6_v1 case. Coefficients use body FLU axes at the moving COM, wrench rows [X,Y,Z,K,M,N], velocity columns [u,v,w,p,q,r], and tau_h=-M_A*nu_dot-C_A(nu,M_A)*nu-D_L*nu-D_Q*(abs(nu)*nu). Raw fitted asymmetry and coefficient signs are retained without symmetry or passivity projection; no legacy angle-based hydrodynamic wrench is superimposed.",
   "hydrodynamics": {
     "added_mass": [
       [14.0292390851258, 0.0, -0.14083965481196956, 0.0, -0.17150142521654479, 0.0],
@@ -30,11 +30,12 @@
     "water_current_periodic_enabled": true,
     "water_current_periodic_amplitude_w": [0.04, 0.025, 0.008],
     "water_current_periodic_period_s": [18.0, 27.0, 11.0],
-    "water_current_periodic_phase_rad": [0.0, 1.5707963267948966, 3.141592653589793]
+    "water_current_periodic_phase_rad": [0.0, 1.5707963267948966, 3.141592653589793],
+    "water_current_field_bounds": [0.0, 5.0, 0.0, 3.5, 0.0, 0.75]
   },
   "pool_boundary": {
     "enabled": true,
-    "bounds": [-7.0, 7.0, -7.0, 7.0, -15.0, -1.0],
+    "bounds": [0.0, 5.0, 0.0, 3.5, 0.0, 0.75],
     "effect_distance": 0.9,
     "damping_scale_at_boundary": 1.35,
     "added_mass_scale_at_boundary": 1.12,
@@ -42,16 +43,16 @@
   },
   "free_surface": {
     "enabled": true,
-    "surface_z": -1.0,
+    "surface_z": 0.75,
     "effect_distance": 0.65,
     "heave_damping_scale": 1.3,
     "roll_pitch_damping_scale": 1.15,
     "added_mass_scale": 1.1,
-    "buoyancy_scale": 0.96,
+    "buoyancy_scale": 1.0,
     "thrust_scale": 0.92,
     "sloshing_enabled": true,
-    "sloshing_pool_bounds": [-7.0, 7.0, -7.0, 7.0],
-    "sloshing_water_depth": 14.0,
+    "sloshing_pool_bounds": [0.0, 5.0, 0.0, 3.5],
+    "sloshing_water_depth": 0.75,
     "sloshing_mode_numbers": [[1, 0], [0, 1]],
     "sloshing_amplitudes_m": [0.018, 0.012],
     "sloshing_phases_rad": [0.0, 1.5707963267948966],

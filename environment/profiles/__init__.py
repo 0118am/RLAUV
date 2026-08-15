@@ -22,6 +22,7 @@ from .environment_profile import (
     resolve_environment_profile,
     write_environment_profile_json,
 )
+from .composition import RuntimeComposition, resolve_runtime_composition
 
 __all__ = [
     "DOMAIN_RANDOMIZATION_SCHEMA_VERSION",
@@ -31,6 +32,7 @@ __all__ = [
     "FreeSurfaceProfile",
     "HydrodynamicsProfile",
     "PoolBoundaryProfile",
+    "RuntimeComposition",
     "apply_domain_randomization_spec",
     "domain_randomization_parameter_names",
     "domain_randomization_parameters_requiring_sources",
@@ -38,6 +40,7 @@ __all__ = [
     "load_domain_randomization_spec_json",
     "load_environment_profile_json",
     "resolve_environment_profile",
+    "resolve_runtime_composition",
     "resolve_domain_randomization_spec",
     "validate_domain_randomization_base_profile",
     "write_domain_randomization_spec_json",

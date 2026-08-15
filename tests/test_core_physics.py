@@ -94,8 +94,8 @@ def test_z_up_buoyancy_and_surface_conventions_are_consistent() -> None:
     assert torch.allclose(torque, torch.zeros_like(torque))
 
     _, _, surface_buoyancy, _ = pool_effects.calculate_free_surface_scales(
-        torch.tensor([[0.0, 0.0, -1.0]]),
-        -1.0,
+        torch.tensor([[0.0, 0.0, 0.75]]),
+        0.75,
         0.5,
         1.4,
         1.2,
@@ -104,6 +104,30 @@ def test_z_up_buoyancy_and_surface_conventions_are_consistent() -> None:
         0.9,
     )
     assert torch.allclose(surface_buoyancy, torch.tensor([[0.95]]))
+
+
+def test_measured_positive_buoyancy_is_applied_without_nominal_scaling() -> None:
+    vehicle = T60_RUNTIME.model
+    model = models.HydrodynamicForceModels(num_envs=1, device=torch.device("cpu"))
+    gravity = torch.tensor([0.0, 0.0, -9.81])
+    identity = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+    volume = torch.tensor([[vehicle.displaced_volume_m3]])
+    cob = torch.tensor([vehicle.center_of_buoyancy_from_com_m])
+
+    buoyancy, _ = model.calculate_buoyancy_forces(
+        identity,
+        gravity,
+        vehicle.water_density_kg_m3,
+        volume,
+        cob,
+    )
+    net_force = buoyancy + vehicle.mass_kg * gravity
+
+    buoyant_mass_surplus = (
+        vehicle.water_density_kg_m3 * vehicle.displaced_volume_m3 - vehicle.mass_kg
+    )
+    assert abs(buoyant_mass_surplus - 0.24) < 1.0e-12
+    assert torch.allclose(net_force, torch.tensor([[0.0, 0.0, 2.3544]]), atol=1.0e-5)
 
 
 def test_thruster_curve_preserves_deadband_and_wrench_geometry() -> None:
@@ -164,11 +188,11 @@ def test_installed_curve_jacobian_matches_all_three_flu_components() -> None:
 
 
 def test_nominal_thruster_response_and_delay_are_explicit_and_applied() -> None:
-    physics_dt_s = 1.0 / 200.0
+    physics_dt_s = 1.0 / 100.0
     delay_steps = T60_RUNTIME.thruster_command_delay_steps_for_dt(physics_dt_s)
     assert T60_RUNTIME.thruster_time_constant_s == 0.08
     assert T60_RUNTIME.thruster_command_delay_s == 0.13
-    assert delay_steps == 26
+    assert delay_steps == 13
 
     processor = ThrusterCommandProcessor(1, 8, delay_steps, torch.device("cpu"))
     commands = torch.ones((1, 8))

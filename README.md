@@ -1,377 +1,226 @@
 # T60 AUV 水动力、轨迹控制与强化学习
 
-本仓库只面向 T60 AUV，统一管理机器人本体、水池与水动力模型、Isaac Lab
-强化学习训练和策略评估。当前 Isaac Lab Direct Task 为
-`Isaac-AUV-Traj-Direct-v1`。
+本仓库面向 T60 AUV，统一管理机器人本体、实测推进器曲线、水池水动力、Isaac Lab
+强化学习训练和策略评估。Gym 任务为 `Isaac-AUV-Traj-Direct-v1`。
 
-项目采用明确的领域边界：机器人自身性质归 `robot/`，水和水动力物理归
-`environment/`，`simulation/isaac/` 只把两者合成为 Isaac/PhysX 任务。训练人员只需在
-仓库根目录的 [`train.ipynb`](train.ipynb) 中选择流速、Domain Randomization（DR）强度和
-训练规模，不应在 Isaac 目录里维护第二套物理参数。
+## 代码边界
 
-## 设计原则
+| 目录 | 唯一职责 |
+| --- | --- |
+| `robot/` | 机器人质量、惯量、浮心、推进器、执行器、电池、系缆、PID 和可部署轨迹几何 |
+| `environment/` | 水流、完整水动力矩阵、池壁/自由液面、环境 profile、DR 和逐步流体力计算 |
+| `simulation/assembly.py` | 唯一 Isaac/PhysX 组装层：场景生命周期、状态接线、最终 wrench 提交和 Gym 注册 |
+| `simulation/training/` | 仅训练相关：网络、PPO、奖励、观测、训练轨迹接入、评估、可视化、导出和进程管理 |
+| `train.ipynb` / `eval.ipynb` | 人工选择一次运行的参数并调用上述 API |
 
-| 领域 | 负责内容 | 不应放入的内容 |
-| --- | --- | --- |
-| `robot/` | T60 质量、惯量、浮力中心、推进器、执行器、电池、系缆、PID 和可部署轨迹几何 | 水流、水池边界、Isaac 生命周期 |
-| `environment/` | 水流场、水动力方程、池壁/自由液面效应、OpenFOAM/PMM 数据和环境随机化 | 机器人控制器、Isaac 场景代码 |
-| `simulation/isaac/` | Isaac 配置、场景生命周期、PhysX 适配、观测、奖励、PPO、训练与评估 worker | 机器人或水动力参数副本、模拟传感器滤波链 |
-| `train.ipynb` | 单次训练的人工数值选择和启动动作 | 可复用函数、物理实现、进程实现 |
-
-核心数据流如下：
+`simulation/` 不再设置 `isaac/` 中间层：根目录只有包入口和 `assembly.py`，训练实现全部
+位于唯一的 `training/` 树。物理参数不在模拟目录复制，训练目录也不直接向 PhysX 写力。
 
 ```text
-environment/ 中的水动力基准 ─┐
-                              ├─ simulation/isaac/composition.py
-robot/ 中的 T60 本体基准 ─────┘                │
-                                              ▼
-train.ipynb ──生成本次运行的环境/DR 快照──> Isaac 任务配置
-                                              │
-                         environment/ 力模型 ─┤
-                         robot/ 推进器模型 ────┤
-                                              ▼
-                 physics_adapter.py + force_composition.py → PhysX
-                                              │
-                                              ▼
-                               PPO checkpoint / 评估结果
+robot/ 机器人事实 ───────────┐
+                             ├─ environment/profiles/composition.py
+environment/ 环境事实 ──────┘                 │
+                                               ▼
+                         simulation/assembly.py
+                 ┌───────────────┼──────────────────┐
+                 ▼               ▼                  ▼
+       environment/runtime   robot 力模型   training 观测/奖励/轨迹
+                 └───────────────┼──────────────────┘
+                                 ▼
+                         单次 PhysX wrench 提交
 ```
-
-`composition.py` 只解析、校验和组合外部数据源；`physics_adapter.py` 计算 Isaac 水动力状态，
-`force_composition.py` 合成推进器、缆绳与流体 wrench。它们都不是物理参数的数据源。
 
 ## 目录结构
 
 ```text
-train.ipynb                         训练的唯一人工数值配置与进程操作入口
-eval.ipynb                          指定策略运行、评估和绘图入口
+environment/
+├── hydrodynamics/             水流、阻尼、附加质量、池壁和自由液面方程
+├── profiles/                  环境/DR 配方、运行组合和评估覆盖
+├── randomization/             水流与水动力随机化
+├── runtime/                   有效系数、相对状态和流体 wrench 计算
+├── openfoam/                  OpenFOAM 工程、工具和结果
+└── pmm/                       PMM 数据与六自由度辨识
 
-environment/                        水与水动力领域
-├── hydrodynamics/
-│   ├── coefficients/               经确认、版本化的水动力系数 JSON
-│   ├── current_fields.py           常值、周期和空间水流场
-│   ├── models.py                   阻尼、附加质量等水动力方程
-│   └── pool_effects.py             池壁和自由液面效应
-├── profiles/
-│   ├── environment_profile.py      严格的环境配置边界
-│   ├── domain_randomization.py     DR 配方结构、校验和序列化
-│   └── configs/                    经确认的 DR 基准配方
-├── randomization/                  水流与水动力随机化执行函数
-├── openfoam/                       OpenFOAM v2512 几何、算例、工具和结果
-└── pmm/                            PMM 原始数据与六自由度辨识
-
-robot/                              T60 机器人领域
-├── assets/isaac/t60_auv.usd        Isaac 资产
-├── dynamics/                       本体参数、刚体变换和系缆模型
-├── propulsion/                     T1–T8 实测三分量推力曲线与推力合成
-├── control/
-│   ├── pid.py                      六自由度 PID 控制器
-│   └── trajectory/                 可部署的轨迹运动学、重定时与航向生成
-├── randomization/                  刚体、推进器和电池随机化执行函数
-└── runtime.py                      执行器、电池和系缆运行参数
+robot/
+├── assets/isaac/              T60 USD 与 Isaac 资产生成配置
+├── dynamics/                  刚体参数、变换和系缆
+├── propulsion/                T1–T8 实测 FLU 曲线、执行器动态和安装点合成
+├── control/                   PID、分配器和可部署轨迹生成
+├── randomization/             刚体、推进器和电池随机化
+├── runtime.py                 执行器、电池、系缆名义运行参数
+└── runtime_state.py           刚体、执行器、电池、系缆的显式逐环境状态
 
 simulation/
-└── isaac/
-    ├── config.py                   策略空间、任务参数和 Isaac 配置契约
-    ├── env.py                      DirectRLEnv 生命周期和状态推进
-    ├── composition.py              环境与机器人数据源的显式合成
-    ├── physics_adapter.py          水流、池体效应与有效水动力状态
-    ├── force_composition.py        推进器、缆绳和流体 wrench 合成
-    ├── observations.py             当前观测、归一化和因果历史
-    ├── robot_asset.py              T60 USD 与 Isaac prim 的绑定
-    ├── visualization*.py           Isaac 调试可视化
-    ├── ppo/                        PPO 算法、runner 和 MLP 架构注册表
-    ├── rewards/                    版本化奖励函数
-    ├── training.py                 快照生成与训练进程管理
-    ├── trajectory/                 Isaac 任务 mixin、train/eval worker 和报告工具
-    └── rlpolicy/                   本地运行、评估和导出产物
-
-tests/                               与生产代码相同的领域归属
+├── assembly.py                唯一 Isaac/PhysX 组装文件
+├── training/
+│   ├── recipes/               版本化训练 recipe JSON
+│   ├── ppo/                   网络、算法、runner 和配置
+│   ├── evaluation/            评估配置、运行、指标、调度与导出
+│   ├── recipe.py              recipe、训练/评估请求和 run-local 输入
+│   ├── manifest.py            run 输出契约
+│   ├── campaign.py            命令、进程和 run/checkpoint 管理
+│   ├── config.py              Direct Task 配置
+│   ├── observations.py        Actor 与 Critic 观测
+│   ├── rewards.py             奖励 profile 与唯一张量实现
+│   ├── trajectory.py          训练轨迹、课程和 reference runtime
+│   ├── visualization.py       环境调试显示
+│   └── train.py               Isaac Sim 训练入口与 worker
+└── rlpolicy/                  仅本地 checkpoint、日志、评估和导出产物
 ```
 
-## 配置的三个层次
+## 物理基准
 
-### 1. 经确认的物理基准
+长期有效的数据只从下列位置读取：
 
-长期有效、需要评审或来自实验/CFD 的参数保存在领域目录：
+- T60 刚体参数：`robot/dynamics/parameters.py`
+- T1–T8 安装位置和实测三分量推力曲线：`robot/propulsion/curves.py`
+- 执行器响应、延迟、电池和系缆：`robot/runtime.py`
+- 名义水池和水动力矩阵：
+  `environment/hydrodynamics/coefficients/auv_pool_openfoam_hydrodynamics_v1.json`
+- DR 基准：`environment/profiles/configs/auv_pool_openfoam_hydrodynamics_dr_v1.json`
 
-- T60 质量、惯量、排水体积、质心和浮心：
-  [`robot/dynamics/parameters.py`](robot/dynamics/parameters.py)
-- T1–T8 安装位置、PWM 映射和实测三分量推力曲线：
-  [`robot/propulsion/curves.py`](robot/propulsion/curves.py)
-- 执行器、电池和系缆名义运行参数：[`robot/runtime.py`](robot/runtime.py)
-- 水池名义水动力配置：
-  [`environment/hydrodynamics/coefficients/auv_pool_openfoam_hydrodynamics_v1.json`](environment/hydrodynamics/coefficients/auv_pool_openfoam_hydrodynamics_v1.json)
-- DR 基准配方：
-  [`environment/profiles/configs/auv_pool_openfoam_hydrodynamics_dr_v1.json`](environment/profiles/configs/auv_pool_openfoam_hydrodynamics_dr_v1.json)
+名义质量为 `11.301 kg`。实测浮力比重力多 `0.24 kg` 等效质量，因此在
+`ρ=1000 kg/m³` 时排水体积为 `0.011541 m³`，净上浮力约 `2.3544 N`。
 
-这些文件是物理事实或经确认配方的单一来源。更新机器人参数时修改 `robot/`；更新水流、
-阻尼、附加质量或池体效应时修改 `environment/`。不要把数值复制进
-`simulation/isaac/config.py`。
-
-### 2. 单次训练选择
-
-[`train.ipynb`](train.ipynb) 是训练人员唯一需要编辑的入口。它显式列出本次运行所需的：
-
-- 训练身份：`RUN_NAME`、`SEED`、`MLP_ARCHITECTURE`、`REWARD_PROFILE`；
-- 训练规模：`NUM_ENVS`、`MAX_ITERATIONS`、`ROLLOUT_STEPS`；
-- 确定性水流：世界坐标系常值流、周期流，以及可选空间流场；
-- 水池效应：池壁边界、自由液面和晃荡参数；
-- 全部 DR 数值：刚体、水流、水动力、推进器和电池的范围与分阶段强度；
-- 进程动作：`preview`、`start`、`status` 或 `stop`。
-
-Notebook 不定义 `def` 或 `class`。校验、序列化、命令构造、进程发现和停止逻辑全部位于
-Python 模块中，避免交互式单元成为隐藏实现。
-
-### 3. 运行快照
-
-`materialize_training_profiles()` 读取上述基准并应用 Notebook 选择，生成：
+水池局部坐标使用 FLU：`+X` 前、`+Y` 左、`+Z` 上；下角为原点。真实边界严格为：
 
 ```text
-simulation/isaac/rlpolicy/_configs/<RUN_NAME>/
-├── environment.json
-└── domain_randomization.json
+x ∈ [0, 5.0] m, y ∈ [0, 3.5] m, z ∈ [0, 0.75] m
 ```
 
-生成过程不会修改 `environment/` 或 `robot/` 的基准文件。快照路径传给训练 worker，DR
-快照同时记录绑定的环境名称、运行名称和活动参数来源。`_configs/` 被 Git 忽略。
+池底 `z=0`，水面 `z=0.75 m`，名义中心为 `(2.5, 1.75, 0.375) m`。水流场、池壁、
+自由液面和晃荡共享这套范围。
 
-同一 `RUN_NAME` 会使用同一个快照目录，因此不同参数实验应使用不同名称；不要在一个仍在
-运行或需要审计的实验上复用名称。
+## 推力与水动力链路
 
-## 使用 `train.ipynb`
+每个 `100 Hz` 物理步执行一次：
 
-### 环境准备
+1. 策略输出限制到 `[-1, 1]`，再映射为物理 `1300–1700 µs` PWM；
+2. 显式施加 `0.13 s` 命令延迟、可选限速/量化/丢指令；
+3. 用正/反 PWM 分支计算每台推进器实测 FLU `(Fx,Fy,Fz)`；
+4. 对三分量目标力施加名义 `0.08 s` 一阶响应；
+5. 在八个安装点计算 `ΣFᵢ` 和 `Σ(rᵢ×Fᵢ)`；
+6. 叠加浮力、流体力和可选系缆力；
+7. `assembly.py` 只向 PhysX 提交一次机体系合力与合矩。
 
-当前代码按以下组合开发：
+`1475–1525 µs` 是闭区间零推力死区。正 PWM 时 T5/T6 正转，但安装朝 `F−`，所以
+`Fx<0`；T7/T8 朝 `F+`，所以 `Fx>0`。三个分量的符号均来自实测曲线，不存在第二套
+polarity、spin direction、固定轴重建、反扭矩或高阶残差逻辑。
 
-- Isaac Sim `4.5.0`
-- Isaac Lab `2.2.0`
-- 已验证 Isaac Lab 提交 `0d520b2`
-- Conda 环境 `env_isaaclab`
+水动力使用机体系相对速度：
 
-让仓库在 Isaac Lab Direct Task 路径中可见，推荐使用软链接：
-
-```bash
-cd <IsaacLab_Path>/source/isaaclab_tasks/isaaclab_tasks/direct
-ln -s <isaac-auv-env_Path> isaac-auv-env
+```text
+νr = [v_b - Rᵀv_current_w, ω_b]
+τh = τbuoyancy - DLνr - DQ(|νr|⊙νr) - CA(νr)νr - MAν̇r
 ```
 
-随后从仓库根目录启动 Jupyter，并打开 `train.ipynb`：
+`MA`、`DL`、`DQ` 使用测得/拟合的完整 `6×6` 矩阵，保留非对角耦合项。PhysX 自带线性和
+角阻尼设为零，避免重复阻力。`ν̇r` 在 `100 Hz` 上有限差分并使用现有 `0.35` 滤波。
+
+## 频率与观测
+
+- PhysX：`100 Hz` (`dt=0.01 s`)
+- 控制：`50 Hz` (`decimation=2`)
+- 融合状态观测：`50 Hz`
+- `0.13 s` 执行器延迟：量化为 13 个物理步
+
+Actor 当前样本为 30 维：位置误差 3、目标线速度 3、线速度误差 3、姿态误差四元数 4、
+角速度 3、目标角速度 3、目标线加速度 3、实际应用动作 8。
+
+网络只在 `training/ppo/networks.py` 定义：
+
+| 网络 | Actor 输入 | Actor/Critic 隐藏层 |
+| --- | ---: | --- |
+| `mlp_30d` | 当前 30 维 | `512,256,128` |
+| `mlp_history_5` | 当前 30 维 + 5 个历史样本，共 135 维 | `512,384,256,128` |
+
+历史样本包含位置误差、线速度误差、姿态误差、角速度和实际应用动作。Critic 额外接收 76 维
+模拟器特权状态；Actor 和导出的 ONNX 不使用这些字段。没有额外的模拟传感器延迟、滤波、
+丢包或噪声链。
+
+## 训练轨迹与课程
+
+训练只使用三种互补命令：
+
+- `lateral_sine`：沿 `Y` 轴往返，覆盖横移和正反航向；
+- `vertical_sine`：沿 `Z` 轴往返，覆盖升沉和俯仰；
+- `spatial_helix`：闭合三维双层螺旋，同时激励三轴平移和姿态变化。
+
+每种类型与 `0.1/0.2/0.3/0.4 m/s` 四档速度均衡组合。四阶段课程在全局策略步
+`9,750 / 22,500 / 40,500` 切换；幅值比例为 `0.55/0.75/0.90/1.0`，垂向比例为
+`0.25/0.50/0.75/1.0`。轨迹经过 `curve_v2` 局部重定时，限制速度 `0.60 m/s`、加速度
+`0.45 m/s²`、姿态角速度 `0.80 rad/s` 和 jerk `0.36 m/s³`。
+
+训练不会因越过水池盒而终止，以免短暂误差切碎长 episode。验收测试使用
+`keep_boundaries=True`，按真实水池六面边界判定越界；默认评估几何及最终验收采样范围均以
+池中心为基准并限制在真实空间内。
+
+评估还可选择 Lissajous、wavy loop (`helix`)、breathing loop (`spiral`)、chirp、G²
+racetrack 和 random smooth，专门测试未作为训练课程主体的几何泛化。
+
+## 奖励与 PPO
+
+奖励 profile、选择逻辑和张量实现在 `training/rewards.py`，公共误差只计算一次。
+`policy_0`–`policy_6` 的不可变权重和公式变体也保存在该文件。当前训练默认 `policy_6`：Huber 位置/姿态/
+线速度/角速度跟踪，叠加 applied-action 能量与按实际变化率归一化的平滑惩罚，并对真实越界
+终止扣分。
+
+PPO 当前默认值：
+
+| 参数 | 值 |
+| --- | ---: |
+| rollout | 256 steps/env = 5.12 s |
+| notebook 环境数 | 1024 |
+| 最大迭代 | 500 |
+| 学习轮数 / mini-batches | 5 / 32 |
+| learning rate | `3e-4`，按 rollout 在 `[1e-4,5e-4]` 内调整 |
+| clip / value loss coef | `0.2 / 1.0` |
+| gamma / lambda | `0.997 / 0.98` |
+| desired KL / early stop | `0.01 / 0.015` |
+| entropy / max grad norm | `0.0 / 1.0` |
+| 初始动作标准差 | `0.5` |
+
+学习率在一个 rollout 的所有更新中保持不变，rollout 结束后根据 KL 调整下一轮；KL 超过
+`0.015` 时提前停止本轮剩余更新。
+
+## 训练与评估
+
+从仓库根目录启动 Jupyter：
 
 ```bash
 conda activate env_isaaclab
-cd <isaac-auv-env_Path>
 jupyter lab train.ipynb
 ```
 
-Notebook 会验证当前工作目录是否为仓库根目录。默认 `ISAACLAB_ROOT` 为
-`Path.home() / "IsaacLab"`；安装位置不同时应先修改该变量。
-
-### 确定性环境参数
-
-`HYDRODYNAMICS`、`POOL_BOUNDARY` 和 `FREE_SURFACE` 描述每个环境都要应用的确定性物理：
-
-- `water_current_w`：世界坐标系中的常值流速；
-- `water_current_periodic_*`：周期流的三轴幅值、周期和相位；
-- `water_current_field_*`：可选规则网格流场及其边界、形状和值；
-- `POOL_BOUNDARY`：接近池壁时的阻尼、附加质量和推力缩放；
-- `FREE_SURFACE`：接近水面时的阻尼、附加质量、浮力、推力和晃荡效应。
-
-这些值与 DR 不同：即使关闭随机化，确定性环境仍然生效。
-
-### Domain Randomization
-
-`DR` 字典完整列出当前配方的所有训练随机化字段：
-
-| DR 组 | 执行函数归属 | 主要内容 |
-| --- | --- | --- |
-| `rigid_body` | `robot/randomization/rigid_body.py` | 质量、排水体积、负载、COM/COB 偏移 |
-| `actuators` | `robot/randomization/actuators.py` | 延迟、变化率、分辨率、丢指令、推力与时间常数缩放 |
-| `battery` | `robot/randomization/battery.py` | 初始电压和电压下降 |
-| `current` | `environment/randomization/current.py` | 平滑随机流、时间常数、水平/垂向幅值和变化量 |
-| `hydrodynamics` | `environment/randomization/hydrodynamics.py` | 一次/二次阻力和附加质量缩放 |
-
-使用规则：
-
-- `enabled_features` 决定哪些组可以执行；
-- `[a, b]` 表示采样范围，`a == b` 表示固定值；
-- `disturbance_curriculum_stage_steps` 是各阶段切换的全局策略步；
-- `*_by_stage` 数组按阶段给出扰动上限或缩放强度；
-- 启用的非固定随机参数必须具有来源说明，快照生成器会补充本次 Notebook 选择的来源；
-- 关闭某个组时，执行层不会因为配置中仍有字段而偷偷应用它。
-
-### 训练动作
-
-最后一个单元的 `ACTION` 控制训练生命周期：
-
-| 值 | 行为 |
-| --- | --- |
-| `preview` | 生成并校验快照，打印完整 worker 命令，不启动训练 |
-| `start` | 以独立进程直接启动训练 worker |
-| `status` | 查找属于该 campaign 的训练和评估进程，并显示日志尾部 |
-| `stop` | 只终止该 campaign 的匹配进程，并清理失效 PID 记录 |
-
-建议先运行 `preview`，确认环境/DR 快照和打印命令，再改为 `start`。
-
-`simulation/isaac/trajectory/train.py` 是 Isaac Sim 隔离 worker，不是人工配置入口；不应手工
-在其中维护实验数值。`simulation/isaac/training.py` 是 Notebook 调用的无 Isaac Sim 导入的
-管理 API。
-
-## 训练运行与文件布局
-
-PPO 架构决定独立的 experiment 目录：
-
-- `mlp_30d` → `auv_traj_mlp/`
-- `mlp_history_5` → `auv_traj_mlp_history_5/`
-
-RSL-RL 的运行文件全部留在仓库内，不再写入外部 IsaacLab 的 `logs/rsl_rl`：
+`train.ipynb` 只选择版本化 recipe、运行名、seed、环境数和启动开关。训练 worker 创建 run 后，
+把解析完成的 recipe 和两个 profile 固化在该 run 内：
 
 ```text
-simulation/isaac/rlpolicy/
-├── _configs/<RUN_NAME>/                 本次环境与 DR 快照
-└── <architecture experiment>/
-    ├── _launcher/                       PID 和启动日志
-    └── <timestamp>_<RUN_NAME>/
-        ├── model_*.pt                   checkpoint
-        ├── params/                      RSL-RL/环境解析配置
-        ├── evaluation/                  CSV、汇总表和图片
-        ├── exports/                     ONNX
-        └── TensorBoard 等运行文件
+simulation/rlpolicy/<architecture>/<timestamp>_<RUN_NAME>/params/
+├── run_manifest.json
+└── inputs/
+    ├── training_recipe.json
+    ├── environment.json
+    └── domain_randomization.json
 ```
 
-运行产物由 [`simulation/isaac/rlpolicy/.gitignore`](simulation/isaac/rlpolicy/.gitignore) 排除；
-目录说明与导出工具仍受版本控制。
-
-## 策略、观测与控制频率
-
-Isaac/PhysX 以 `200 Hz` 推进，策略每四个物理步执行一次，即 `50 Hz`。机器人使用
-body `+X` 为前向；Isaac 世界坐标为 z-up，当前水面默认位于 `z=-1 m`，所以正深度对应负的
-世界 z 坐标。
-
-Actor 的当前样本为 30 维可部署观测：
-
-```text
-位置误差_b(3)
-+ 目标线速度_b(3)
-+ 线速度误差_b(3)
-+ 姿态误差四元数(4)
-+ 角速度_b(3)
-+ 目标角速度_b(3)
-+ 目标线加速度_b(3)
-+ 实际应用的八维动作(8)
-= 30
-```
-
-`mlp_history_5` 在当前样本后追加过去五个 50 Hz 样本中的位置误差、线速度误差、姿态误差、
-角速度和实际应用动作，Actor 输入共 135 维。Critic 可在训练时额外使用 76 维模拟器特权
-状态；这些状态不进入 Actor、ONNX 或部署输入。
-
-## 物理施力链
-
-每个 200 Hz 物理步只执行下面这条链路：
-
-1. 命令处理器施加延迟、可选变化率/分辨率/丢指令，并在唯一位置把命令限制到 `[-1, 1]`；
-2. 归一化命令线性映射到物理 `1300–1700 µs`；
-3. 依据物理 PWM 的负/正分支直接计算每台推进器的实测 FLU 向量 `(Fx, Fy, Fz)`；
-4. 一阶执行器响应作用于三分量目标力；
-5. 八个安装点的力按 `ΣF_i` 和 `Σ(r_i × F_i)` 归并为质心处机体系 wrench；
-6. 叠加浮力、相对流速水动力和已启用的环境效应后，只向 PhysX 提交一次机体系合力/合矩。
-
-`1475–1525 µs` 是闭区间零推力死区。正 PWM 下 T5/T6 正转但安装方向朝 `F−`，所以
-`Fx < 0`；T7/T8 朝 `F+`，所以 `Fx > 0`。三个 FLU 分量的符号全部来自实测曲线，运行时
-没有独立的 polarity、spin direction、固定轴重建或反扭矩修正。
-
-水动力使用机体系相对速度
-
-```text
-νr = [v_b - Rᵀ v_current_w, ω_b]
-τh = τbuoyancy - DL νr - DQ (|νr| ⊙ νr) - CA(νr) νr - MA ν̇r
-```
-
-`MA`、`DL`、`DQ` 均使用 OpenFOAM 拟合得到的完整 `6×6` 矩阵，非对角耦合项不会被丢弃。
-PhysX 自带线性阻尼和角阻尼均显式设为零，避免与上述实测阻力重复；重力仍由 PhysX 施加。
-运行链路不叠加旋向修正、反扭矩或高阶残差 wrench。
-
-推进器动态的当前名义参考为一阶时间常数 `0.08 s` 和固定命令延迟 `0.13 s`；在 200 Hz
-物理步长下延迟量化为 26 步。两者来自外部 T200/Basic ESC 文献，不是 T60 自身测量；
-`0.25 s` 静止启动时间只作为来源记录，不额外叠加。附加质量的 `ν̇r` 仍采用现有 200 Hz
-有限差分和 `0.35` 滤波，不是隐式刚体—流体联合求解。
-
-环境 profile 给出名义矩阵。启用池壁/自由液面效应或训练 DR 后，有效推力和水动力系数会按
-显式配置缩放，因此训练阶段的有效值不一定等于名义测量值。
-
-仿真不注入观测延迟、滤波、丢包或传感器噪声。滤波属于真实测量链，只有通过硬件/水池数据
-证明有效后才应进入实际部署代码，而不是在 Isaac 中维护一套未经验证的 sensing 模块。
-
-## 奖励和轨迹
-
-奖励函数以不可变版本保存在 `simulation/isaac/rewards/policy_N.py`，并由
-`rewards/registry.py` 统一选择。改变奖励公式或系数时新增版本，不要原地改变既有策略定义。
-当前训练入口默认选择 `policy_6`。
-
-可部署的轨迹运动学和航向生成位于 `robot/control/trajectory/`；Isaac 的
-`trajectory/mixin.py` 只负责把轨迹状态接入任务 reset/step。训练、评估命令和报表工具位于
-`simulation/isaac/trajectory/`，因为它们属于模拟实验流程而不是机器人本体。
-
-## 评估
-
-从仓库根目录打开 [`eval.ipynb`](eval.ipynb)，并把 `POLICY_RUN_DIR` 设置为训练生成的完整
-运行目录。评估不会猜测最新 checkpoint 所属运行，也不会搜索外部 IsaacLab 日志；
-`FINAL_CHECKPOINT="latest"` 只在已经明确选择的运行内解析。
-
-Notebook 支持：
-
-- 名义环境和完整 Stage-4 DR 的最终验收；
-- 多轨迹鲁棒泛化矩阵；
-- 保持随机种子和曲线不变的固定流速 sweep；
-- checkpoint 汇总、RMSE 图、热图和单条轨迹细节图。
-
-结果写入 `<POLICY_RUN_DIR>/evaluation/`。训练和评估必须选择相同的 MLP 架构、奖励版本以及
-相容的环境/DR 配方。
-
-## ONNX 导出
-
-ONNX 默认写入 checkpoint 所在运行的 `exports/`：
+训练 worker 是 `simulation/training/train.py`。评估入口是 `eval.ipynb`，它要求显式设置
+`POLICY_RUN_DIR`，从 `run_manifest.json` 恢复网络、奖励和 run-local profile，结果写入该运行的
+`evaluation/`。ONNX 导出同样从 manifest 恢复网络契约：
 
 ```bash
-python simulation/isaac/rlpolicy/export_onnx.py \
-  --checkpoint simulation/isaac/rlpolicy/auv_traj_mlp_history_5/<run>/model_480.pt \
-  --mlp_architecture mlp_history_5
+python simulation/training/evaluation/export.py \
+  --checkpoint simulation/rlpolicy/auv_traj_mlp_history_5/<run>/model_450.pt
 ```
 
-## OpenFOAM 与 PMM
-
-OpenFOAM 工程锁定 OpenCFD OpenFOAM `v2512`。几何门禁、算例生成、批量运行和结果拟合见
-[`environment/openfoam/README.md`](environment/openfoam/README.md)。PMM 六自由度辨识入口为：
-
-```bash
-python environment/pmm/six_dof_identification.py
-```
-
-OpenFOAM/PMM 结果经过检查后，应更新 `environment/hydrodynamics/coefficients/` 或相应环境
-配置；运行时不会从临时结果目录自动挑选“最新”文件。
+本次迁移和文档整理不会自动启动训练。
 
 ## 测试
-
-精简测试集不启动 Isaac Sim，只保留实验主链路的数值与接口回归：PMM 拟合、共享物理、
-PID/轨迹、PPO、训练快照和 Isaac 适配。
 
 ```bash
 conda run -n env_isaaclab python -m pytest -q tests
 ```
 
-完整 GPU 训练前仍应执行一次 Isaac Lab 短迭代 smoke test；OpenFOAM 的几何与网格质量由
-实际工具链输出判定，不再维护一套独立的 Python 门禁测试。
-
-## 修改内容应放在哪里
-
-- 修改机器人质量、惯量、浮力或推进器实测曲线：`robot/dynamics/`、`robot/propulsion/`。
-- 修改执行器、电池、系缆、PID 或部署轨迹：`robot/runtime.py`、`robot/control/`。
-- 修改水流、阻尼、附加质量、池壁或自由液面模型：`environment/hydrodynamics/`。
-- 修改水流或水动力随机化的执行方式：`environment/randomization/`。
-- 修改机器人属性随机化的执行方式：`robot/randomization/`。
-- 修改单次训练的流速、DR 数值或训练规模：`train.ipynb`。
-- 修改 Isaac 状态读取、wrench 注入、观测组装、奖励或 PPO：`simulation/isaac/`。
-- 修改真实传感器滤波：应进入实际机器人测量/部署工程，并由真实测试数据支撑；不放回本模拟目录。
-
-仓库目前没有 URDF。以后新增 URDF/xacro 时放入 `robot/assets/`，不要复制到模拟器目录。
+完整训练前还应在 Isaac Lab 中运行短迭代 smoke test。OpenFOAM 工程说明见
+`environment/openfoam/README.md`，PMM 六自由度辨识入口为
+`environment/pmm/six_dof_identification.py`。

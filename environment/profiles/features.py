@@ -42,17 +42,3 @@ def normalize_domain_randomization_features(features: Iterable[str]) -> tuple[st
     if duplicates:
         raise ValueError("Duplicate domain-randomization feature(s): " + ", ".join(duplicates) + ".")
     return names
-
-
-def domain_randomization_feature_enabled(env, name: str) -> bool:
-    """Return whether one feature is active for this reset/step.
-
-    The environment's global train/eval gate remains authoritative.
-    """
-
-    if name not in ALL_DOMAIN_RANDOMIZATION_FEATURES:
-        raise ValueError(f"Unknown domain-randomization feature {name!r}.")
-    if not env._domain_randomization_enabled():
-        return False
-    selected = env.cfg.domain_randomization.enabled_features
-    return name in normalize_domain_randomization_features(selected)

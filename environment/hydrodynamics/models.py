@@ -16,13 +16,9 @@ from typing import Tuple
 import torch
 
 from .tensor_ops import (
-    calculate_speed_dependent_damping_scale,
-    expand_6d_matrix,
-    mean_one_lognormal_scale,
     multiply_6d_matrix,
     quat_apply_wxyz,
     quat_conjugate_wxyz,
-    scale_hydrodynamic_coefficients,
     skew_symmetric,
 )
 
