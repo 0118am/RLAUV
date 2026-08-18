@@ -21,7 +21,7 @@ from robot.control.trajectory.observation_contract import ACTION_DIM, BASE_OBSER
 from simulation.training.rewards import POLICY_0 as DEFAULT_REWARD_POLICY
 from simulation.training.evaluation.config import DEFAULT_EVALUATION_DURATION_S
 from robot.assets.isaac.spawn import AUV_CFG
-from .visualization.ui import AUVTrajEnvWindow
+from .visualization import AUVTrajEnvWindow
 
 
 DEFAULT_ENVIRONMENT_PROFILE_PATH = (

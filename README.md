@@ -223,4 +223,4 @@ conda run -n env_isaaclab python -m pytest -q tests
 
 完整训练前还应在 Isaac Lab 中运行短迭代 smoke test。OpenFOAM 工程说明见
 `environment/openfoam/README.md`，PMM 六自由度辨识入口为
-`environment/pmm/six_dof_identification.py`。
+`environment/pmm/PMM水动力解算.ipynb`。

@@ -1,0 +1,282 @@
+[
+  {
+    "dof": "sway",
+    "nominal_frequency_hz": 0.1,
+    "mean_estimated_frequency_hz": 0.09739752345679013,
+    "repeats": 3,
+    "added_mass": 16.564604903091514,
+    "linear_damping_effective": -1.2447534444412778,
+    "quadratic_damping": 34.525855421645154,
+    "r2": 0.9290828859748343
+  },
+  {
+    "dof": "sway",
+    "nominal_frequency_hz": 0.2,
+    "mean_estimated_frequency_hz": 0.19803222962962963,
+    "repeats": 3,
+    "added_mass": 15.592617671556027,
+    "linear_damping_effective": -0.6538518630879758,
+    "quadratic_damping": 7.976472177094961,
+    "r2": 0.9987853542443086
+  },
+  {
+    "dof": "sway",
+    "nominal_frequency_hz": 0.3,
+    "mean_estimated_frequency_hz": 0.29705705555555556,
+    "repeats": 3,
+    "added_mass": 16.001406358642413,
+    "linear_damping_effective": 0.9221505019538705,
+    "quadratic_damping": -8.756932420028377,
+    "r2": 0.9996129274164843
+  },
+  {
+    "dof": "sway",
+    "nominal_frequency_hz": 0.4,
+    "mean_estimated_frequency_hz": 0.39603229135802476,
+    "repeats": 3,
+    "added_mass": 16.17905558264903,
+    "linear_damping_effective": -8.636577287308755,
+    "quadratic_damping": 32.40035069973606,
+    "r2": 0.9969356095611386
+  },
+  {
+    "dof": "sway",
+    "nominal_frequency_hz": 0.5,
+    "mean_estimated_frequency_hz": 0.49506936419753084,
+    "repeats": 3,
+    "added_mass": 16.375439105565103,
+    "linear_damping_effective": -17.96075476104082,
+    "quadratic_damping": 54.03021911590923,
+    "r2": 0.9980582095332006
+  },
+  {
+    "dof": "sway",
+    "nominal_frequency_hz": 0.6,
+    "mean_estimated_frequency_hz": 0.5941254814814815,
+    "repeats": 3,
+    "added_mass": 16.59798040176761,
+    "linear_damping_effective": -19.6387502536933,
+    "quadratic_damping": 43.79526629959853,
+    "r2": 0.9912395820577938
+  },
+  {
+    "dof": "sway",
+    "nominal_frequency_hz": 0.7,
+    "mean_estimated_frequency_hz": 0.6928409012345681,
+    "repeats": 3,
+    "added_mass": 16.576623072264443,
+    "linear_damping_effective": -9.536124193323374,
+    "quadratic_damping": 10.159605173871864,
+    "r2": 0.9944976213146672
+  },
+  {
+    "dof": "heave",
+    "nominal_frequency_hz": 0.1,
+    "mean_estimated_frequency_hz": 0.09739968641975309,
+    "repeats": 3,
+    "added_mass": -0.45002951361900806,
+    "linear_damping_effective": -7.835676715637626,
+    "quadratic_damping": 26.85735456524381,
+    "r2": 0.9196888855381796
+  },
+  {
+    "dof": "heave",
+    "nominal_frequency_hz": 0.2,
+    "mean_estimated_frequency_hz": 0.1980322197530864,
+    "repeats": 3,
+    "added_mass": -8.649710891091871,
+    "linear_damping_effective": -6.83357011553551,
+    "quadratic_damping": 2.936083606066837,
+    "r2": 0.9952784539250433
+  },
+  {
+    "dof": "heave",
+    "nominal_frequency_hz": 0.3,
+    "mean_estimated_frequency_hz": 0.29705708148148147,
+    "repeats": 3,
+    "added_mass": -9.577920216309241,
+    "linear_damping_effective": -7.30967020742289,
+    "quadratic_damping": 4.925132355109128,
+    "r2": 0.9969074420187611
+  },
+  {
+    "dof": "heave",
+    "nominal_frequency_hz": 0.4,
+    "mean_estimated_frequency_hz": 0.39603229135802476,
+    "repeats": 3,
+    "added_mass": -10.098686065968307,
+    "linear_damping_effective": -4.819106839874347,
+    "quadratic_damping": -0.6768697674799651,
+    "r2": 0.7863037330339365
+  },
+  {
+    "dof": "heave",
+    "nominal_frequency_hz": 0.5,
+    "mean_estimated_frequency_hz": 0.49506938888888885,
+    "repeats": 3,
+    "added_mass": -10.690065056456579,
+    "linear_damping_effective": 4.221527338198653,
+    "quadratic_damping": -13.96024470265723,
+    "r2": 0.9715658096969475
+  },
+  {
+    "dof": "heave",
+    "nominal_frequency_hz": 0.6,
+    "mean_estimated_frequency_hz": 0.5941254888888889,
+    "repeats": 3,
+    "added_mass": -11.366255946450416,
+    "linear_damping_effective": 1.3823467766514645,
+    "quadratic_damping": 3.50692488501661,
+    "r2": 0.8886283951005425
+  },
+  {
+    "dof": "heave",
+    "nominal_frequency_hz": 0.7,
+    "mean_estimated_frequency_hz": 0.6928409098765433,
+    "repeats": 3,
+    "added_mass": -11.209418853082289,
+    "linear_damping_effective": -10.425145131482827,
+    "quadratic_damping": 31.80591601720526,
+    "r2": 0.9730443570765679
+  },
+  {
+    "dof": "pitch",
+    "nominal_frequency_hz": 0.1,
+    "mean_estimated_frequency_hz": 0.09745726913580248,
+    "repeats": 3,
+    "added_mass": 0.08097486121173143,
+    "linear_damping_effective": 0.20535349724014784,
+    "quadratic_damping": -0.9515627216960753,
+    "r2": 0.9253676555817947
+  },
+  {
+    "dof": "pitch",
+    "nominal_frequency_hz": 0.2,
+    "mean_estimated_frequency_hz": 0.19803022222222225,
+    "repeats": 3,
+    "added_mass": 0.0873355194431809,
+    "linear_damping_effective": 0.09805368444753251,
+    "quadratic_damping": -0.26611002199779504,
+    "r2": 0.9948341655345974
+  },
+  {
+    "dof": "pitch",
+    "nominal_frequency_hz": 0.3,
+    "mean_estimated_frequency_hz": 0.2970601148148148,
+    "repeats": 3,
+    "added_mass": 0.11577343514381322,
+    "linear_damping_effective": 0.08662050007309299,
+    "quadratic_damping": -0.2315156894727479,
+    "r2": 0.9992225656964303
+  },
+  {
+    "dof": "pitch",
+    "nominal_frequency_hz": 0.4,
+    "mean_estimated_frequency_hz": 0.39602760000000004,
+    "repeats": 3,
+    "added_mass": 0.13002413294679518,
+    "linear_damping_effective": 0.10939945866648215,
+    "quadratic_damping": -0.2948750700148283,
+    "r2": 0.9995350743370486
+  },
+  {
+    "dof": "pitch",
+    "nominal_frequency_hz": 0.5,
+    "mean_estimated_frequency_hz": 0.4950709814814814,
+    "repeats": 3,
+    "added_mass": 0.1347775847593834,
+    "linear_damping_effective": 0.017598560750618802,
+    "quadratic_damping": -0.1258210784858946,
+    "r2": 0.9987373191206566
+  },
+  {
+    "dof": "pitch",
+    "nominal_frequency_hz": 0.6,
+    "mean_estimated_frequency_hz": 0.5941310666666667,
+    "repeats": 3,
+    "added_mass": 0.1343618310349068,
+    "linear_damping_effective": -0.019307270544794423,
+    "quadratic_damping": -0.11683699856677926,
+    "r2": 0.9984870028273807
+  },
+  {
+    "dof": "pitch",
+    "nominal_frequency_hz": 0.7,
+    "mean_estimated_frequency_hz": 0.6928384814814815,
+    "repeats": 3,
+    "added_mass": 0.13566771865658567,
+    "linear_damping_effective": -0.1815388186341442,
+    "quadratic_damping": 0.07272889207591562,
+    "r2": 0.9990993750043461
+  },
+  {
+    "dof": "yaw",
+    "nominal_frequency_hz": 0.1,
+    "mean_estimated_frequency_hz": 0.09735275679012347,
+    "repeats": 3,
+    "added_mass": 0.05489114152921362,
+    "linear_damping_effective": 0.07064258051325625,
+    "quadratic_damping": -0.29627704544566086,
+    "r2": 0.9488821797493383
+  },
+  {
+    "dof": "yaw",
+    "nominal_frequency_hz": 0.2,
+    "mean_estimated_frequency_hz": 0.19802950370370373,
+    "repeats": 3,
+    "added_mass": 0.10826750823412175,
+    "linear_damping_effective": 0.028750594621968856,
+    "quadratic_damping": -0.05157856685234009,
+    "r2": 0.99731565403371
+  },
+  {
+    "dof": "yaw",
+    "nominal_frequency_hz": 0.3,
+    "mean_estimated_frequency_hz": 0.29706012592592596,
+    "repeats": 3,
+    "added_mass": 0.12070577468781171,
+    "linear_damping_effective": 0.04143377434236924,
+    "quadratic_damping": -0.1410165971873611,
+    "r2": 0.9994438100307217
+  },
+  {
+    "dof": "yaw",
+    "nominal_frequency_hz": 0.4,
+    "mean_estimated_frequency_hz": 0.3960315851851852,
+    "repeats": 3,
+    "added_mass": 0.12452816772316652,
+    "linear_damping_effective": 0.04383196654015391,
+    "quadratic_damping": -0.17821775993893885,
+    "r2": 0.9995956161398716
+  },
+  {
+    "dof": "yaw",
+    "nominal_frequency_hz": 0.5,
+    "mean_estimated_frequency_hz": 0.4950656851851852,
+    "repeats": 3,
+    "added_mass": 0.12441411123455337,
+    "linear_damping_effective": -0.018697309022608834,
+    "quadratic_damping": -0.08424921233808882,
+    "r2": 0.9995083787244539
+  },
+  {
+    "dof": "yaw",
+    "nominal_frequency_hz": 0.6,
+    "mean_estimated_frequency_hz": 0.5941363925925928,
+    "repeats": 3,
+    "added_mass": 0.12357711476045638,
+    "linear_damping_effective": -0.10216304829210085,
+    "quadratic_damping": 0.005004446267523329,
+    "r2": 0.9991233900675802
+  },
+  {
+    "dof": "yaw",
+    "nominal_frequency_hz": 0.7,
+    "mean_estimated_frequency_hz": 0.6928372197530864,
+    "repeats": 3,
+    "added_mass": 0.1235346753391729,
+    "linear_damping_effective": -0.21495536954854505,
+    "quadratic_damping": 0.09505581488780145,
+    "r2": 0.9999172798380366
+  }
+]
