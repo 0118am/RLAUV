@@ -1,36 +1,25 @@
-# OpenFOAM hydrodynamic matrix analysis
+# 完整响应矩阵拟合器
 
-Run the fitter after all prescribed-motion cases have produced OpenCFD v2512
-`postProcessing/forces/**/{force.dat,moment.dat}`:
+分析器从给出的 24 个工况目录直接读取 `case.json` 和原始
+`force.dat/moment.dat`。输出坐标是 moving-COM body FLU，顺序为
+`[u,v,w,p,q,r]` / `[X,Y,Z,K,M,N]`。
+
+- 稳态正负配对的半差拟合平移 `D_L,D_Q`；全部六个 wrench 响应共同形成对应激励列。
+- 六个低幅值附加质量工况做半周期奇投影；其中三个平移结果用于平移 `M_A`，三个
+  转动结果用于检查幅值依赖。
+- 每个转动轴的两档转速工况联合回归 `[-nu_dot,-nu,-|nu|nu]`，同时拟合六个响应通道的
+  `M_A,D_L,D_Q`，不再固定低幅值转动附加质量。
+- 依据 body-FLU 左右镜像对称，只清零偶/奇块之间物理禁止的项；两个块内允许的非对角项
+  保留。独立拟合的 `M_A` 列按互易性取对称平均，不对 `D_L,D_Q` 做裁剪或被动性投影。
+
+输出保留每个 wrench 通道的系数、NRMSE、最后周期/稳态窗口变化、横轴载荷比例、附加质量
+互易误差和线性阻尼对称部分特征值作为诊断量，不设置通过/拒绝阈值。比较横轴载荷前先用
+艇长把力矩换算为 `M/L`，避免直接混用 N 与 N·m。
+
+运行：
 
 ```bash
 python3 -m environment.openfoam.analysis \
-  --cases-root environment/openfoam/cases \
-  --output-dir environment/openfoam/results
+  --cases-root environment/openfoam/cases/current \
+  --config environment/openfoam/config.json
 ```
-
-Each oscillatory case must contain `motion.json` plus OpenCFD v2512
-`postProcessing/forces/**/{force.dat,moment.dat}` output. The canonical motion fields are
-`dof`, `dof_index`, `motion_kind`, `axis`, `amplitude_si`, `omega_rad_s`,
-`phase_rad`, `settle_cycles`, `sample_cycles`, `cofr_global_m`, and
-`com_initial_global_m`. Generator aliases such as `kind`, `amplitude_m`,
-`amplitude_rad`, `amplitude_deg`, and `centre_of_rotation_m` are accepted.
-Baseline/rest cases are skipped.
-
-The output convention is body FLU at the moving COM, with DOFs
-`[u,v,w,p,q,r]`, wrench `[X,Y,Z,K,M,N]`, and fluid-on-body model
-
-```text
-tau = -M_A*nudot - C_A(nu,M_A)*nu
-      - D_L*nu - D_Q*(abs(nu)*nu)
-```
-
-The primary estimate first resamples every complete cycle onto the same
-uniform phase grid (`phase_samples_per_cycle`, default `256`), then pairs
-samples half a period apart. Equal phase rows per cycle prevent adaptive time
-steps or denser cases from becoming accidental regression weights. The pairing
-cancels steady bias and the even-in-velocity added-mass Coriolis load without
-discarding any off-axis wrench response. Requested partial cycles are rejected
-rather than silently underweighted. `config_updates.json` contains the project keys
-`added_mass_diag`, `linear_damping`, and `quadratic_damping`, each as a full
-6x6 matrix.

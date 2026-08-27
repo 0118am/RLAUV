@@ -65,7 +65,7 @@ def _discover(cases_dir: Path, patterns: list[str], resume: bool, solver: str = 
         raise FileNotFoundError(f"Cases directory does not exist: {cases_dir}")
     cases = []
     skipped = 0
-    for metadata in sorted(cases_dir.glob("*/motion.json")):
+    for metadata in sorted(cases_dir.glob("*/case.json")):
         case = metadata.parent
         try:
             case_metadata = json.loads(metadata.read_text(encoding="utf-8"))
@@ -109,22 +109,33 @@ def _command_plan(
             raise ValueError("cpu_set requires bind_to_core")
         _parse_cpu_set(cpu_set)
 
+    metadata = json.loads((case / "case.json").read_text(encoding="utf-8"))
+    if metadata.get("schema_version") != 5:
+        raise ValueError(f"{case}: only case schema_version 5 is runnable")
+    steady = metadata.get("case_family") == "steady_damping"
     plan: list[tuple[list[str], Path]] = []
+    if steady:
+        plan.append(
+            (
+                ["potentialFoam", "-writePhi", "-case", str(case)],
+                case / "log.potentialFoam",
+            )
+        )
     if ranks > 1:
+        runtime_decomposition = case / ".execution" / "decomposeParDict"
         plan.append(
             (
                 [
-                    "foamDictionary",
-                    str(case / "system" / "decomposeParDict"),
-                    "-entry",
-                    "numberOfSubdomains",
-                    "-set",
-                    str(ranks),
+                    "decomposePar",
+                    "-force",
+                    "-decomposeParDict",
+                    str(runtime_decomposition),
+                    "-case",
+                    str(case),
                 ],
-                case / "log.foamDictionary",
+                case / "log.decomposePar",
             )
         )
-        plan.append((["decomposePar", "-force", "-case", str(case)], case / "log.decomposePar"))
         mpi_command = []
         if cpu_set is not None:
             mpi_command.extend(("taskset", "-c", cpu_set))
@@ -138,4 +149,3 @@ def _command_plan(
     else:
         plan.append(([solver, "-case", str(case)], case / f"log.{solver}"))
     return plan
-

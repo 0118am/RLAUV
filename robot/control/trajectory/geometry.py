@@ -9,14 +9,18 @@ from .catalog import (
     BREATHING_LOOP,
     CHIRP,
     CIRCLE,
-    LATERAL_SINE,
+    LATERAL_WAVE,
     LISSAJOUS,
     RACETRACK,
     RANDOM_SMOOTH,
+    REVERSE_SPATIAL_HELIX,
     SPATIAL_HELIX,
-    VERTICAL_SINE,
+    VERTICAL_WAVE,
     WAVY_LOOP,
 )
+
+
+_TRAVELING_WAVE_RETURN_LANE_RATIO = 0.25
 
 def _expand(value: torch.Tensor, phase: torch.Tensor) -> torch.Tensor:
     return value.unsqueeze(-1).expand_as(phase)
@@ -126,6 +130,7 @@ def _smooth_racetrack(phase: torch.Tensor, ax: torch.Tensor, ay: torch.Tensor) -
 def evaluate_geometry(
     trajectory_type: torch.Tensor,
     axis: torch.Tensor,
+    wave_count: torch.Tensor,
     amp_x: torch.Tensor,
     amp_y: torch.Tensor,
     amp_z: torch.Tensor,
@@ -147,12 +152,13 @@ def evaluate_geometry(
 
     if phase.ndim != 2:
         raise ValueError("phase must have shape [num_envs, num_samples].")
-    harmonic_ratio = max(0.0, min(float(harmonic_ratio), 0.10))
+    harmonic_ratio = float(harmonic_ratio)
     px = _expand(phase_x, phase)
     py = _expand(phase_y, phase)
     ax = _expand(amp_x, phase)
     ay = _expand(amp_y, phase)
     az = _expand(amp_z, phase)
+    wave_harmonic = 2.0 * _expand(wave_count.to(dtype=phase.dtype), phase)
     types = trajectory_type.unsqueeze(-1)
 
     base = phase + px
@@ -163,11 +169,20 @@ def evaluate_geometry(
     circle = torch.stack((ax * torch.cos(base), ay * torch.sin(base), zeros), dim=-1)
     result = torch.where((types == CIRCLE).unsqueeze(-1), circle, result)
 
-    # Keep the 2:1 harmonic phase coherent with the fundamental.  Independent
-    # random offsets can create a zero-tangent cusp, which no finite heading
-    # rate can track; the common offset still randomises the starting point.
+    # Keep the 1:2:3 harmonic phases coherent. Independent random offsets can
+    # create a zero-tangent cusp, which no finite heading rate can track; the
+    # common offset still randomises the starting point. All three amplitudes
+    # are half-extents, so this is a genuinely spatial Lissajous curve.
     lissajous_harmonic = 2.0 * base
-    lissajous = torch.stack((ax * torch.sin(base), ay * torch.sin(lissajous_harmonic), zeros), dim=-1)
+    lissajous_vertical = 3.0 * base
+    lissajous = torch.stack(
+        (
+            ax * torch.sin(base),
+            ay * torch.sin(lissajous_harmonic),
+            az * torch.sin(lissajous_vertical),
+        ),
+        dim=-1,
+    )
     result = torch.where((types == LISSAJOUS).unsqueeze(-1), lissajous, result)
 
     sine_amplitude = torch.where(_expand(axis, phase) == 1, ay, ax)
@@ -206,11 +221,35 @@ def evaluate_geometry(
     )
     result = torch.where((types == RANDOM_SMOOTH).unsqueeze(-1), random_smooth, result)
 
-    lateral_sine = torch.stack((zeros, ay * torch.sin(base), zeros), dim=-1)
-    result = torch.where((types == LATERAL_SINE).unsqueeze(-1), lateral_sine, result)
+    # During either half-cycle, x moves monotonically from one end of the
+    # command envelope to the other while the transverse coordinate completes
+    # ``wave_count`` full sine waves. A quarter-width cosine return lane keeps
+    # the outbound and inbound branches separate and gives vertical waves a
+    # horizontal U-turn. The resulting closed curve has no zero tangent or
+    # vertical-heading singularity.
+    wave_phase = wave_harmonic * base
+    return_lane_ratio = torch.as_tensor(
+        _TRAVELING_WAVE_RETURN_LANE_RATIO,
+        dtype=phase.dtype,
+        device=phase.device,
+    )
+    wave_ratio = 1.0 - return_lane_ratio
+    return_lane = return_lane_ratio * ay * torch.cos(base)
+    lateral_wave = torch.stack(
+        (
+            ax * torch.sin(base),
+            return_lane + wave_ratio * ay * torch.sin(wave_phase),
+            zeros,
+        ),
+        dim=-1,
+    )
+    result = torch.where((types == LATERAL_WAVE).unsqueeze(-1), lateral_wave, result)
 
-    vertical_sine = torch.stack((zeros, zeros, az * torch.sin(base)), dim=-1)
-    result = torch.where((types == VERTICAL_SINE).unsqueeze(-1), vertical_sine, result)
+    vertical_wave = torch.stack(
+        (ax * torch.sin(base), return_lane, az * torch.sin(wave_phase)),
+        dim=-1,
+    )
+    result = torch.where((types == VERTICAL_WAVE).unsqueeze(-1), vertical_wave, result)
 
     # A bounded, closed spatial helix.  Closing the vertical component after
     # two coils avoids the discontinuity of an unbounded z=pitch*q helix at an
@@ -219,12 +258,186 @@ def evaluate_geometry(
         (ax * torch.cos(base), ay * torch.sin(base), az * torch.sin(2.0 * base)), dim=-1
     )
     result = torch.where((types == SPATIAL_HELIX).unsqueeze(-1), spatial_helix, result)
+
+    # Traverse exactly the same closed spatial-helix geometry in reverse from
+    # the sampled start phase.  With q increasing, the original curve is
+    # evaluated at ``phase_x - q`` instead of ``phase_x + q``; this reverses
+    # velocity and every odd time derivative without inventing a mirrored task.
+    reverse_base = px - phase
+    reverse_spatial_helix = torch.stack(
+        (
+            ax * torch.cos(reverse_base),
+            ay * torch.sin(reverse_base),
+            az * torch.sin(2.0 * reverse_base),
+        ),
+        dim=-1,
+    )
+    result = torch.where(
+        (types == REVERSE_SPATIAL_HELIX).unsqueeze(-1),
+        reverse_spatial_helix,
+        result,
+    )
     return result
+
+
+def _analytic_speed_controlled_derivatives(
+    trajectory_type: torch.Tensor,
+    axis: torch.Tensor,
+    wave_count: torch.Tensor,
+    amp_x: torch.Tensor,
+    amp_y: torch.Tensor,
+    amp_z: torch.Tensor,
+    phase_x: torch.Tensor,
+    phase: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return exact position through third phase derivative for training curves."""
+
+    types = trajectory_type.unsqueeze(-1)
+    condition_axis = (types == AXIS_SINE).unsqueeze(-1)
+    condition_lissajous = (types == LISSAJOUS).unsqueeze(-1)
+    condition_lateral = (types == LATERAL_WAVE).unsqueeze(-1)
+    condition_vertical = (types == VERTICAL_WAVE).unsqueeze(-1)
+    condition_helix = (types == SPATIAL_HELIX).unsqueeze(-1)
+    condition_reverse_helix = (types == REVERSE_SPATIAL_HELIX).unsqueeze(-1)
+    base = phase + _expand(phase_x, phase)
+    reverse_base = _expand(phase_x, phase) - phase
+    zeros = torch.zeros_like(phase)
+    ax = _expand(amp_x, phase)
+    ay = _expand(amp_y, phase)
+    az = _expand(amp_z, phase)
+    wave_harmonic = 2.0 * _expand(wave_count.to(dtype=phase.dtype), phase)
+    wave_phase = wave_harmonic * base
+    sin_1 = torch.sin(base)
+    cos_1 = torch.cos(base)
+    sin_2 = torch.sin(2.0 * base)
+    cos_2 = torch.cos(2.0 * base)
+    sin_3 = torch.sin(3.0 * base)
+    cos_3 = torch.cos(3.0 * base)
+    reverse_sin_1 = torch.sin(reverse_base)
+    reverse_cos_1 = torch.cos(reverse_base)
+    reverse_sin_2 = torch.sin(2.0 * reverse_base)
+    reverse_cos_2 = torch.cos(2.0 * reverse_base)
+    sin_wave = torch.sin(wave_phase)
+    cos_wave = torch.cos(wave_phase)
+
+    shape = (*phase.shape, 3)
+    position = torch.zeros(shape, dtype=phase.dtype, device=phase.device)
+    first = torch.zeros_like(position)
+    second = torch.zeros_like(position)
+    third = torch.zeros_like(position)
+    return_lane_ratio = torch.as_tensor(
+        _TRAVELING_WAVE_RETURN_LANE_RATIO,
+        dtype=phase.dtype,
+        device=phase.device,
+    )
+    wave_ratio = 1.0 - return_lane_ratio
+
+    sine_amplitude = torch.where(_expand(axis, phase) == 1, ay, ax)
+    sine_amplitude = torch.where(_expand(axis, phase) == 2, az, sine_amplitude)
+    sine_axis = torch.nn.functional.one_hot(axis, num_classes=3).to(dtype=phase.dtype).unsqueeze(1)
+    axis_sine = (
+        sine_axis * (sine_amplitude * sin_1).unsqueeze(-1),
+        sine_axis * (sine_amplitude * cos_1).unsqueeze(-1),
+        sine_axis * (-sine_amplitude * sin_1).unsqueeze(-1),
+        sine_axis * (-sine_amplitude * cos_1).unsqueeze(-1),
+    )
+
+    lissajous = (
+        torch.stack((ax * sin_1, ay * sin_2, az * sin_3), dim=-1),
+        torch.stack((ax * cos_1, 2.0 * ay * cos_2, 3.0 * az * cos_3), dim=-1),
+        torch.stack((-ax * sin_1, -4.0 * ay * sin_2, -9.0 * az * sin_3), dim=-1),
+        torch.stack((-ax * cos_1, -8.0 * ay * cos_2, -27.0 * az * cos_3), dim=-1),
+    )
+    lateral = (
+        torch.stack(
+            (ax * sin_1, return_lane_ratio * ay * cos_1 + wave_ratio * ay * sin_wave, zeros),
+            dim=-1,
+        ),
+        torch.stack(
+            (
+                ax * cos_1,
+                -return_lane_ratio * ay * sin_1 + wave_ratio * wave_harmonic * ay * cos_wave,
+                zeros,
+            ),
+            dim=-1,
+        ),
+        torch.stack(
+            (
+                -ax * sin_1,
+                -return_lane_ratio * ay * cos_1
+                - wave_ratio * wave_harmonic.square() * ay * sin_wave,
+                zeros,
+            ),
+            dim=-1,
+        ),
+        torch.stack(
+            (
+                -ax * cos_1,
+                return_lane_ratio * ay * sin_1
+                - wave_ratio * wave_harmonic.pow(3) * ay * cos_wave,
+                zeros,
+            ),
+            dim=-1,
+        ),
+    )
+    vertical = (
+        torch.stack((ax * sin_1, return_lane_ratio * ay * cos_1, az * sin_wave), dim=-1),
+        torch.stack(
+            (ax * cos_1, -return_lane_ratio * ay * sin_1, wave_harmonic * az * cos_wave),
+            dim=-1,
+        ),
+        torch.stack(
+            (-ax * sin_1, -return_lane_ratio * ay * cos_1, -wave_harmonic.square() * az * sin_wave),
+            dim=-1,
+        ),
+        torch.stack(
+            (-ax * cos_1, return_lane_ratio * ay * sin_1, -wave_harmonic.pow(3) * az * cos_wave),
+            dim=-1,
+        ),
+    )
+    helix = (
+        torch.stack((ax * cos_1, ay * sin_1, az * sin_2), dim=-1),
+        torch.stack((-ax * sin_1, ay * cos_1, 2.0 * az * cos_2), dim=-1),
+        torch.stack((-ax * cos_1, -ay * sin_1, -4.0 * az * sin_2), dim=-1),
+        torch.stack((ax * sin_1, -ay * cos_1, -8.0 * az * cos_2), dim=-1),
+    )
+    reverse_helix = (
+        torch.stack(
+            (ax * reverse_cos_1, ay * reverse_sin_1, az * reverse_sin_2),
+            dim=-1,
+        ),
+        torch.stack(
+            (ax * reverse_sin_1, -ay * reverse_cos_1, -2.0 * az * reverse_cos_2),
+            dim=-1,
+        ),
+        torch.stack(
+            (-ax * reverse_cos_1, -ay * reverse_sin_1, -4.0 * az * reverse_sin_2),
+            dim=-1,
+        ),
+        torch.stack(
+            (-ax * reverse_sin_1, ay * reverse_cos_1, 8.0 * az * reverse_cos_2),
+            dim=-1,
+        ),
+    )
+    for condition, values in (
+        (condition_axis, axis_sine),
+        (condition_lissajous, lissajous),
+        (condition_lateral, lateral),
+        (condition_vertical, vertical),
+        (condition_helix, helix),
+        (condition_reverse_helix, reverse_helix),
+    ):
+        position = torch.where(condition, values[0], position)
+        first = torch.where(condition, values[1], first)
+        second = torch.where(condition, values[2], second)
+        third = torch.where(condition, values[3], third)
+    return position, first, second, third
 
 
 def _geometry_derivatives(
     trajectory_type: torch.Tensor,
     axis: torch.Tensor,
+    wave_count: torch.Tensor,
     amp_x: torch.Tensor,
     amp_y: torch.Tensor,
     amp_z: torch.Tensor,
@@ -247,13 +460,13 @@ def _geometry_derivatives(
         harmonic_ratio=harmonic_ratio,
     )
     position = evaluate_geometry(
-        trajectory_type, axis, amp_x, amp_y, amp_z, phase_x, phase_y, phase, **common
+        trajectory_type, axis, wave_count, amp_x, amp_y, amp_z, phase_x, phase_y, phase, **common
     )
     forward = evaluate_geometry(
-        trajectory_type, axis, amp_x, amp_y, amp_z, phase_x, phase_y, phase + step, **common
+        trajectory_type, axis, wave_count, amp_x, amp_y, amp_z, phase_x, phase_y, phase + step, **common
     )
     backward = evaluate_geometry(
-        trajectory_type, axis, amp_x, amp_y, amp_z, phase_x, phase_y, phase - step, **common
+        trajectory_type, axis, wave_count, amp_x, amp_y, amp_z, phase_x, phase_y, phase - step, **common
     )
     first = (forward - backward) / (2.0 * step)
     second = (forward - 2.0 * position + backward) / (step * step)
@@ -261,39 +474,133 @@ def _geometry_derivatives(
     # The speed-controlled training curves have compact analytic derivatives.
     # Using them avoids float32 second-difference noise leaking into the
     # arc-length reparameterization and its jerk estimate.
-    types = trajectory_type.unsqueeze(-1)
-    base = phase + _expand(phase_x, phase)
-    zeros = torch.zeros_like(phase)
-    ay = _expand(amp_y, phase)
-    az = _expand(amp_z, phase)
-    lateral_first = torch.stack((zeros, ay * torch.cos(base), zeros), dim=-1)
-    lateral_second = torch.stack((zeros, -ay * torch.sin(base), zeros), dim=-1)
-    first = torch.where((types == LATERAL_SINE).unsqueeze(-1), lateral_first, first)
-    second = torch.where((types == LATERAL_SINE).unsqueeze(-1), lateral_second, second)
-
-    vertical_first = torch.stack((zeros, zeros, az * torch.cos(base)), dim=-1)
-    vertical_second = torch.stack((zeros, zeros, -az * torch.sin(base)), dim=-1)
-    first = torch.where((types == VERTICAL_SINE).unsqueeze(-1), vertical_first, first)
-    second = torch.where((types == VERTICAL_SINE).unsqueeze(-1), vertical_second, second)
-
-    ax = _expand(amp_x, phase)
-    helix_first = torch.stack(
-        (-ax * torch.sin(base), ay * torch.cos(base), 2.0 * az * torch.cos(2.0 * base)), dim=-1
+    analytic_position, analytic_first, analytic_second, _ = (
+        _analytic_speed_controlled_derivatives(
+            trajectory_type,
+            axis,
+            wave_count,
+            amp_x,
+            amp_y,
+            amp_z,
+            phase_x,
+            phase,
+        )
     )
-    helix_second = torch.stack(
-        (-ax * torch.cos(base), -ay * torch.sin(base), -4.0 * az * torch.sin(2.0 * base)), dim=-1
-    )
-    first = torch.where((types == SPATIAL_HELIX).unsqueeze(-1), helix_first, first)
-    second = torch.where((types == SPATIAL_HELIX).unsqueeze(-1), helix_second, second)
+    analytic = (
+        (trajectory_type == AXIS_SINE)
+        | (trajectory_type == LISSAJOUS)
+        | (trajectory_type == LATERAL_WAVE)
+        | (trajectory_type == VERTICAL_WAVE)
+        | (trajectory_type == SPATIAL_HELIX)
+        | (trajectory_type == REVERSE_SPATIAL_HELIX)
+    ).reshape(-1, 1, 1)
+    position = torch.where(analytic, analytic_position, position)
+    first = torch.where(analytic, analytic_first, first)
+    second = torch.where(analytic, analytic_second, second)
     return position, first, second
 
 
-def _orientation_rate_per_phase(first: torch.Tensor, second: torch.Tensor) -> torch.Tensor:
-    speed_per_phase = torch.linalg.vector_norm(first, dim=-1).clamp_min(1.0e-6)
-    tangent = first / speed_per_phase.unsqueeze(-1)
-    tangent_rate = second / speed_per_phase.unsqueeze(-1)
-    tangent_rate = tangent_rate - tangent * torch.sum(tangent * tangent_rate, dim=-1, keepdim=True)
-    # ``tangent_rate`` is d(tangent)/dq. Multiplying it by dq/dt gives the
-    # commanded heading/pitch rate; dividing by phase speed here would apply
-    # curvature once more and severely over-slow otherwise benign curves.
-    return torch.linalg.vector_norm(tangent_rate, dim=-1)
+def _geometry_derivatives_through_third(
+    trajectory_type: torch.Tensor,
+    axis: torch.Tensor,
+    wave_count: torch.Tensor,
+    amp_x: torch.Tensor,
+    amp_y: torch.Tensor,
+    amp_z: torch.Tensor,
+    phase_x: torch.Tensor,
+    phase_y: torch.Tensor,
+    phase: torch.Tensor,
+    *,
+    analytic_only: bool,
+    radius_min: float,
+    radius_max: float,
+    harmonic_ratio: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return geometry and its first three phase derivatives at reset time."""
+
+    common = dict(
+        radius_min=radius_min,
+        radius_max=radius_max,
+        harmonic_ratio=harmonic_ratio,
+    )
+    analytic = (
+        (trajectory_type == AXIS_SINE)
+        | (trajectory_type == LISSAJOUS)
+        | (trajectory_type == LATERAL_WAVE)
+        | (trajectory_type == VERTICAL_WAVE)
+        | (trajectory_type == SPATIAL_HELIX)
+        | (trajectory_type == REVERSE_SPATIAL_HELIX)
+    )
+    analytic_values = _analytic_speed_controlled_derivatives(
+        trajectory_type,
+        axis,
+        wave_count,
+        amp_x,
+        amp_y,
+        amp_z,
+        phase_x,
+        phase,
+    )
+    if analytic_only:
+        return analytic_values
+
+    position, first, second = _geometry_derivatives(
+        trajectory_type,
+        axis,
+        wave_count,
+        amp_x,
+        amp_y,
+        amp_z,
+        phase_x,
+        phase_y,
+        phase,
+        **common,
+    )
+    third = torch.zeros_like(position)
+    if bool(torch.any(~analytic)):
+        step = torch.as_tensor(1.0e-2, dtype=phase.dtype, device=phase.device)
+        _, _, second_forward = _geometry_derivatives(
+            trajectory_type,
+            axis,
+            wave_count,
+            amp_x,
+            amp_y,
+            amp_z,
+            phase_x,
+            phase_y,
+            phase + step,
+            **common,
+        )
+        _, _, second_backward = _geometry_derivatives(
+            trajectory_type,
+            axis,
+            wave_count,
+            amp_x,
+            amp_y,
+            amp_z,
+            phase_x,
+            phase_y,
+            phase - step,
+            **common,
+        )
+        third = (second_forward - second_backward) / (2.0 * step)
+
+    analytic_mask = analytic.reshape(-1, 1, 1)
+    return tuple(
+        torch.where(analytic_mask, analytic_value, numeric_value)
+        for analytic_value, numeric_value in zip(
+            analytic_values,
+            (position, first, second, third),
+            strict=True,
+        )
+    )
+
+
+def _yaw_rate_per_phase(first: torch.Tensor, second: torch.Tensor) -> torch.Tensor:
+    """Return absolute horizontal-heading rate per unit phase."""
+
+    vx, vy = first[..., :2].unbind(dim=-1)
+    ax, ay = second[..., :2].unbind(dim=-1)
+    horizontal_speed_sq = (vx.square() + vy.square()).clamp_min(1.0e-8)
+    yaw_rate = (vx * ay - vy * ax) / horizontal_speed_sq
+    return torch.abs(yaw_rate)

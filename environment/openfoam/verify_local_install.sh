@@ -16,7 +16,7 @@ fi
 
 python3 "${script_dir}/tools/check_environment.py" --strict --min-api 2512 >/dev/null
 
-for application in blockMesh snappyHexMesh surfaceCheck pimpleFoam decomposePar; do
+for application in blockMesh snappyHexMesh surfaceCheck surfaceTransformPoints pimpleFoam decomposePar; do
     application_path="$(command -v "${application}")"
     missing_libraries="$(ldd "${application_path}" 2>&1 | awk '/not found/')"
     if [[ -n "${missing_libraries}" ]]; then

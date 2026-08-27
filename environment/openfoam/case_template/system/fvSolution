@@ -27,6 +27,11 @@ solvers
         $p;
         relTol          0;
     }
+    Phi
+    {
+        $p;
+        relTol          0.01;
+    }
     "(U|k|omega)"
     {
         solver          smoothSolver;
@@ -60,10 +65,15 @@ PIMPLE
     correctPhi              yes;
     // __MOVE_MESH_OUTER_CORRECTORS__
     nOuterCorrectors        __PIMPLE_OUTER_CORRECTORS__;
-    nCorrectors             2;
+    nCorrectors             1;
     nNonOrthogonalCorrectors 1;
     pRefCell                0;
     pRefValue               0;
+}
+
+potentialFlow
+{
+    nNonOrthogonalCorrectors 1;
 }
 
 relaxationFactors

@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 
 from simulation.training.evaluation.config import sanitize_evaluation_label
-from simulation.training.evaluation.campaign import eval_dir, logs_path
+from simulation.training.evaluation.campaign import evaluation_paths
 from simulation.training.recipe import ExperimentSpec
 from simulation.training.campaign import checkpoint_iter
 
@@ -22,27 +22,40 @@ def _finite_statistic(values: Any, reducer: Callable[[np.ndarray], Any]) -> floa
 
 
 def _reference_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, Any]:
-    path_lengths: list[float] = []
+    evaluated_distances: list[float] = []
+    cycle_lengths: list[float] = []
     speed_p95_by_env: list[float] = []
     for _, curve_rows in log.groupby("env_id", sort=True):
         ordered = curve_rows.sort_values("time")
         positions = ordered[["desired_x", "desired_y", "desired_z"]].to_numpy(dtype=np.float64)
-        path_lengths.append(float(np.sum(np.linalg.norm(np.diff(positions, axis=0), axis=1))))
+        evaluated_distances.append(float(np.sum(np.linalg.norm(np.diff(positions, axis=0), axis=1))))
         speed_p95_by_env.append(float(np.quantile(ordered["target_speed_mps"].to_numpy(), 0.95)))
+        effective_period_s = float(ordered["effective_period_s"].iloc[0])
+        cycle_end_time_s = effective_period_s + 0.5 * float(
+            cfg.trajectory_startup_duration_s
+        )
+        if float(ordered["time"].iloc[-1]) >= cycle_end_time_s:
+            cycle_positions = ordered.loc[
+                ordered["time"] <= cycle_end_time_s,
+                ["desired_x", "desired_y", "desired_z"],
+            ].to_numpy(dtype=np.float64)
+            cycle_lengths.append(
+                float(np.sum(np.linalg.norm(np.diff(cycle_positions, axis=0), axis=1)))
+            )
 
     speed_max = float(log["target_speed_mps"].max())
     acceleration_max = float(log["target_acceleration_mps2"].max())
     jerk_max = float(log["target_jerk_mps3"].max())
-    orientation_rate_max = float(log["target_orientation_rate_radps"].max())
+    yaw_rate_max = float(log["target_yaw_rate_radps"].max())
     within_envelope = (
         speed_max <= float(cfg.trajectory_max_speed_mps) * 1.01
         and acceleration_max <= float(cfg.trajectory_max_acceleration_mps2) * 1.01
         and jerk_max <= float(cfg.trajectory_max_jerk_mps3) * 1.01
-        and orientation_rate_max <= float(cfg.trajectory_max_orientation_rate_radps) * 1.01
+        and yaw_rate_max <= float(cfg.trajectory_max_yaw_rate_radps) * 1.01
     )
     reference_valid = (
-        bool(path_lengths)
-        and min(path_lengths) >= 0.10
+        bool(evaluated_distances)
+        and min(evaluated_distances) >= 0.10
         and min(speed_p95_by_env) >= 0.05
         and within_envelope
     )
@@ -56,9 +69,15 @@ def _reference_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, Any]:
         "reference_generator_version": str(cfg.trajectory_generator_version),
         "reference_valid": int(reference_valid),
         "reference_within_kinematic_envelope": int(within_envelope),
-        "reference_path_length_mean_m": float(np.mean(path_lengths)),
-        "reference_path_length_m_by_env_json": json.dumps(path_lengths),
-        "min_reference_path_length_m": float(min(path_lengths)),
+        "reference_evaluated_distance_mean_m": float(np.mean(evaluated_distances)),
+        "reference_evaluated_distance_m_by_env_json": json.dumps(evaluated_distances),
+        "min_reference_evaluated_distance_m": float(min(evaluated_distances)),
+        "reference_complete_cycle_fraction": float(
+            len(cycle_lengths) / len(evaluated_distances)
+        ),
+        "reference_cycle_length_mean_m": (
+            None if not cycle_lengths else float(np.mean(cycle_lengths))
+        ),
         "target_speed_p95_mps_by_env_json": json.dumps(speed_p95_by_env),
         "min_curve_target_speed_p95_mps": float(min(speed_p95_by_env)),
         "target_speed_mean_mps": float(log["target_speed_mps"].mean()),
@@ -73,9 +92,9 @@ def _reference_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, Any]:
         "target_curvature_mean_m_inv": float(log["target_curvature_m_inv"].mean()),
         "target_curvature_p95_m_inv": float(log["target_curvature_m_inv"].quantile(0.95)),
         "target_curvature_max_m_inv": float(log["target_curvature_m_inv"].max()),
-        "target_orientation_rate_mean_radps": float(log["target_orientation_rate_radps"].mean()),
-        "target_orientation_rate_p95_radps": float(log["target_orientation_rate_radps"].quantile(0.95)),
-        "target_orientation_rate_max_radps": orientation_rate_max,
+        "target_yaw_rate_mean_radps": float(log["target_yaw_rate_radps"].mean()),
+        "target_yaw_rate_p95_radps": float(log["target_yaw_rate_radps"].quantile(0.95)),
+        "target_yaw_rate_max_radps": yaw_rate_max,
         "requested_period_mean_s": float(log["requested_period_s"].mean()),
         "requested_period_s_by_env_json": json.dumps(requested_periods),
         "effective_period_mean_s": float(log["effective_period_s"].mean()),
@@ -85,57 +104,197 @@ def _reference_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, Any]:
     }
 
 
-def _tracking_metrics(log: pd.DataFrame) -> dict[str, Any]:
-    position_errors = log["position_error"].to_numpy()
-    velocity_errors = log["velocity_error"].to_numpy()
-    heading_mean = _finite_statistic(log["command_heading_error_rad"], np.mean)
-    sideslip_mean = _finite_statistic(log["motion_sideslip_error_rad"], np.mean)
-    return {
-        "position_rmse": float(np.sqrt(np.mean(position_errors**2))),
-        "position_error_p95": float(np.quantile(position_errors, 0.95)),
-        "position_mae": float(np.mean(position_errors)),
-        "max_position_error": float(np.max(position_errors)),
-        "velocity_rmse": float(np.sqrt(np.mean(velocity_errors**2))),
-        "mean_command_heading_error_deg": None if heading_mean is None else float(np.degrees(heading_mean)),
-        "mean_motion_sideslip_error_deg": None if sideslip_mean is None else float(np.degrees(sideslip_mean)),
+def _window_tracking_metrics(log: pd.DataFrame, prefix: str = "") -> dict[str, Any]:
+    position_error_w = (
+        log[["desired_x", "desired_y", "desired_z"]].to_numpy(dtype=np.float64)
+        - log[["true_x", "true_y", "true_z"]].to_numpy(dtype=np.float64)
+    )
+    velocity_error_w = (
+        log[["desired_vx", "desired_vy", "desired_vz"]].to_numpy(dtype=np.float64)
+        - log[["true_vx", "true_vy", "true_vz"]].to_numpy(dtype=np.float64)
+    )
+    position_error = np.linalg.norm(position_error_w, axis=1)
+    velocity_error = np.linalg.norm(velocity_error_w, axis=1)
+    bias = np.mean(position_error_w, axis=0)
+    target_velocity = log[["desired_vx", "desired_vy", "desired_vz"]].to_numpy(
+        dtype=np.float64
+    )
+    target_speed = np.linalg.norm(target_velocity, axis=1)
+    moving = target_speed > 1.0e-6
+    tangent_error = np.sum(
+        position_error_w[moving] * target_velocity[moving] / target_speed[moving, None],
+        axis=1,
+    )
+    cross_track_error = np.sqrt(
+        np.maximum(
+            position_error[moving] ** 2 - tangent_error**2,
+            0.0,
+        )
+    )
+    heading_mean = _finite_statistic(log["nose_to_target_heading_angle_rad"], np.mean)
+    heading_p95 = _finite_statistic(
+        log["nose_to_target_heading_angle_rad"], lambda x: np.quantile(x, 0.95)
+    )
+    motion_angle_mean = _finite_statistic(log["nose_to_motion_heading_angle_rad"], np.mean)
+    motion_angle_p95 = _finite_statistic(
+        log["nose_to_motion_heading_angle_rad"], lambda x: np.quantile(x, 0.95)
+    )
+    attitude_error = log["attitude_error"].to_numpy(dtype=np.float64)
+    curvature = log["target_curvature_m_inv"].to_numpy(dtype=np.float64)
+    curvature_correlation = (
+        None
+        if np.std(curvature) == 0.0 or np.std(position_error) == 0.0
+        else float(np.corrcoef(curvature, position_error)[0, 1])
+    )
+    result: dict[str, Any] = {
+        "position_rmse": float(np.sqrt(np.mean(position_error**2))),
+        "position_error_p95": float(np.quantile(position_error, 0.95)),
+        "position_mae": float(np.mean(position_error)),
+        "max_position_error": float(np.max(position_error)),
+        "position_bias_x_m": float(bias[0]),
+        "position_bias_y_m": float(bias[1]),
+        "position_bias_z_m": float(bias[2]),
+        "position_bias_norm_m": float(np.linalg.norm(bias)),
+        "position_x_rmse_m": float(np.sqrt(np.mean(position_error_w[:, 0] ** 2))),
+        "position_y_rmse_m": float(np.sqrt(np.mean(position_error_w[:, 1] ** 2))),
+        "position_z_rmse_m": float(np.sqrt(np.mean(position_error_w[:, 2] ** 2))),
+        "tangential_position_error_rmse_m": float(np.sqrt(np.mean(tangent_error**2))),
+        "cross_track_position_error_rmse_m": float(np.sqrt(np.mean(cross_track_error**2))),
+        "velocity_rmse": float(np.sqrt(np.mean(velocity_error**2))),
+        "velocity_x_rmse_mps": float(np.sqrt(np.mean(velocity_error_w[:, 0] ** 2))),
+        "velocity_y_rmse_mps": float(np.sqrt(np.mean(velocity_error_w[:, 1] ** 2))),
+        "velocity_z_rmse_mps": float(np.sqrt(np.mean(velocity_error_w[:, 2] ** 2))),
+        "attitude_error_rmse_deg": float(np.degrees(np.sqrt(np.mean(attitude_error**2)))),
+        "attitude_error_p95_deg": float(np.degrees(np.quantile(attitude_error, 0.95))),
+        "mean_nose_to_target_heading_angle_deg": None if heading_mean is None else float(np.degrees(heading_mean)),
+        "nose_to_target_heading_angle_p95_deg": None if heading_p95 is None else float(np.degrees(heading_p95)),
+        "mean_nose_to_motion_heading_angle_deg": None if motion_angle_mean is None else float(np.degrees(motion_angle_mean)),
+        "nose_to_motion_heading_angle_p95_deg": None if motion_angle_p95 is None else float(np.degrees(motion_angle_p95)),
+        "position_error_curvature_correlation": curvature_correlation,
         "mean_reward_per_step": float(log["reward"].mean()),
     }
+    return {f"{prefix}{name}": value for name, value in result.items()}
 
 
-def _actuator_metrics(log: pd.DataFrame) -> dict[str, Any]:
-    force_columns = [
-        "realized_wrench_force_x_n",
-        "realized_wrench_force_y_n",
-        "realized_wrench_force_z_n",
+def _tracking_metrics(
+    log: pd.DataFrame,
+    cfg: Any,
+    domain_samples: pd.DataFrame,
+) -> dict[str, Any]:
+    # The target finishes its smooth startup first; three actuator time
+    # constants plus the configured sensor delay then cover 95% response.
+    steady_state_start_s = (
+        float(cfg.trajectory_startup_duration_s)
+        + 3.0 * float(domain_samples["sampled_thruster_time_constant_s"].max())
+        + float(domain_samples["pose_sensor_delay_s"].max())
+    )
+    steady = log.loc[log["time"] >= steady_state_start_s]
+    result = _window_tracking_metrics(log)
+    result.update(_window_tracking_metrics(steady, prefix="steady_"))
+    result["steady_state_start_s"] = steady_state_start_s
+    return result
+
+
+def _actuator_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, Any]:
+    thruster_force_columns = [
+        "thruster_wrench_b_force_x_n",
+        "thruster_wrench_b_force_y_n",
+        "thruster_wrench_b_force_z_n",
     ]
+    physx_force_columns = [
+        "physx_applied_wrench_b_force_x_n",
+        "physx_applied_wrench_b_force_y_n",
+        "physx_applied_wrench_b_force_z_n",
+    ]
+    processed_columns = sorted(
+        (name for name in log.columns if re.fullmatch(r"processed_command_\d+", name)),
+        key=lambda name: int(name.rsplit("_", 1)[1]),
+    )
+    processed = log[processed_columns].to_numpy(dtype=np.float64)
+    deadband = float(cfg.rew_action_deadband)
     return {
         "mean_action_rms": float(log["action_rms"].mean()),
-        "mean_action_rate_rms": float(log["action_rate_rms"].mean()),
+        "mean_action_rate_rms_per_s": float(log["action_rate_rms_per_s"].mean()),
         "raw_policy_action_clip_fraction": float(log["raw_policy_action_clip_fraction"].mean()),
-        "mean_requested_to_applied_action_rms": _finite_statistic(
-            log["requested_to_applied_action_rms"], np.mean
+        "mean_requested_to_processed_command_rms": _finite_statistic(
+            log["requested_to_processed_command_rms"], np.mean
         ),
-        "mean_applied_action_rate_rms": _finite_statistic(log["applied_action_rate_rms"], np.mean),
+        "mean_processed_command_rate_rms_per_s": _finite_statistic(
+            log["processed_command_rate_rms_per_s"], np.mean
+        ),
+        "mean_processed_command_acceleration_rms_per_s2": _finite_statistic(
+            log["processed_command_acceleration_rms_per_s2"], np.mean
+        ),
         "mean_realized_thruster_force_abs_n": _finite_statistic(
             log["realized_thruster_force_abs_mean_n"], np.mean
         ),
         "max_realized_thruster_force_abs_n": _finite_statistic(
             log["realized_thruster_force_abs_max_n"], np.max
         ),
-        "mean_realized_wrench_force_norm_n": _finite_statistic(
-            np.linalg.norm(log[force_columns].to_numpy(), axis=1), np.mean
+        "mean_thruster_wrench_force_norm_n": _finite_statistic(
+            np.linalg.norm(log[thruster_force_columns].to_numpy(), axis=1), np.mean
         ),
+        "mean_physx_applied_wrench_force_norm_n": _finite_statistic(
+            np.linalg.norm(log[physx_force_columns].to_numpy(), axis=1), np.mean
+        ),
+        "processed_command_deadband_fraction": float(np.mean(np.abs(processed) <= deadband)),
+    }
+
+
+def _boundary_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, float]:
+    positions = log[
+        ["position_local_x_m", "position_local_y_m", "position_local_z_m"]
+    ].to_numpy(dtype=np.float64)
+    quaternions = log[["quat_w", "quat_x", "quat_y", "quat_z"]].to_numpy(
+        dtype=np.float64
+    )
+    w, x, y, z = quaternions.T
+    rotation = np.stack(
+        (
+            1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w),
+            2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w),
+            2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y),
+        ),
+        axis=1,
+    ).reshape(-1, 3, 3)
+    body_half_extents = 0.5 * np.asarray(cfg.body_bounds_size_m, dtype=np.float64)
+    world_half_extents = np.abs(rotation) @ body_half_extents
+    bounds = np.asarray(cfg.pool_bounds, dtype=np.float64)
+    clearance = np.stack(
+        (
+            positions[:, 0] - world_half_extents[:, 0] - bounds[0],
+            bounds[1] - positions[:, 0] - world_half_extents[:, 0],
+            positions[:, 1] - world_half_extents[:, 1] - bounds[2],
+            bounds[3] - positions[:, 1] - world_half_extents[:, 1],
+            positions[:, 2] - world_half_extents[:, 2] - bounds[4],
+            bounds[5] - positions[:, 2] - world_half_extents[:, 2],
+        ),
+        axis=1,
+    )
+    minimum = np.min(clearance, axis=1)
+    return {
+        "minimum_vehicle_boundary_clearance_m": float(np.min(minimum)),
+        "vehicle_boundary_violation_fraction": float(np.mean(minimum < 0.0)),
     }
 
 
 def _domain_metrics(domain_samples: pd.DataFrame) -> dict[str, float]:
+    fluid_added_mass_scales = domain_samples[
+        [
+            "sampled_fluid_added_mass_scale_surge",
+            "sampled_fluid_added_mass_scale_sway",
+            "sampled_fluid_added_mass_scale_heave",
+            "sampled_fluid_added_mass_scale_roll",
+            "sampled_fluid_added_mass_scale_pitch",
+            "sampled_fluid_added_mass_scale_yaw",
+        ]
+    ].to_numpy()
     return {
+        "fluid_added_mass_scale_mean": float(np.mean(fluid_added_mass_scales)),
+        "fluid_added_mass_scale_min": float(np.min(fluid_added_mass_scales)),
+        "fluid_added_mass_scale_max": float(np.max(fluid_added_mass_scales)),
         "thruster_time_constant_mean_s": float(domain_samples["sampled_thruster_time_constant_s"].mean()),
-        "thruster_command_delay_mean_s": float(domain_samples["sampled_thruster_delay_s"].mean()),
-        "thruster_command_delay_max_s": float(domain_samples["sampled_thruster_delay_s"].max()),
-        "thruster_command_rate_limit_mean_per_s": float(
-            domain_samples["sampled_thruster_max_command_rate_per_s"].mean()
-        ),
+        "pose_sensor_delay_s": float(domain_samples["pose_sensor_delay_s"].mean()),
         "thruster_command_resolution_mean": float(
             domain_samples["sampled_thruster_command_resolution_mean"].mean()
         ),
@@ -191,19 +350,21 @@ def build_evaluation_summary(
 ) -> dict[str, Any]:
     cfg = env.unwrapped.cfg
     summary: dict[str, Any] = {
+        "evaluation_log_schema_version": int(log["log_schema_version"].iloc[0]),
         "controller": args.controller,
         "trajectory": args.trajectory,
         "reward_profile": args.reward_profile,
         "seed": int(cfg.seed),
         "environment_profile_name": cfg.environment_profile_name,
-        "domain_randomization_spec_name": getattr(cfg, "domain_randomization_spec_name", None) or "",
+        "domain_randomization_spec_name": cfg.domain_randomization_spec_name or "",
         "disturbance": disturbance_label or "nominal",
         "num_curves": int(log["env_id"].nunique()),
     }
     summary.update(_domain_metrics(domain_samples))
     summary.update(_reference_metrics(log, cfg))
-    summary.update(_tracking_metrics(log))
-    summary.update(_actuator_metrics(log))
+    summary.update(_tracking_metrics(log, cfg, domain_samples))
+    summary.update(_actuator_metrics(log, cfg))
+    summary.update(_boundary_metrics(log, cfg))
     summary.update(_disturbance_metrics(log, args))
     summary.update(_failure_metrics(log, termination_events, any_failure, first_failure_time_s))
     return summary
@@ -384,7 +545,9 @@ def load_eval_log(
     trajectory: str,
     case_label: str = "",
 ) -> tuple[pd.DataFrame, Path]:
-    path = logs_path(spec, run_name, checkpoint, trajectory, case_label)
+    path = evaluation_paths(
+        spec.results_root(run_name), checkpoint, trajectory, case_label
+    ).logs_csv
     if not path.exists():
         raise FileNotFoundError(f"Missing logs.csv: {path}")
     frame = pd.read_csv(path)
@@ -456,7 +619,9 @@ def plot_eval_detail(
     ax_control.set(title="Velocity error, action and reward", xlabel="time [s]")
     ax_control.legend()
 
-    output = eval_dir(spec, run_name, checkpoint, trajectory, case_label) / f"tracking_eval_env{env_id}.png"
+    output = evaluation_paths(
+        spec.results_root(run_name), checkpoint, trajectory, case_label
+    ).directory / f"tracking_eval_env{env_id}.png"
     if save:
         fig.savefig(output, dpi=180)
         print(f"Saved: {output}")

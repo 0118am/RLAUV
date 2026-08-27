@@ -276,6 +276,7 @@ def _stable_sinh_over_cosh(numerator_argument: torch.Tensor, denominator_argumen
 
 def calculate_pool_boundary_scales(
     positions: torch.Tensor,
+    body_half_extents_w: torch.Tensor,
     bounds: torch.Tensor | list[float] | tuple[float, ...],
     effect_distance: float,
     damping_scale_at_boundary: float,
@@ -284,12 +285,15 @@ def calculate_pool_boundary_scales(
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Return damping, added-mass, and thrust scales from box-boundary proximity.
 
-    ``positions`` are expressed in the pool-local/world-aligned frame.  Bounds
-    are ``[x_min, x_max, y_min, y_max, z_min, z_max]`` in the same frame.
+    Distances are clearances from the oriented vehicle envelope, not from its
+    centre.  The free surface ``z_max`` is intentionally excluded; it has its
+    own model and must never be counted again as a rigid wall.
     """
 
     if positions.ndim != 2 or positions.shape[1] != 3:
         raise ValueError(f"positions must have shape (N, 3), got {tuple(positions.shape)}.")
+    if body_half_extents_w.shape != positions.shape:
+        raise ValueError("body_half_extents_w must match positions with shape (N, 3).")
 
     bounds_tensor = torch.as_tensor(bounds, dtype=positions.dtype, device=positions.device)
     if bounds_tensor.shape != (6,):
@@ -302,10 +306,20 @@ def calculate_pool_boundary_scales(
             positions[:, 1] - bounds_tensor[2],
             bounds_tensor[3] - positions[:, 1],
             positions[:, 2] - bounds_tensor[4],
-            bounds_tensor[5] - positions[:, 2],
         ],
         dim=-1,
     )
+    envelope_extent = torch.stack(
+        (
+            body_half_extents_w[:, 0],
+            body_half_extents_w[:, 0],
+            body_half_extents_w[:, 1],
+            body_half_extents_w[:, 1],
+            body_half_extents_w[:, 2],
+        ),
+        dim=-1,
+    )
+    distance = distance - envelope_extent
     min_distance = torch.min(distance, dim=-1).values
     effect_distance = max(float(effect_distance), 1.0e-6)
     proximity = torch.clamp((effect_distance - min_distance) / effect_distance, min=0.0, max=1.0)

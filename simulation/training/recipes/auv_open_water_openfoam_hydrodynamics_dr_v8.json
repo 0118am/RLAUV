@@ -1,0 +1,26 @@
+{
+  "description": "Reset-time domain randomization around the latest full-response open-water CFD model. The measured rigid-body mass, volume, inertia, COM and CoB remain fixed. Current, hydrodynamic coefficients including fluid added mass, independent thruster mismatch, and one shared weak-only thruster scale follow the disturbance curriculum.",
+  "name": "auv-open-water-openfoam-hydrodynamics-dr-v8",
+  "parameters": {
+    "use_custom_randomization": true,
+    "enabled_features": [
+      "current",
+      "hydrodynamics",
+      "actuators"
+    ],
+    "thruster_time_constant_range": [0.064, 0.096],
+    "water_current_smooth": true,
+    "water_current_tau_range": [8.0, 20.0],
+    "disturbance_curriculum": true,
+    "disturbance_curriculum_stage_steps": [12800, 25600, 44800],
+    "water_current_max_by_stage": [0.0, 0.02, 0.04, 0.06],
+    "water_current_vertical_max_by_stage": [0.0, 0.005, 0.01, 0.015],
+    "water_current_variation_std_by_stage": [0.0, 0.0025, 0.005, 0.01],
+    "linear_damping_log_std_by_stage": [0.0, 0.04, 0.07, 0.1],
+    "quadratic_damping_log_std_by_stage": [0.0, 0.05, 0.1, 0.15],
+    "fluid_added_mass_log_std_by_stage": [0.0, 0.025, 0.05, 0.1],
+    "thruster_scale_by_stage": [0.0, 0.05, 0.1, 0.15],
+    "common_thruster_scale_reduction_by_stage": [0.0, 0.05, 0.1, 0.15]
+  },
+  "schema_version": 8
+}

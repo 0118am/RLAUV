@@ -1,102 +1,71 @@
 #!/usr/bin/env python3
-"""Prepare geometry, build a checked snappyHexMesh, and render all motion cases."""
+"""Build one no-layer mesh, then attach it to the CFD cases."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-from typing import Sequence
-
-from environment.openfoam.mesh_audit import (
-    check_mesh_audit as _check_mesh_audit,
-    mesh_volume_validation as _mesh_volume_validation,
-    snappy_mesh_audit as _snappy_mesh_audit,
-    surface_check_failures as _surface_check_failures,
-    write_mesh_quality_audit as _write_mesh_quality_audit,
-)
-
+import tempfile
+from typing import Any, Sequence
 
 HERE = Path(__file__).resolve().parent
+PROJECT_ROOT = HERE.parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from environment.openfoam.case_generation.config import load_config
+DEFAULT_REPAIR_REPORT = (
+    HERE / "geometry/validated_locked_rotor_v1/selection_report.json"
+)
+
 DEFAULT_CASES = HERE / "cases"
-DEFAULT_GEOMETRY = HERE / "geometry" / "processed" / "auv_visual_m.stl"
-DEFAULT_TRANSFORM_REPORT = HERE / "results" / "geometry_transform.json"
-DEFAULT_MESH_VOLUME_RELATIVE_TOLERANCE = 0.055
+MESH_COMPLETION_FILENAME = ".mesh_completed.json"
+_CORE_POLY_MESH_FILES = ("boundary", "faces", "neighbour", "owner", "points")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", type=Path, help="Watertight CAD STL to audit and scale")
-    parser.add_argument("--scale", type=float, default=0.001, help="Uniform post-transform scale")
     parser.add_argument(
-        "--axis-map",
-        default="x,y,z",
-        metavar="SIGNED_AXES",
-        help="Input axes supplying body x,y,z (default: x,y,z; example: z,-x,y)",
-    )
-    parser.add_argument(
-        "--translate-after-map",
-        type=float,
-        nargs=3,
-        default=(0.0, 0.0, 0.0),
-        metavar=("TX", "TY", "TZ"),
-        help="Translation in mapped input units, applied before --scale",
-    )
-    parser.add_argument("--geometry", type=Path, default=DEFAULT_GEOMETRY)
-    parser.add_argument(
-        "--transform-report", type=Path, default=DEFAULT_TRANSFORM_REPORT
+        "input", type=Path, help="Audited metre-scale body-FLU wetted OBJ"
     )
     parser.add_argument("--cases-dir", type=Path, default=DEFAULT_CASES)
     parser.add_argument("--config", type=Path, default=HERE / "config.json")
-    parser.add_argument(
-        "--repair-report",
-        type=Path,
-        help="STEP repair report used to derive locked-rotor local refinement axes",
-    )
-    parser.add_argument("--backend", choices=("auto", "vtk", "openfoam"), default="auto")
-    parser.add_argument(
-        "--allow-dirty",
-        action="store_true",
-        help="Debug only: continue after failed VTK/OpenFOAM surface gates",
-    )
-    parser.add_argument("--force", action="store_true", help="Replace this workflow's generated outputs")
-    parser.add_argument(
-        "--prepared-input",
-        action="store_true",
-        help=(
-            "Use INPUT directly as metre-scaled body-FLU geometry. OpenFOAM surface "
-            "validation still runs, but prepare_geometry.py is skipped."
-        ),
-    )
-    parser.add_argument("--mesh-only", action="store_true", help="Stop after the checked shared mesh")
-    parser.add_argument(
-        "--expected-displaced-volume-m3",
-        type=float,
-        required=True,
-        help="assembled-vehicle displaced volume used to validate snappy cell removal",
-    )
-    parser.add_argument(
-        "--mesh-volume-relative-tolerance",
-        type=float,
-        default=DEFAULT_MESH_VOLUME_RELATIVE_TOLERANCE,
-        help=(
-            "maximum relative error between snappy-excluded and expected displaced volume "
-            f"(default: {DEFAULT_MESH_VOLUME_RELATIVE_TOLERANCE:g})"
-        ),
-    )
-    parser.add_argument("--dry-run", action="store_true", help="Print commands without writing or running them")
+    parser.add_argument("--repair-report", type=Path, default=DEFAULT_REPAIR_REPORT)
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--mesh-only", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--verify-existing", action="store_true")
     return parser
 
 
-def _run(command: Sequence[str], *, log: Path | None = None, dry_run: bool = False) -> str:
+def _load_object(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise RuntimeError(f"{path} must contain a JSON object")
+    return value
+
+
+def _run(
+    command: Sequence[str],
+    *,
+    log: Path | None = None,
+    dry_run: bool = False,
+    cwd: Path | None = None,
+) -> str:
     printable = " ".join(command)
     if dry_run:
         print(printable)
         return ""
     if log is None:
-        completed = subprocess.run(command, text=True, capture_output=True, check=False)
+        completed = subprocess.run(
+            command, cwd=cwd, text=True, capture_output=True, check=False
+        )
         output = completed.stdout + completed.stderr
     else:
         log.parent.mkdir(parents=True, exist_ok=True)
@@ -104,6 +73,7 @@ def _run(command: Sequence[str], *, log: Path | None = None, dry_run: bool = Fal
         with log.open("w", encoding="utf-8") as stream:
             completed = subprocess.run(
                 command,
+                cwd=cwd,
                 text=True,
                 stdout=stream,
                 stderr=subprocess.STDOUT,
@@ -113,12 +83,20 @@ def _run(command: Sequence[str], *, log: Path | None = None, dry_run: bool = Fal
     if completed.returncode:
         detail = output[-3000:].strip()
         location = f"; see {log}" if log is not None else ""
-        raise RuntimeError(f"command failed ({completed.returncode}): {printable}{location}\n{detail}")
+        raise RuntimeError(
+            f"command failed ({completed.returncode}): {printable}{location}\n{detail}"
+        )
     return output
 
 
 def _require_commands() -> None:
-    required = ("surfaceCheck", "blockMesh", "surfaceFeatureExtract", "snappyHexMesh", "checkMesh")
+    required = (
+        "surfaceTransformPoints",
+        "surfaceCheck",
+        "blockMesh",
+        "snappyHexMesh",
+        "checkMesh",
+    )
     missing = [name for name in required if shutil.which(name) is None]
     if missing:
         raise RuntimeError(
@@ -126,40 +104,8 @@ def _require_commands() -> None:
             + ", ".join(missing)
             + ". Run: source environment/openfoam/env.sh"
         )
-    api = str(os.environ.get("FOAM_API", ""))
-    if api != "2512":
-        raise RuntimeError(f"FOAM_API={api or 'unset'}; this workflow requires OpenCFD API 2512")
-
-
-def _verify_prepared_input(path: Path) -> None:
-    if not path.is_file():
-        raise RuntimeError(f"prepared input does not exist: {path}")
-    if path.suffix.lower() != ".stl":
-        raise RuntimeError("prepared input must use the .stl suffix")
-
-
-def _prepare_command(args: argparse.Namespace, geometry: Path, report: Path) -> list[str]:
-    command = [
-        sys.executable,
-        str(HERE / "tools" / "prepare_geometry.py"),
-        str(args.input.resolve()),
-        str(geometry),
-        "--scale",
-        f"{args.scale:.17g}",
-        "--axis-map",
-        args.axis_map,
-        "--translate-after-map",
-        *(str(value) for value in args.translate_after_map),
-        "--backend",
-        args.backend,
-        "--report",
-        str(report),
-    ]
-    if args.allow_dirty:
-        command.append("--allow-dirty")
-    if args.force:
-        command.append("--force")
-    return command
+    if os.environ.get("FOAM_API", "") != "2512":
+        raise RuntimeError("FOAM_API must be 2512; source environment/openfoam/env.sh")
 
 
 def _generator_command(args: argparse.Namespace, *extra: str) -> list[str]:
@@ -174,134 +120,56 @@ def _generator_command(args: argparse.Namespace, *extra: str) -> list[str]:
     ]
     if args.force:
         command.append("--force")
-    if args.repair_report is not None:
-        command.extend(("--repair-report", str(args.repair_report.resolve())))
+    command.extend(("--repair-report", str(args.repair_report.resolve())))
     return command
 
 
-def _validate_build_args(args: argparse.Namespace) -> None:
-    if args.prepared_input:
-        ignored = []
-        if args.scale != 0.001:
-            ignored.append("--scale")
-        if args.axis_map != "x,y,z":
-            ignored.append("--axis-map")
-        if tuple(args.translate_after_map) != (0.0, 0.0, 0.0):
-            ignored.append("--translate-after-map")
-        if args.geometry != DEFAULT_GEOMETRY:
-            ignored.append("--geometry")
-        if args.backend != "auto":
-            ignored.append("--backend")
-        if ignored:
-            raise ValueError(
-                "--prepared-input cannot be combined with preparation option(s): " + ", ".join(ignored)
-            )
-    if args.expected_displaced_volume_m3 is not None and (
-        not math.isfinite(args.expected_displaced_volume_m3)
-        or args.expected_displaced_volume_m3 <= 0.0
-    ):
-        raise ValueError("--expected-displaced-volume-m3 must be positive")
-    if (
-        not math.isfinite(args.mesh_volume_relative_tolerance)
-        or not 0.0 < args.mesh_volume_relative_tolerance < 1.0
-    ):
-        raise ValueError("--mesh-volume-relative-tolerance must lie in (0, 1)")
-
-
-def _prepare_and_check_surface(
+def _prepare_surface(
     args: argparse.Namespace,
     geometry: Path,
-    transform_report: Path,
     cases_dir: Path,
+    source_to_output_scale: float,
 ) -> None:
-    if args.prepared_input:
-        _verify_prepared_input(geometry)
-    else:
-        _run(_prepare_command(args, geometry, transform_report), dry_run=args.dry_run)
-    output = _run(
-        ["surfaceCheck", "-checkSelfIntersection", str(geometry)],
-        log=cases_dir / "surfaceCheck.log",
-        dry_run=args.dry_run,
+    if not geometry.is_file() or geometry.suffix.lower() != ".obj":
+        raise RuntimeError(f"Prepared OBJ does not exist: {geometry}")
+    if not math.isfinite(source_to_output_scale) or source_to_output_scale <= 0.0:
+        raise RuntimeError("geometry source/output scale must be positive")
+    cases_dir.mkdir(parents=True, exist_ok=True) if not args.dry_run else None
+    audit_dir = (
+        cases_dir / ".surface-audit"
+        if args.dry_run
+        else Path(tempfile.mkdtemp(prefix=".surface-audit-", dir=cases_dir))
     )
-    if args.dry_run:
-        return
-    failures = _surface_check_failures(output)
-    if failures and not args.allow_dirty:
-        raise RuntimeError(
-            "OpenFOAM surface validation failed: "
-            + ", ".join(failures)
-            + f"; see {cases_dir / 'surfaceCheck.log'}"
+    normalized = audit_dir / "surface_source_scale.stl"
+    try:
+        _run(
+            [
+                "surfaceTransformPoints",
+                "-write-scale",
+                f"{1.0 / source_to_output_scale:.17g}",
+                str(geometry),
+                str(normalized),
+            ],
+            log=cases_dir / "surfaceTransformPoints.log",
+            dry_run=args.dry_run,
+            cwd=audit_dir,
         )
-    if failures:
-        print("warning: --allow-dirty bypassed: " + ", ".join(failures), file=sys.stderr)
-
-
-def _audit_snappy_output(
-    output: str,
-    quality_report: Path,
-    check_mesh_audit: dict[str, object] | None,
-) -> dict[str, object]:
-    audit = _snappy_mesh_audit(output)
-    _write_mesh_quality_audit(quality_report, audit, check_mesh_audit)
-    if audit["hard_failures"]:
-        raise RuntimeError(
-            "snappy final mesh failed: "
-            + ", ".join(str(item) for item in audit["hard_failures"])
-            + f"; see {quality_report}"
+        _run(
+            ["surfaceCheck", "-checkSelfIntersection", str(normalized)],
+            log=cases_dir / "surfaceCheck.log",
+            dry_run=args.dry_run,
+            cwd=audit_dir,
         )
-    return audit
-
-
-def _audit_check_mesh_output(
-    args: argparse.Namespace,
-    block_mesh_output: str,
-    output: str,
-    quality_report: Path,
-    snappy_audit: dict[str, object] | None,
-) -> tuple[dict[str, object], dict[str, float | bool] | None]:
-    audit = _check_mesh_audit(output)
-    _write_mesh_quality_audit(quality_report, snappy_audit, audit)
-    volume_validation = None
-    if args.expected_displaced_volume_m3 is not None:
-        volume_validation = _mesh_volume_validation(
-            block_mesh_output,
-            output,
-            args.expected_displaced_volume_m3,
-            args.mesh_volume_relative_tolerance,
-        )
-        volume_report = quality_report.parent / "mesh_volume_validation.json"
-        volume_report.write_text(
-            json.dumps(volume_validation, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        if not volume_validation["passed"]:
-            raise RuntimeError(
-                "snappy excluded volume failed: "
-                f"actual={volume_validation['excluded_volume_m3']:.12g} m^3, "
-                f"expected={volume_validation['expected_displaced_volume_m3']:.12g} m^3, "
-                f"relative_error={volume_validation['relative_error']:.6g} exceeds "
-                f"tolerance={volume_validation['relative_tolerance']:.6g}; see {volume_report}"
-            )
-    if audit["hard_failures"]:
-        raise RuntimeError(
-            "mesh quality failed: "
-            + ", ".join(str(item) for item in audit["hard_failures"])
-            + f"; see {quality_report}"
-        )
-    if audit["warnings"]:
-        print(
-            "warning: checkMesh extended diagnostics were retained "
-            f"({len(audit['warnings'])} record(s)); see {quality_report}",
-            file=sys.stderr,
-        )
-    return audit, volume_validation
+    finally:
+        if not args.dry_run:
+            shutil.rmtree(audit_dir)
 
 
 def _build_shared_mesh(
     args: argparse.Namespace,
     geometry: Path,
     mesh_case: Path,
-) -> dict[str, float | bool] | None:
+) -> dict[str, Any] | None:
     _run(
         _generator_command(
             args,
@@ -313,40 +181,41 @@ def _build_shared_mesh(
         ),
         dry_run=args.dry_run,
     )
-    log_dir = mesh_case / "logs"
-    quality_report = log_dir / "mesh_quality_audit.json"
-    block_mesh_output = ""
-    snappy_audit = None
-    check_mesh_audit = None
-    volume_validation = None
-    utilities = (
-        ("blockMesh", ()),
-        ("surfaceFeatureExtract", ()),
-        ("snappyHexMesh", ("-overwrite",)),
-        ("checkMesh", ("-allGeometry", "-allTopology", "-meshQuality")),
+    logs = mesh_case / "logs"
+
+    _run(
+        ["blockMesh", "-case", str(mesh_case)],
+        log=logs / "blockMesh.log",
+        dry_run=args.dry_run,
     )
-    for utility, utility_args in utilities:
-        output = _run(
-            [utility, *utility_args, "-case", str(mesh_case)],
-            log=log_dir / f"{utility}.log",
-            dry_run=args.dry_run,
-        )
-        if utility == "blockMesh":
-            block_mesh_output = output
-        elif utility == "snappyHexMesh" and not args.dry_run:
-            snappy_audit = _audit_snappy_output(output, quality_report, check_mesh_audit)
-        elif utility == "checkMesh" and not args.dry_run:
-            check_mesh_audit, volume_validation = _audit_check_mesh_output(
-                args,
-                block_mesh_output,
-                output,
-                quality_report,
-                snappy_audit,
-            )
-    return volume_validation
+    _run(
+        ["snappyHexMesh", "-overwrite", "-case", str(mesh_case)],
+        log=logs / "snappyHexMesh.log",
+        dry_run=args.dry_run,
+    )
+    _run(
+        [
+            "checkMesh",
+            "-allTopology",
+            "-meshQuality",
+            "-case",
+            str(mesh_case),
+        ],
+        log=logs / "checkMesh.log",
+        dry_run=args.dry_run,
+    )
+    if args.dry_run:
+        return None
+    return {
+        "block_mesh_log": str(logs / "blockMesh.log"),
+        "snappy_hex_mesh_log": str(logs / "snappyHexMesh.log"),
+        "check_mesh_log": str(logs / "checkMesh.log"),
+    }
 
 
-def _render_motion_cases(args: argparse.Namespace, geometry: Path, mesh_case: Path) -> None:
+def _render_motion_cases(
+    args: argparse.Namespace, geometry: Path, mesh_case: Path
+) -> None:
     if args.mesh_only:
         return
     _run(
@@ -357,7 +226,7 @@ def _render_motion_cases(args: argparse.Namespace, geometry: Path, mesh_case: Pa
             "--geometry-mode",
             "symlink",
             "--base-poly-mesh",
-            str(mesh_case / "constant" / "polyMesh"),
+            str(mesh_case / "constant/polyMesh"),
             "--poly-mesh-mode",
             "symlink",
         ),
@@ -365,33 +234,124 @@ def _render_motion_cases(args: argparse.Namespace, geometry: Path, mesh_case: Pa
     )
 
 
+def _completion_payload(
+    cases_dir: Path,
+    *,
+    require_motion_cases: bool,
+) -> dict[str, Any]:
+    manifest = _load_object(cases_dir / "manifest.json")
+    poly_mesh = cases_dir / "mesh_case/constant/polyMesh"
+    for name in _CORE_POLY_MESH_FILES:
+        if not (poly_mesh / name).is_file():
+            raise RuntimeError(f"shared polyMesh is missing {name}")
+    cases = manifest.get("cases")
+    if not isinstance(cases, list):
+        raise RuntimeError("campaign manifest cases must be an array")
+    if require_motion_cases:
+        target = poly_mesh.resolve()
+        for record in cases:
+            if not isinstance(record, dict):
+                raise RuntimeError("campaign manifest case record is not an object")
+            name = str(record["case_name"])
+            case = cases_dir / name
+            if not (case / "case.json").is_file():
+                raise RuntimeError(f"{name}: case.json is missing")
+            linked = case / "constant/polyMesh"
+            if not linked.is_dir() or linked.resolve() != target:
+                raise RuntimeError(f"{name}: shared polyMesh link is missing")
+
+    return {
+        "status": "completed",
+        "motion_cases_rendered": require_motion_cases,
+        "case_count": len(cases),
+    }
+
+
+def validate_mesh_completion(
+    cases_dir: Path,
+    *,
+    require_motion_cases: bool = True,
+) -> tuple[bool, str]:
+    marker_path = cases_dir / MESH_COMPLETION_FILENAME
+    if not marker_path.is_file():
+        return False, f"missing {MESH_COMPLETION_FILENAME}"
+    try:
+        actual = _load_object(marker_path)
+        _completion_payload(
+            cases_dir,
+            require_motion_cases=require_motion_cases,
+        )
+    except (OSError, ValueError, TypeError, RuntimeError, json.JSONDecodeError) as exc:
+        return False, str(exc)
+    if actual.get("status") != "completed":
+        return False, "mesh completion marker is not completed"
+    return True, "shared mesh and case links are usable"
+
+
+def _write_completion(
+    cases_dir: Path,
+    *,
+    require_motion_cases: bool,
+) -> Path:
+    path = cases_dir / MESH_COMPLETION_FILENAME
+    payload = _completion_payload(
+        cases_dir,
+        require_motion_cases=require_motion_cases,
+    )
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    geometry = args.input.resolve() if args.prepared_input else args.geometry.resolve()
-    transform_report = args.transform_report.resolve()
+    geometry = args.input.resolve()
     cases_dir = args.cases_dir.resolve()
     mesh_case = cases_dir / "mesh_case"
     try:
-        _validate_build_args(args)
+        config = load_config(args.config.resolve())
+        if args.verify_existing:
+            valid, reason = validate_mesh_completion(
+                cases_dir,
+                require_motion_cases=not args.mesh_only,
+            )
+            print(json.dumps({"valid": valid, "reason": reason}, indent=2))
+            return 0 if valid else 1
+        if args.force and cases_dir.exists() and not args.dry_run:
+            if cases_dir.is_symlink() or not cases_dir.is_dir():
+                cases_dir.unlink()
+            else:
+                shutil.rmtree(cases_dir)
         if not args.dry_run:
             _require_commands()
-        _prepare_and_check_surface(args, geometry, transform_report, cases_dir)
-        volume_validation = _build_shared_mesh(args, geometry, mesh_case)
+        geometry_audit = config["geometry_audit"]
+        _prepare_surface(
+            args,
+            geometry,
+            cases_dir,
+            float(geometry_audit["source_to_output_coordinate_scale"]),
+        )
+        mesh_diagnostics = _build_shared_mesh(args, geometry, mesh_case)
         _render_motion_cases(args, geometry, mesh_case)
+        marker = None
+        if not args.dry_run:
+            marker = _write_completion(
+                cases_dir,
+                require_motion_cases=not args.mesh_only,
+            )
         print(
             json.dumps(
                 {
                     "geometry": str(geometry),
-                    "transform_report": None if args.prepared_input else str(transform_report),
                     "mesh_case": str(mesh_case),
                     "motion_cases_rendered": not args.mesh_only,
-                    "dirty_override": bool(args.allow_dirty),
-                    "prepared_input": bool(args.prepared_input),
-                    "dry_run": bool(args.dry_run),
-                    "mesh_quality_audit": (
-                        None if args.dry_run else str(mesh_case / "logs" / "mesh_quality_audit.json")
-                    ),
-                    "mesh_volume_validation": volume_validation,
+                    "dry_run": args.dry_run,
+                    "mesh_diagnostics": mesh_diagnostics,
+                    "mesh_completion": None if marker is None else str(marker),
                 },
                 indent=2,
                 sort_keys=True,

@@ -8,7 +8,8 @@ FoamFile
 
 maxNonOrtho            70;
 maxBoundarySkewness    20;
-maxInternalSkewness    4;
+// Leave margin for the slightly different post-write checkMesh skew metric.
+maxInternalSkewness    3.9;
 maxConcave             80;
 minVol                 1e-15;
 minTetQuality          1e-30;

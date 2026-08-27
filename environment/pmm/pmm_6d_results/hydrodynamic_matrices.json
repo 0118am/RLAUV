@@ -1,4 +1,5 @@
 {
+  "role": "historical_experiment_archive_not_runtime_source",
   "definition": "tau_h=-M_A@nu_dot-D_1_eff@nu-D_2@(abs(nu)*nu)-K_nuisance@xi",
   "measurement_equation": {
     "balance_output": "body_on_support_reaction_R_equals_minus_F_support",
@@ -44,474 +45,220 @@
     },
     "angle_convention": "radian is dimensionless"
   },
-  "experimentally_excited_columns": [
-    "v",
-    "w",
-    "q",
-    "r"
-  ],
-  "unidentified_input_columns": [
-    "u",
-    "p"
-  ],
+  "identification_scope": {
+    "published_terms": "direct_diagonal_only",
+    "identified_diagonal_dofs": [
+      "v",
+      "w",
+      "q",
+      "r"
+    ],
+    "unidentified_diagonal_dofs": [
+      "u",
+      "p"
+    ],
+    "off_diagonal_terms": "not_identified_and_left_null",
+    "cross_wrench_channels": "not_used_to_publish_hydrodynamic_matrix_coefficients",
+    "reciprocity_completion": false,
+    "symmetry_zero_fill": false
+  },
   "identifiability_mask": [
     [
       false,
-      true,
-      true,
       false,
-      true,
-      true
+      false,
+      false,
+      false,
+      false
     ],
     [
       false,
       true,
-      true,
       false,
-      true,
-      true
+      false,
+      false,
+      false
     ],
     [
       false,
-      true,
-      true,
       false,
       true,
-      true
+      false,
+      false,
+      false
     ],
     [
       false,
-      true,
-      true,
       false,
-      true,
-      true
+      false,
+      false,
+      false,
+      false
     ],
     [
       false,
-      true,
-      true,
+      false,
+      false,
       false,
       true,
-      true
+      false
     ],
     [
       false,
-      true,
-      true,
       false,
-      true,
+      false,
+      false,
+      false,
       true
     ]
   ],
-  "port_starboard_reflection": {
-    "generalized_parity_u_v_w_p_q_r": [
-      1,
-      -1,
-      1,
-      -1,
-      1,
-      -1
-    ],
-    "allowed_coefficient_mask": [
-      [
-        true,
-        false,
-        true,
-        false,
-        true,
-        false
-      ],
-      [
-        false,
-        true,
-        false,
-        true,
-        false,
-        true
-      ],
-      [
-        true,
-        false,
-        true,
-        false,
-        true,
-        false
-      ],
-      [
-        false,
-        true,
-        false,
-        true,
-        false,
-        true
-      ],
-      [
-        true,
-        false,
-        true,
-        false,
-        true,
-        false
-      ],
-      [
-        false,
-        true,
-        false,
-        true,
-        false,
-        true
-      ]
-    ],
-    "source": "environment/openfoam/experiment_configs/jn2_port_starboard_symmetric_minimal_level6.json"
-  },
-  "added_mass_identified_columns_raw": [
+  "added_mass_direct_diagonal_identified": [
     [
       null,
-      0.40739810170607466,
-      0.2287414690970029,
       null,
-      -0.037985994194958635,
-      -0.0018896221742780914
+      null,
+      null,
+      null,
+      null
     ],
     [
       null,
       6.41312611066381,
-      0.014077965357481636,
       null,
-      0.010469825037691368,
-      0.10894960654166273
+      null,
+      null,
+      null
     ],
     [
       null,
-      0.273483864058372,
-      11.569459227419353,
       null,
-      -0.1123019474672985,
-      0.024074710276657398
+      11.569459227419351,
+      null,
+      null,
+      null
     ],
     [
       null,
-      2.696032338309041,
-      4.637016217852943,
       null,
-      -0.029758287738967965,
-      0.03561409980385087
+      null,
+      null,
+      null,
+      null
     ],
     [
       null,
-      0.0579065771742522,
-      0.10201821947237817,
+      null,
+      null,
       null,
       0.057726146122463316,
-      0.012024737883703413
+      null
     ],
     [
       null,
-      -0.0384584350174406,
-      -0.09718130992504453,
       null,
-      -0.009480973841253815,
+      null,
+      null,
+      null,
       0.03736190377829378
     ]
   ],
-  "added_mass_reciprocity_only_diagnostic": [
+  "linear_damping_direct_diagonal_at_mean_towing_speed": [
     [
       null,
-      0.40739810170607466,
-      0.2287414690970029,
       null,
-      -0.037985994194958635,
-      -0.0018896221742780914
-    ],
-    [
-      0.40739810170607466,
-      6.41312611066381,
-      0.1437809147079268,
-      2.696032338309041,
-      0.03418820110597178,
-      0.035245585762111065
-    ],
-    [
-      0.2287414690970029,
-      0.1437809147079268,
-      11.569459227419353,
-      4.637016217852943,
-      -0.0051418639974601665,
-      -0.03655329982419357
-    ],
-    [
       null,
-      2.696032338309041,
-      4.637016217852943,
       null,
-      -0.029758287738967965,
-      0.03561409980385087
-    ],
-    [
-      -0.037985994194958635,
-      0.03418820110597178,
-      -0.0051418639974601665,
-      -0.029758287738967965,
-      0.057726146122463316,
-      0.001271882021224799
-    ],
-    [
-      -0.0018896221742780914,
-      0.035245585762111065,
-      -0.03655329982419357,
-      0.03561409980385087,
-      0.001271882021224799,
-      0.03736190377829378
-    ]
-  ],
-  "added_mass_recommended_port_starboard_symmetry_and_reciprocity": [
-    [
       null,
-      0.0,
-      0.2287414690970029,
-      0.0,
-      -0.037985994194958635,
-      0.0
-    ],
-    [
-      0.0,
-      6.41312611066381,
-      0.0,
-      2.696032338309041,
-      0.0,
-      0.035245585762111065
-    ],
-    [
-      0.2287414690970029,
-      0.0,
-      11.569459227419353,
-      0.0,
-      -0.0051418639974601665,
-      0.0
-    ],
-    [
-      0.0,
-      2.696032338309041,
-      0.0,
-      null,
-      0.0,
-      0.03561409980385087
-    ],
-    [
-      -0.037985994194958635,
-      0.0,
-      -0.0051418639974601665,
-      0.0,
-      0.057726146122463316,
-      0.0
-    ],
-    [
-      0.0,
-      0.035245585762111065,
-      0.0,
-      0.03561409980385087,
-      0.0,
-      0.03736190377829378
-    ]
-  ],
-  "linear_damping_identified_raw_at_mean_towing_speed": [
-    [
-      null,
-      -0.062292709342015085,
-      -0.6861438868439226,
-      null,
-      -0.002547930753681242,
-      -0.001730717105083859
+      null
     ],
     [
       null,
       -1.2962682750143437,
-      -0.7374347591867944,
       null,
-      -0.010030490403347395,
-      0.658973854040218
+      null,
+      null,
+      null
     ],
     [
       null,
-      -0.02684155616901076,
-      8.502780517591093,
       null,
-      -0.38746770592310714,
-      0.0403714255631169
+      8.502780517591098,
+      null,
+      null,
+      null
     ],
     [
       null,
-      -0.2729988450444271,
-      2.31473822999575,
       null,
-      -0.3827894321120609,
-      0.4067393188954801
+      null,
+      null,
+      null,
+      null
     ],
     [
       null,
-      0.011318299349185365,
-      -0.5516420744086648,
       null,
-      0.1068125928965157,
-      0.021135993045002858
+      null,
+      null,
+      0.10681259289651544,
+      null
     ],
     [
       null,
-      0.3271275648493357,
-      -0.03333091571135777,
       null,
-      -0.008472069480219896,
+      null,
+      null,
+      null,
       0.07006274879662897
     ]
   ],
-  "linear_damping_recommended_port_starboard_fixed_U0": [
+  "quadratic_damping_direct_diagonal_identified": [
     [
       null,
-      0.0,
-      -0.6861438868439226,
-      0.0,
-      -0.002547930753681242,
-      0.0
-    ],
-    [
-      0.0,
-      -1.2962682750143437,
-      0.0,
       null,
-      0.0,
-      0.658973854040218
-    ],
-    [
       null,
-      0.0,
-      8.502780517591093,
-      0.0,
-      -0.38746770592310714,
-      0.0
-    ],
-    [
-      0.0,
-      -0.2729988450444271,
-      0.0,
       null,
-      0.0,
-      0.4067393188954801
-    ],
-    [
       null,
-      0.0,
-      -0.5516420744086648,
-      0.0,
-      0.1068125928965157,
-      0.0
-    ],
-    [
-      0.0,
-      0.3271275648493357,
-      0.0,
-      null,
-      0.0,
-      0.07006274879662897
-    ]
-  ],
-  "quadratic_damping_identified_raw": [
-    [
-      null,
-      0.7968432965380867,
-      2.952664191660393,
-      null,
-      -0.17249987012875487,
-      0.06060966635396099
+      null
     ],
     [
       null,
       -8.635177729473837,
-      4.1873400568969625,
       null,
-      -0.0024506767101361315,
-      0.28757245649289614
+      null,
+      null,
+      null
     ],
     [
       null,
-      -1.9588741077122078,
-      -23.417546728148466,
       null,
-      -0.15449550544359725,
-      0.08246428076002045
+      -23.41754672814848,
+      null,
+      null,
+      null
     ],
     [
       null,
-      -0.42379926757849745,
-      -6.742027092009788,
       null,
-      -0.03099491070153063,
-      0.049727024818604346
+      null,
+      null,
+      null,
+      null
     ],
     [
       null,
-      -0.23214541274533532,
-      0.6430051600734141,
       null,
-      -0.33807681704111636,
-      -0.024603469942612595
+      null,
+      null,
+      -0.338076817041116,
+      null
     ],
     [
       null,
-      -0.30007990725157385,
-      0.006590633008320625,
       null,
-      0.05533922899597876,
-      -0.2974208829175569
-    ]
-  ],
-  "quadratic_damping_recommended_port_starboard_fixed_U0": [
-    [
       null,
-      0.0,
-      2.952664191660393,
-      0.0,
-      -0.17249987012875487,
-      0.0
-    ],
-    [
-      0.0,
-      -8.635177729473837,
-      0.0,
       null,
-      0.0,
-      0.28757245649289614
-    ],
-    [
       null,
-      0.0,
-      -23.417546728148466,
-      0.0,
-      -0.15449550544359725,
-      0.0
-    ],
-    [
-      0.0,
-      -0.42379926757849745,
-      0.0,
-      null,
-      0.0,
-      0.049727024818604346
-    ],
-    [
-      null,
-      0.0,
-      0.6430051600734141,
-      0.0,
-      -0.33807681704111636,
-      0.0
-    ],
-    [
-      0.0,
-      -0.30007990725157385,
-      0.0,
-      null,
-      0.0,
       -0.2974208829175569
     ]
   ],
@@ -519,105 +266,105 @@
     "linear_damping_matrix": [
       [
         0.0,
-        0.0,
-        -0.6861438868439226,
-        0.0,
-        -0.002547930753681242,
-        0.0
+        null,
+        null,
+        null,
+        null,
+        null
       ],
       [
-        0.0,
+        null,
         -1.2962682750143437,
-        0.0,
         null,
-        0.0,
-        0.658973854040218
+        null,
+        null,
+        null
       ],
       [
         null,
-        0.0,
-        8.502780517591093,
-        0.0,
-        -0.38746770592310714,
-        0.0
-      ],
-      [
-        0.0,
-        -0.2729988450444271,
-        0.0,
         null,
-        0.0,
-        0.4067393188954801
+        8.502780517591098,
+        null,
+        null,
+        null
       ],
       [
         null,
-        0.0,
-        -0.5516420744086648,
-        0.0,
-        0.1068125928965157,
-        0.0
+        null,
+        null,
+        null,
+        null,
+        null
       ],
       [
-        0.0,
-        0.3271275648493357,
-        0.0,
         null,
-        0.0,
+        null,
+        null,
+        null,
+        0.10681259289651544,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
         0.07006274879662897
       ]
     ],
     "quadratic_damping_matrix": [
       [
         8.886723754321773,
-        0.0,
-        2.952664191660393,
-        0.0,
-        -0.17249987012875487,
-        0.0
+        null,
+        null,
+        null,
+        null,
+        null
       ],
       [
-        0.0,
+        null,
         -8.635177729473837,
-        0.0,
         null,
-        0.0,
-        0.28757245649289614
+        null,
+        null,
+        null
       ],
       [
         null,
-        0.0,
-        -23.417546728148466,
-        0.0,
-        -0.15449550544359725,
-        0.0
-      ],
-      [
-        0.0,
-        -0.42379926757849745,
-        0.0,
         null,
-        0.0,
-        0.049727024818604346
+        -23.41754672814848,
+        null,
+        null,
+        null
       ],
       [
         null,
-        0.0,
-        0.6430051600734141,
-        0.0,
-        -0.33807681704111636,
-        0.0
+        null,
+        null,
+        null,
+        null,
+        null
       ],
       [
-        0.0,
-        -0.30007990725157385,
-        0.0,
         null,
-        0.0,
+        null,
+        null,
+        null,
+        -0.338076817041116,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
         -0.2974208829175569
       ]
     ],
     "assumption": "D1_uu=0 and D2_uu=R(U0)/U0^2; this exactly anchors straight-surge resistance at U0 but does not identify its forward-speed dependence.",
-    "remaining_nulls": "symmetry-allowed Z_u/M_u forward-speed derivatives and the Y_p/K_p/N_p roll column were not excited"
+    "remaining_nulls": "p diagonal and every off-diagonal term; none is zero-filled"
   },
   "fixed_speed_surge_even_model": {
     "definition": "Fourier-cycle-mean(X_h)=X0_campaign+X_vv*cycle-mean(v^2)+X_ww*cycle-mean(w^2)+X_qq*cycle-mean(q^2)+X_rr*cycle-mean(r^2); each campaign excites one term",
@@ -721,16 +468,16 @@
       },
       "heave": {
         "trials": 21,
-        "median_equivalent_direct_D": 4.545853513782541,
+        "median_equivalent_direct_D": 4.54585351378254,
         "min_equivalent_direct_D": -23.824476245725734,
-        "max_equivalent_direct_D": 16.391663159566267,
+        "max_equivalent_direct_D": 16.391663159566285,
         "coefficient_units": "N*s/m"
       },
       "pitch": {
         "trials": 21,
-        "median_equivalent_direct_D": -0.0017508692256866978,
+        "median_equivalent_direct_D": -0.0017508692256866345,
         "min_equivalent_direct_D": -0.13737188176718268,
-        "max_equivalent_direct_D": 0.17857225104154095,
+        "max_equivalent_direct_D": 0.17857225104154104,
         "coefficient_units": "N*m*s"
       },
       "yaw": {
@@ -745,11 +492,12 @@
   "deployment_readiness": {
     "model_scope": "local_fixed_U0_manoeuvring_model",
     "reference_forward_speed_m_s": 0.20159363395824845,
-    "v_w_q_r_columns": "empirically_fitted_from_21_trials_per_column_then_exact_port_starboard_mask_applied",
+    "v_w_q_r_diagonal": "each directly fitted from 21 trials",
+    "off_diagonal_terms": "not_published_from_this_PMM_campaign",
     "frequency_amplitude_confounding": "The seven records change forcing frequency and oscillatory velocity amplitude together. Constant D1/D2 across 0.1--0.7 Hz is therefore a modelling assumption; per-frequency diagnostics show sign-changing effective in-phase response.",
     "straight_surge_at_reference_speed": "total_resistance_anchored",
     "surge_speed_dependence": "not_identified_from_one_forward_speed",
-    "roll_column": "not_identified_not_excited",
+    "roll_diagonal": "not_identified_not_excited",
     "surge_even_couplings": "identified_as_fixed-U0 empirical terms with independent DC-versus-2f audit",
     "isaac_requirement": "Keep the odd D1/D2 terms and add a separate even surge wrench for X_vv*v^2+X_ww*w^2+X_qq*q^2+X_rr*r^2.",
     "coefficient_sign_clipping_or_projection_applied": false
@@ -757,50 +505,50 @@
   "nuisance_restoring_not_part_of_requested_matrices": [
     [
       null,
-      0.02958346527577535,
-      0.4559139214414004,
       null,
-      0.1810390709378803,
-      0.010057919070719259
+      null,
+      null,
+      null,
+      null
     ],
     [
       null,
       2.247099837005576,
-      -1.1262126887880008,
       null,
-      -0.08662987745060347,
-      -0.7350871954833919
+      null,
+      null,
+      null
     ],
     [
       null,
-      -0.5102860997187805,
-      6.608731305537137,
       null,
-      1.2965776808266434,
-      -0.04043084108835819
+      6.608731305537121,
+      null,
+      null,
+      null
     ],
     [
       null,
-      0.6019929884043259,
-      2.1626034185677705,
       null,
-      0.3440653912351909,
-      -0.10957187531628736
+      null,
+      null,
+      null,
+      null
     ],
     [
       null,
-      0.04534465444146028,
-      0.6250936450493771,
       null,
-      0.06608065655576152,
-      0.005389850015322065
+      null,
+      null,
+      0.06608065655576126,
+      null
     ],
     [
       null,
-      -0.14967276233888863,
-      -0.048392757192632994,
       null,
-      -0.06493915205228676,
+      null,
+      null,
+      null,
       0.0053697337855375445
     ]
   ],
@@ -839,6 +587,29 @@
     "trial_mean_towing_speed_std_m_s": 0.0001938091997030491
   },
   "coordinate_mapping": {
+    "raw_bench_axis_labels": [
+      "X_forward",
+      "Y_left",
+      "Z_down"
+    ],
+    "raw_bench_handedness": "left_handed_axis_labels_not_used_for_cross_products",
+    "bench_components_to_pool_FLU": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    ],
     "pure_body_to_pool": [
       [
         1.0,
@@ -891,13 +662,13 @@
       ]
     ],
     "yaw_encoder_sign_to_pool_FLU": -1.0,
-    "sensor_force_sign_to_pool": {
+    "sensor_force_polarity_in_raw_bench_axes": {
       "pure": -1.0,
       "vertical": 1.0
     },
-    "sensor_moment_sign_to_pool": {
-      "pure": -1.0,
-      "vertical": -1.0
+    "sensor_moment_polarity_in_raw_bench_axes": {
+      "pure": 1.0,
+      "vertical": 1.0
     }
   },
   "rigid_properties": {
@@ -968,124 +739,33 @@
   "fit_diagnostics": {
     "sway": {
       "standardized_condition_number": 6.39736732965454,
-      "r2_by_wrench": [
-        0.941689499963204,
-        0.9424038539925341,
-        0.6666719419065252,
-        0.9813742441345279,
-        0.8375363512657379,
-        0.9098492734512977
-      ]
+      "direct_wrench": "Y",
+      "direct_r2": 0.9424038539925341
     },
     "heave": {
       "standardized_condition_number": 6.404259234168094,
-      "r2_by_wrench": [
-        0.24358755653797182,
-        0.056263438900590046,
-        0.9389545585789164,
-        0.9706135326143507,
-        0.7005236017597718,
-        0.8856396125730369
-      ]
+      "direct_wrench": "Z",
+      "direct_r2": 0.9389545585789165
     },
     "pitch": {
       "standardized_condition_number": 6.398041526780775,
-      "r2_by_wrench": [
-        0.8906236887523159,
-        0.249379114748977,
-        0.9682977055095191,
-        0.9924640323441442,
-        0.9563598695182238,
-        0.7083469017696726
-      ]
+      "direct_wrench": "M",
+      "direct_r2": 0.9563598695182239
     },
     "yaw": {
       "standardized_condition_number": 6.3981628723424615,
-      "r2_by_wrench": [
-        0.14181787249533806,
-        0.990262134158135,
-        0.21198105727739536,
-        0.9977951445949731,
-        0.7365459065925594,
-        0.9302683676031389
-      ]
+      "direct_wrench": "N",
+      "direct_r2": 0.9302683676031389
     }
   },
-  "external_completion_audit": {
-    "candidate": "environment/openfoam/results_jn2_port_starboard_symmetric_minimal_level6_v1/config_updates.json",
-    "status": "used_only_for_added_mass_reaction_sign_crosscheck",
-    "reason": "The corresponding CFD design assumes source PMM frequencies 0.2--1.4 Hz and mean tow speed 0.403186 m/s, whereas the user-confirmed gather motor 100 Hz / sensor_ balance 500 Hz rates give 0.1--0.7 Hz and about 0.201594 m/s. It therefore does not automatically fill u/p or any damping term.  The known geometric length ratio is used only to compare already measured added-mass diagonals.",
-    "candidate_source_model_length_ratio_model_over_target": 0.7,
-    "candidate_source_mean_tow_speed_m_s": 0.4031861814304878,
-    "resolved_pmm_mean_tow_speed_m_s": 0.20159363395824845,
-    "candidate_source_nominal_frequencies_hz": [
-      0.2,
-      0.4,
-      0.6,
-      0.8,
-      1.0,
-      1.2,
-      1.4
-    ],
-    "resolved_pmm_nominal_frequencies_hz": [
-      0.1,
-      0.2,
-      0.3,
-      0.4,
-      0.5,
-      0.6,
-      0.7
-    ],
-    "added_mass_scale_crosscheck": [
-      {
-        "dof": "sway",
-        "units": "kg",
-        "length_scale_exponent": 3,
-        "cfd_target_scale": 20.23309968300135,
-        "cfd_scaled_to_pmm_model": 6.939953191269461,
-        "corrected_pmm": 6.41312611066381,
-        "pmm_minus_scaled_cfd": -0.526827080605651,
-        "relative_difference_percent": -7.591219509497634
-      },
-      {
-        "dof": "heave",
-        "units": "kg",
-        "length_scale_exponent": 3,
-        "cfd_target_scale": 35.18217758674451,
-        "cfd_scaled_to_pmm_model": 12.067486912253363,
-        "corrected_pmm": 11.569459227419353,
-        "pmm_minus_scaled_cfd": -0.4980276848340104,
-        "relative_difference_percent": -4.127020716536362
-      },
-      {
-        "dof": "pitch",
-        "units": "kg*m^2",
-        "length_scale_exponent": 5,
-        "cfd_target_scale": 0.41629928926014775,
-        "cfd_scaled_to_pmm_model": 0.069967421545953,
-        "corrected_pmm": 0.057726146122463316,
-        "pmm_minus_scaled_cfd": -0.01224127542348969,
-        "relative_difference_percent": -17.495678921724878
-      },
-      {
-        "dof": "yaw",
-        "units": "kg*m^2",
-        "length_scale_exponent": 5,
-        "cfd_target_scale": 0.16124301535435814,
-        "cfd_scaled_to_pmm_model": 0.027100113590606965,
-        "corrected_pmm": 0.03736190377829378,
-        "pmm_minus_scaled_cfd": 0.010261790187686814,
-        "relative_difference_percent": 37.86622573878658
-      }
-    ]
-  },
   "notes": [
-    "NaN means an input DOF was not independently excited; it is not zero.",
+    "NaN means the term was not published by the direct-diagonal PMM identification; it is not zero. This includes u/p diagonal terms and every off-diagonal term.",
     "D_1_eff includes towing-speed-dependent in-phase effects and unseparated added-mass Coriolis effects.",
-    "No sign clipping, absolute-value repair, damping reciprocity, or PSD projection is applied; only the vehicle's exact port-starboard reflection mask removes forbidden cross-block terms.",
+    "Only direct v/Y, w/Z, q/M and r/N regressions populate the three matrices; all off-diagonal terms remain null and no reciprocity or symmetry zero-fill is applied.",
     "The SolidWorks material/assembly volume is recorded but is not used as displaced volume.",
     "Coordinate System 1 is assumed to be the PMM motion/load reference origin; replace r_OG if the balance origin differs.",
     "The user confirms that gather and sensor_ are hardware-synchronized; zero timing shift is therefore the experimental setting.",
+    "The user confirms the raw PMM bench axis labels are +X forward, +Y left, +Z down; raw vectors are explicitly mapped by diag(1,1,-1) into right-handed FLU before rigid-body operations.",
     "The vertical force polarity is resolved from the campaign-to-campaign inertial phase reversal and should be confirmed against the wiring log.",
     "The +/-50 ms timing sweep is an artificial phase perturbation, not an estimate of actual synchronization uncertainty.",
     "The direct fixed-U0 coefficients are manoeuvring derivatives of a coupled model; an individual diagonal sign is not by itself a six-DOF passivity result.",

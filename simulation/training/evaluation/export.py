@@ -16,20 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from simulation.training.ppo.networks import available_mlp_architectures, get_mlp_architecture
-from simulation.training.ppo.networks import TrajectoryEvaluationActor, load_evaluation_actor
-from simulation.training.manifest import load_run_manifest, validate_manifest_selection
-
-
-class FeedForwardActorOnnx(torch.nn.Module):
-    """Pure actor wrapper for a named feed-forward MLP policy."""
-
-    def __init__(self, policy: TrajectoryEvaluationActor):
-        super().__init__()
-        self.actor = policy.actor
-
-    def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        return self.actor(obs)
+from simulation.training.evaluation.policy import load_actor
+from simulation.training.recipe import load_training_recipe, run_input_paths
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,72 +31,37 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--prefix", default="auv_traj_policy")
     parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"))
-    parser.add_argument("--action-dim", type=int, default=None, help="Optional manifest consistency assertion.")
-    parser.add_argument("--activation", default=None, help="Optional manifest consistency assertion.")
-    parser.add_argument(
-        "--mlp_architecture",
-        choices=available_mlp_architectures(),
-        default=None,
-        help="Optional assertion for the architecture stored with the run.",
-    )
-    parser.add_argument(
-        "--reward_profile",
-        default=None,
-        help="Optional assertion for the reward profile stored with the run.",
-    )
-    parser.add_argument(
-        "--run-manifest",
-        type=Path,
-        default=None,
-        help="Defaults to <checkpoint run>/params/run_manifest.json.",
-    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    manifest_path = args.run_manifest or args.checkpoint.resolve().parent / "params" / "run_manifest.json"
-    manifest = load_run_manifest(manifest_path)
-    validate_manifest_selection(
-        manifest,
-        mlp_architecture=args.mlp_architecture,
-        reward_profile=args.reward_profile,
-    )
-    if args.action_dim is not None and args.action_dim != manifest.action_dim:
-        raise ValueError(
-            f"Requested action dimension {args.action_dim} does not match manifest {manifest.action_dim}."
-        )
-    if args.activation is not None and args.activation != manifest.activation:
-        raise ValueError(
-            f"Requested activation {args.activation!r} does not match manifest {manifest.activation!r}."
-        )
-    architecture_profile = get_mlp_architecture(manifest.mlp_architecture)
-    observation_dim = architecture_profile.observation_dim
-    hidden_dims = list(architecture_profile.actor_hidden_dims)
-    policy = load_evaluation_actor(
-        args.checkpoint,
-        observation_dim=observation_dim,
-        action_dim=manifest.action_dim,
-        hidden_dims=hidden_dims,
-        activation=manifest.activation,
+    checkpoint = args.checkpoint.expanduser().resolve()
+    recipe = load_training_recipe(run_input_paths(checkpoint.parent).recipe)
+    architecture = recipe.architecture
+    policy = load_actor(
+        checkpoint,
+        architecture,
         device="cpu",
     )
+    deployable_policy = torch.nn.Sequential(
+        policy,
+        torch.nn.Hardtanh(min_val=-1.0, max_val=1.0),
+    )
 
-    output_dir = args.output_dir or args.checkpoint.resolve().parent / "exports"
+    output_dir = args.output_dir or checkpoint.parent / "exports"
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = args.checkpoint.stem
-    output_path = output_dir / f"{args.prefix}_{architecture_profile.name}_{args.date}_{stem}.onnx"
-    dummy_obs = torch.zeros(1, observation_dim)
-    exporter = FeedForwardActorOnnx(policy)
+    output_path = output_dir / f"{args.prefix}_{architecture.name}_{args.date}_{stem}.onnx"
     torch.onnx.export(
-        exporter,
-        dummy_obs,
+        deployable_policy,
+        (torch.zeros(1, architecture.observation_dim),),
         output_path,
-        export_params=True,
         opset_version=18,
         input_names=["obs"],
         output_names=["actions"],
-        dynamic_axes={},
+        dynamo=True,
+        external_data=False,
     )
     print(output_path)
 

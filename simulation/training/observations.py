@@ -7,7 +7,8 @@ import gymnasium as gym
 import numpy as np
 import torch
 import isaaclab.utils.math as math_utils
-from isaaclab.utils.math import quat_apply, quat_conjugate
+
+from common.tensor_math import quat_apply_wxyz, quat_conjugate_wxyz
 
 from robot.control.trajectory.observation_contract import (
     ACTION_DIM,
@@ -20,6 +21,8 @@ from simulation.training.ppo.networks import (
     CRITIC_PRIVILEGED_FIELD_DIMENSIONS,
     get_mlp_architecture,
 )
+
+
 class AUVCriticObservationMixin:
     """Own privileged-state normalization and Critic observation assembly."""
 
@@ -36,22 +39,11 @@ class AUVCriticObservationMixin:
         )
         self._critic_nominal_linear_damping = self._hydro_diagonal(environment.nominal_linear_damping)
         self._critic_nominal_quadratic_damping = self._hydro_diagonal(environment.nominal_quadratic_damping)
-        self._critic_nominal_added_mass = self._hydro_diagonal(environment.nominal_added_mass)
-        delay_range = getattr(self.cfg.domain_randomization, "thruster_command_delay_steps_range", [0, 0])
-        rate_range = getattr(self.cfg.domain_randomization, "thruster_max_command_rate_range", [0.0, 0.0])
+        self._critic_nominal_fluid_added_mass = self._hydro_diagonal(
+            environment.nominal_fluid_added_mass
+        )
         self._critic_max_thruster_force = max(float(robot.thruster_wake_reference_force_n), 1.0)
-        self._critic_max_delay_steps = max(
-            1,
-            int(self.cfg.thruster_command_delay_steps),
-            int(delay_range[1]),
-        )
-        self._critic_max_command_rate = max(
-            1.0,
-            float(self.cfg.thruster_max_command_rate),
-            float(rate_range[1]),
-        )
         self._critic_nominal_tau = max(float(self.cfg.dyn_time_constant), 1.0e-6)
-        self._critic_nominal_voltage = max(float(self.cfg.battery_voltage_nominal), 1.0e-6)
         self._critic_nominal_tether_length = max(float(self.cfg.tether_winch_max_length), 1.0)
 
     @staticmethod
@@ -73,8 +65,8 @@ class AUVCriticObservationMixin:
         """Build the exact latent dynamics state used only by the value model.
 
         The terms mirror the force path in ``_compute_dynamics``: instantaneous
-        current, effective pool/free-surface hydrodynamic coefficients, sampled
-        rigid-body properties, and realized actuator output.  They must not be
+        current, effective pool/free-surface hydrodynamic coefficients, and
+        realized actuator output. They must not be
         reused when assembling the deployable Actor observation.
         """
 
@@ -98,9 +90,10 @@ class AUVCriticObservationMixin:
                 ),
                 dim=-1,
             ),
-            "water_current_b": quat_apply(quat_conjugate(root_quat_w), water_current_w)
+            "water_current_b": quat_apply_wxyz(quat_conjugate_wxyz(root_quat_w), water_current_w)
             / TRAJECTORY_OBSERVATION.field("linear_velocity_error_b").physical_scale,
-            "filtered_relative_acceleration_b": environment.filtered_nu_r_dot / self._critic_acceleration_scale,
+            "generalized_acceleration_b": environment.generalized_acceleration_b
+            / self._critic_acceleration_scale,
             "effective_linear_damping_ratio": self._relative_to_nominal(
                 self._hydro_diagonal(effective_hydrodynamics.linear_damping),
                 self._critic_nominal_linear_damping,
@@ -109,36 +102,21 @@ class AUVCriticObservationMixin:
                 self._hydro_diagonal(effective_hydrodynamics.quadratic_damping),
                 self._critic_nominal_quadratic_damping,
             ),
-            "effective_added_mass_ratio": self._relative_to_nominal(
-                self._hydro_diagonal(effective_hydrodynamics.added_mass),
-                self._critic_nominal_added_mass,
+            "effective_fluid_added_mass_ratio": self._relative_to_nominal(
+                self._hydro_diagonal(effective_hydrodynamics.fluid_added_mass),
+                self._critic_nominal_fluid_added_mass,
             ),
             "effective_buoyant_volume_ratio": robot.volumes * effective_hydrodynamics.buoyancy_scale
             / max(float(self.cfg.volume), 1.0e-6),
-            "mass_ratio": robot.masses / max(float(self.cfg.mass), 1.0e-6),
-            "principal_inertia_ratio": robot.inertia_principal_moments
-            / robot.nominal_principal_inertia.reshape(1, 3).clamp_min(1.0e-6),
-            "center_of_mass_offset_b": robot.center_of_mass_offsets / 0.1,
-            "com_to_cob_offset_b": robot.com_to_cob_offsets / 0.1,
             "realized_thruster_force": robot.realized_thruster_force_n / self._critic_max_thruster_force,
             "thruster_force_scale": robot.thruster_force_scale,
+            "common_thruster_force_scale": robot.common_thruster_force_scale,
             "thruster_parameters": torch.cat(
                 (
                     (robot.thruster_time_constant / self._critic_nominal_tau).unsqueeze(-1),
-                    (
-                        robot.thruster_delay_steps.to(dtype=torch.float32) / self._critic_max_delay_steps
-                    ).unsqueeze(-1),
-                    robot.thruster_max_command_rate / self._critic_max_command_rate,
                     robot.thruster_command_resolution,
                     robot.thruster_command_dropout_probability,
                     robot.thruster_wake_loss_coefficient.unsqueeze(-1),
-                ),
-                dim=-1,
-            ),
-            "battery_state": torch.cat(
-                (
-                    robot.battery_voltage / self._critic_nominal_voltage,
-                    robot.battery_voltage_drop_per_s,
                 ),
                 dim=-1,
             ),
@@ -159,7 +137,7 @@ class AUVObservationMixin(AUVCriticObservationMixin):
     def _configure_mlp_observation_space(self, cfg) -> None:
         """Derive actor/critic spaces from the selected feed-forward profile.
 
-        History is assembled after the current 30-D sample is normalized, so
+        History is assembled after the current 33-D sample is normalized, so
         every cached value has the same deployed representation as the current
         actor input.
         """
@@ -171,7 +149,7 @@ class AUVObservationMixin(AUVCriticObservationMixin):
         cfg.mlp_history_steps = architecture.history_steps
         cfg.mlp_history_fields = list(architecture.history_fields)
         selected_critic_fields = tuple(
-            getattr(cfg, "critic_privileged_fields_override", ()) or architecture.critic_privileged_fields
+            cfg.critic_privileged_fields_override or architecture.critic_privileged_fields
         )
         unknown_critic_fields = set(selected_critic_fields) - set(CRITIC_PRIVILEGED_FIELD_DIMENSIONS)
         if unknown_critic_fields:
@@ -220,6 +198,11 @@ class AUVObservationMixin(AUVCriticObservationMixin):
             dtype=torch.float32,
             device=self.device,
         )
+        self._latest_normalized_observation = torch.zeros(
+            (self.num_envs, BASE_OBSERVATION_DIM),
+            dtype=torch.float32,
+            device=self.device,
+        )
         self._init_mlp_history()
         self._init_critic_observation_state()
 
@@ -243,40 +226,50 @@ class AUVObservationMixin(AUVCriticObservationMixin):
         )
 
     def _state_for_observation(self):
-        """Return the simulator state used to form the policy observation."""
+        """Return the exact delayed fused state available to the Actor."""
 
+        measurement = self.robot_runtime.pose_sensor.measure()
         return (
-            self._robot.data.root_pos_w,
-            self._robot.data.root_quat_w,
-            self._robot.data.root_lin_vel_b,
-            self._robot.data.root_ang_vel_b,
+            measurement.position_w,
+            measurement.quaternion_wxyz,
+            measurement.linear_velocity_b,
+            measurement.angular_velocity_b,
         )
 
     def _observation_group_slices(self) -> dict[str, slice]:
         return dict(OBSERVATION_FIELD_SLICES)
 
     def _normalize_trajectory_observation(self, obs: torch.Tensor) -> torch.Tensor:
-        """Apply fixed physical scales to the current 30-D trajectory sample."""
+        """Apply fixed physical scales to the current 33-D trajectory sample."""
 
         return obs / self._observation_normalization_scale
 
     def _stack_mlp_history(self, normalized_current_obs: torch.Tensor) -> torch.Tensor:
-        """Append prior selected samples, newest first, then retain this sample.
+        """Append prior selected samples, newest first, without changing history.
 
-        The current sample remains at indices ``[0:30]``.  This makes a
+        The current sample remains at indices ``[0:33]``.  This makes a
         feed-forward MLP causal while preserving the exact information that a
-        real controller can cache between 50-Hz policy updates.
+        real controller can cache between 25-Hz policy updates.
         """
 
-        if self._mlp_history_steps <= 0:
+        if self._mlp_history.shape[1] == 0:
             return normalized_current_obs
+        return torch.cat(
+            (normalized_current_obs, self._mlp_history.flatten(start_dim=1)),
+            dim=-1,
+        )
 
-        actor_obs = torch.cat((normalized_current_obs, self._mlp_history.flatten(start_dim=1)), dim=-1)
-        selected_current = normalized_current_obs.index_select(1, self._mlp_history_indices)
-        if self._mlp_history_steps > 1:
+    def _commit_mlp_history(self, normalized_current_obs: torch.Tensor) -> None:
+        """Advance history exactly once for the policy sample being acted on."""
+
+        if self._mlp_history.shape[1] == 0:
+            return
+        if self._mlp_history.shape[1] > 1:
             self._mlp_history[:, 1:].copy_(self._mlp_history[:, :-1].clone())
-        self._mlp_history[:, 0].copy_(selected_current)
-        return actor_obs
+        self._mlp_history[:, 0].copy_(
+            normalized_current_obs.index_select(1, self._mlp_history_indices)
+        )
 
     def _reset_mlp_history(self, env_ids: Sequence[int] | torch.Tensor) -> None:
         self._mlp_history[env_ids] = 0.0
+        self._latest_normalized_observation[env_ids] = 0.0

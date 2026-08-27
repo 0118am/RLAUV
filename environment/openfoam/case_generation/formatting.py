@@ -6,6 +6,8 @@ import math
 from typing import Any
 
 def fmt(value: float) -> str:
+    if float(value) == 0.0:
+        return "0"
     return f"{value:.12g}"
 
 
@@ -28,3 +30,6 @@ def _finite_vector(value: Any, name: str) -> tuple[float, float, float]:
         raise ValueError(f"{name} must contain finite values")
     return vector
 
+
+def foam_vector(value: Any, name: str = "vector") -> str:
+    return "(" + " ".join(fmt(item) for item in _finite_vector(value, name)) + ")"

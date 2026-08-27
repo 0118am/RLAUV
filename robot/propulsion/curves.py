@@ -6,10 +6,17 @@ import torch
 
 from robot.dynamics.parameters import AUV
 
+
 def get_thruster_positions(device: torch.device, dtype: torch.dtype = torch.float32) -> torch.Tensor:
     """Return the canonical T1...T8 COM-relative installation centers."""
 
     return torch.as_tensor(AUV.thruster_positions_body_m, dtype=dtype, device=device)
+
+
+def get_thruster_axes(device: torch.device, dtype: torch.dtype = torch.float32) -> torch.Tensor:
+    """Return the canonical T1...T8 unit shaft axes from the CAD installation."""
+
+    return torch.as_tensor(AUV.thruster_axes_body, dtype=dtype, device=device)
 
 
 def normalized_command_to_pwm_us(command: torch.Tensor) -> torch.Tensor:
@@ -26,9 +33,10 @@ def thruster_body_forces_from_pwm_us(
 
     ``pwm_us`` has shape ``(..., 8)`` and must already be in 1300...1700 us.
     The coefficient layout is ``(8, 4, 3)`` with rows
-    ``(a_negative, b_negative, a_positive, b_positive)`` and final components
+    ``(a_positive, b_positive, a_negative, b_negative)`` and final components
     ``(Fx, Fy, Fz)``.  PWM values in the inclusive 1475...1525 us dead zone
-    produce an exact zero vector.
+    produce an exact zero vector. Installed PWM orientation is already encoded
+    in each coefficient vector; ``offset_us`` is never negated per thruster.
     """
 
     if pwm_us.shape[-1] != len(AUV.thruster_labels):
@@ -45,10 +53,10 @@ def thruster_body_forces_from_pwm_us(
     q_negative = torch.clamp(-offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     q_positive = torch.clamp(offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     return (
-        coeff[:, 0, :] * q_negative.square()
-        + coeff[:, 1, :] * q_negative
-        + coeff[:, 2, :] * q_positive.square()
-        + coeff[:, 3, :] * q_positive
+        coeff[:, 0, :] * q_positive.square()
+        + coeff[:, 1, :] * q_positive
+        + coeff[:, 2, :] * q_negative.square()
+        + coeff[:, 3, :] * q_negative
     )
 
 
@@ -88,10 +96,10 @@ def measured_thruster_force_jacobian(
     q_positive = torch.clamp(offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     q_negative = torch.clamp(-offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
     positive_slope = AUV.thruster_pwm_half_range_us * (
-        2.0 * coeff[:, 2, :] * q_positive + coeff[:, 3, :]
+        2.0 * coeff[:, 0, :] * q_positive + coeff[:, 1, :]
     )
     negative_slope = -AUV.thruster_pwm_half_range_us * (
-        2.0 * coeff[:, 0, :] * q_negative + coeff[:, 1, :]
+        2.0 * coeff[:, 2, :] * q_negative + coeff[:, 3, :]
     )
     branch_slope = torch.where(
         (offset_us > AUV.thruster_pwm_deadband_us).unsqueeze(-1),

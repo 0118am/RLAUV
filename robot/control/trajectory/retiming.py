@@ -3,46 +3,40 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Annotated
 
 import torch
+from pydantic import Field
+
+from common.schema import PositiveFloat, StrictFrozenModel
 
 from .catalog import (
     AXIS_SINE,
     CHIRP,
-    LATERAL_SINE,
+    LATERAL_WAVE,
     LISSAJOUS,
     RACETRACK,
+    REVERSE_SPATIAL_HELIX,
     SPATIAL_HELIX,
-    VERTICAL_SINE,
+    VERTICAL_WAVE,
 )
-from .geometry import _geometry_derivatives, _orientation_rate_per_phase
+from .geometry import (
+    _geometry_derivatives,
+    _geometry_derivatives_through_third,
+    _yaw_rate_per_phase,
+)
 
-@dataclass(frozen=True)
-class TrajectoryKinematicLimits:
-    """Temporary simulator limits for a physically trackable reference.
 
-    They intentionally match the final-stage ``random_smooth`` command
-    envelope with modest headroom.  Replace them with limits identified from
-    pool data before deployment.
-    """
+_INTERPOLATION_PROBE_SUBSTEPS = 4
 
-    max_speed_mps: float = 0.60
-    max_acceleration_mps2: float = 0.45
-    max_orientation_rate_radps: float = 0.80
-    max_jerk_mps3: float = 0.36
-    retime_samples: int = 256
+class TrajectoryKinematicLimits(StrictFrozenModel):
+    """Explicit kinematic envelope for one reference-generator configuration."""
 
-    def validate(self) -> None:
-        if self.max_speed_mps <= 0.0:
-            raise ValueError("max_speed_mps must be positive.")
-        if self.max_acceleration_mps2 <= 0.0:
-            raise ValueError("max_acceleration_mps2 must be positive.")
-        if self.max_orientation_rate_radps <= 0.0:
-            raise ValueError("max_orientation_rate_radps must be positive.")
-        if self.max_jerk_mps3 <= 0.0:
-            raise ValueError("max_jerk_mps3 must be positive.")
-        if self.retime_samples < 32:
-            raise ValueError("retime_samples must be at least 32.")
+    max_speed_mps: PositiveFloat
+    max_acceleration_mps2: PositiveFloat
+    max_yaw_rate_radps: PositiveFloat
+    max_jerk_mps3: PositiveFloat
+    retime_samples: Annotated[int, Field(ge=32)]
 
 
 @dataclass
@@ -125,13 +119,15 @@ def _validated_speed_targets(
     target_speed_mps: torch.Tensor | None,
     limits: TrajectoryKinematicLimits,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    limits.validate()
     if torch.any(requested_period_s <= 0.0):
         raise ValueError("requested_period_s must be positive.")
     controlled = (
-        (trajectory_type == LATERAL_SINE)
-        | (trajectory_type == VERTICAL_SINE)
+        (trajectory_type == AXIS_SINE)
+        | (trajectory_type == LISSAJOUS)
+        | (trajectory_type == LATERAL_WAVE)
+        | (trajectory_type == VERTICAL_WAVE)
         | (trajectory_type == SPATIAL_HELIX)
+        | (trajectory_type == REVERSE_SPATIAL_HELIX)
     )
     if target_speed_mps is None:
         if bool(torch.any(controlled)):
@@ -149,6 +145,7 @@ def _validated_speed_targets(
 def _phase_geometry(
     trajectory_type: torch.Tensor,
     axis: torch.Tensor,
+    wave_count: torch.Tensor,
     amp_x: torch.Tensor,
     amp_y: torch.Tensor,
     amp_z: torch.Tensor,
@@ -168,6 +165,7 @@ def _phase_geometry(
     position, first, second = _geometry_derivatives(
         trajectory_type,
         axis,
+        wave_count,
         amp_x,
         amp_y,
         amp_z,
@@ -183,13 +181,10 @@ def _phase_geometry(
         torch.linalg.vector_norm(torch.linalg.cross(first, second, dim=-1), dim=-1)
         / phase_speed.pow(3)
     )
-    orientation = _orientation_rate_per_phase(first, second)
-    stopped_sines = (
-        (trajectory_type == AXIS_SINE)
-        | (trajectory_type == LATERAL_SINE)
-        | (trajectory_type == VERTICAL_SINE)
-    ).unsqueeze(-1)
+    yaw_rate_per_phase = _yaw_rate_per_phase(first, second)
+    stopped_sines = (trajectory_type == AXIS_SINE).unsqueeze(-1)
     return {
+        "trajectory_type": trajectory_type,
         "phase_step": phase_step,
         "phase": phase,
         "position": position,
@@ -197,13 +192,27 @@ def _phase_geometry(
         "second": second,
         "phase_speed": phase_speed,
         "curvature": curvature,
-        "orientation": torch.where(stopped_sines, torch.zeros_like(orientation), orientation),
+        "yaw_rate_per_phase": torch.where(
+            stopped_sines,
+            torch.zeros_like(yaw_rate_per_phase),
+            yaw_rate_per_phase,
+        ),
     }
 
 
 def _phase_interval_duration(rate: torch.Tensor, phase_step: float) -> torch.Tensor:
     inverse_rate = rate.clamp_min(1.0e-6).reciprocal()
-    return 0.5 * phase_step * (inverse_rate + torch.roll(inverse_rate, -1, dims=1))
+    inverse_rate_midpoint = (
+        -torch.roll(inverse_rate, 1, dims=1)
+        + 9.0 * inverse_rate
+        + 9.0 * torch.roll(inverse_rate, -1, dims=1)
+        - torch.roll(inverse_rate, -2, dims=1)
+    ) / 16.0
+    return (phase_step / 6.0) * (
+        inverse_rate
+        + 4.0 * inverse_rate_midpoint
+        + torch.roll(inverse_rate, -1, dims=1)
+    )
 
 
 def _elapsed_for_rate(rate: torch.Tensor, phase_step: float) -> tuple[torch.Tensor, torch.Tensor]:
@@ -228,16 +237,24 @@ def _phase_acceleration_for_rate(
 ) -> torch.Tensor:
     finite_difference = _closed_scalar_time_derivative(rate, elapsed)
     tangent_growth = torch.sum(first * second, dim=-1)
-    helix_acceleration = -rate.square() * tangent_growth / phase_speed.square()
+    arc_length_acceleration = -rate.square() * tangent_growth / phase_speed.square()
     return torch.where(
-        (trajectory_type == SPATIAL_HELIX).unsqueeze(-1),
-        helix_acceleration,
+        (
+            (trajectory_type == LISSAJOUS)
+            | (trajectory_type == LATERAL_WAVE)
+            | (trajectory_type == VERTICAL_WAVE)
+            | (trajectory_type == SPATIAL_HELIX)
+            | (trajectory_type == REVERSE_SPATIAL_HELIX)
+        ).unsqueeze(-1),
+        arc_length_acceleration,
         finite_difference,
     )
 
 
 def _candidate_phase_rate(
     trajectory_type: torch.Tensor,
+    axis: torch.Tensor,
+    amp_x: torch.Tensor,
     amp_y: torch.Tensor,
     amp_z: torch.Tensor,
     requested_period_s: torch.Tensor,
@@ -250,17 +267,40 @@ def _candidate_phase_rate(
     phase = geometry["phase"]
     phase_speed = geometry["phase_speed"]
     curvature = geometry["curvature"]
-    orientation = geometry["orientation"]
+    yaw_rate_per_phase = geometry["yaw_rate_per_phase"]
     phase_step = geometry["phase_step"]
     period_rate = (2.0 * torch.pi / requested_period_s).unsqueeze(-1).expand_as(phase)
-    lateral_rate = (target_speed_mps / amp_y.clamp_min(1.0e-6)).unsqueeze(-1).expand_as(phase)
-    vertical_rate = (target_speed_mps / amp_z.clamp_min(1.0e-6)).unsqueeze(-1).expand_as(phase)
-    helix_rate = target_speed_mps.unsqueeze(-1) / phase_speed
-    rate = torch.where((trajectory_type == LATERAL_SINE).unsqueeze(-1), lateral_rate, period_rate)
-    rate = torch.where((trajectory_type == VERTICAL_SINE).unsqueeze(-1), vertical_rate, rate)
-    rate = torch.where((trajectory_type == SPATIAL_HELIX).unsqueeze(-1), helix_rate, rate)
-    speed_period = torch.sum(phase_step / rate.clamp_min(1.0e-6), dim=1)
+    amplitudes = torch.stack((amp_x, amp_y, amp_z), dim=-1)
+    axis_amplitude = torch.gather(amplitudes, 1, axis.unsqueeze(-1)).squeeze(-1)
+    axis_rate = (target_speed_mps / axis_amplitude.clamp_min(1.0e-6)).unsqueeze(-1).expand_as(phase)
+    arc_length_rate = target_speed_mps.unsqueeze(-1) / phase_speed
+    rate = torch.where((trajectory_type == AXIS_SINE).unsqueeze(-1), axis_rate, period_rate)
+    rate = torch.where((trajectory_type == LISSAJOUS).unsqueeze(-1), arc_length_rate, rate)
+    rate = torch.where((trajectory_type == LATERAL_WAVE).unsqueeze(-1), arc_length_rate, rate)
+    rate = torch.where((trajectory_type == VERTICAL_WAVE).unsqueeze(-1), arc_length_rate, rate)
+    rate = torch.where((trajectory_type == SPATIAL_HELIX).unsqueeze(-1), arc_length_rate, rate)
+    rate = torch.where(
+        (trajectory_type == REVERSE_SPATIAL_HELIX).unsqueeze(-1),
+        arc_length_rate,
+        rate,
+    )
+    speed_period = torch.sum(_phase_interval_duration(rate, phase_step), dim=1)
     table_period = torch.where(speed_controlled, speed_period, requested_period_s)
+    axis_acceleration_cap = torch.sqrt(
+        torch.full_like(axis_amplitude, limits.max_acceleration_mps2)
+        / axis_amplitude.clamp_min(1.0e-6)
+    ).unsqueeze(-1)
+    axis_jerk_cap = torch.pow(
+        torch.full_like(axis_amplitude, limits.max_jerk_mps3)
+        / axis_amplitude.clamp_min(1.0e-6),
+        1.0 / 3.0,
+    ).unsqueeze(-1)
+    axis_limited_rate = torch.minimum(rate, torch.minimum(axis_acceleration_cap, axis_jerk_cap))
+    rate = torch.where(
+        (trajectory_type == AXIS_SINE).unsqueeze(-1),
+        axis_limited_rate,
+        rate,
+    )
     chirp_shape = 1.0 + 0.5 * max(0.0, float(chirp_rate) - 1.0) * (1.0 - torch.cos(phase))
     rate = torch.where((trajectory_type == CHIRP).unsqueeze(-1), rate * chirp_shape, rate)
 
@@ -269,8 +309,8 @@ def _candidate_phase_rate(
         torch.full_like(rate, limits.max_acceleration_mps2)
         / (curvature * phase_speed.square()).clamp_min(1.0e-8)
     )
-    orientation_cap = torch.full_like(rate, limits.max_orientation_rate_radps) / orientation.clamp_min(1.0e-6)
-    rate = torch.minimum(torch.minimum(rate, speed_cap), torch.minimum(normal_cap, orientation_cap))
+    yaw_cap = torch.full_like(rate, limits.max_yaw_rate_radps) / yaw_rate_per_phase.clamp_min(1.0e-6)
+    rate = torch.minimum(torch.minimum(rate, speed_cap), torch.minimum(normal_cap, yaw_cap))
     smoothed = (
         torch.roll(rate, 2, 1)
         + 4.0 * torch.roll(rate, 1, 1)
@@ -279,12 +319,19 @@ def _candidate_phase_rate(
         + torch.roll(rate, -2, 1)
     ) / 16.0
     rate = torch.where(speed_controlled.unsqueeze(-1), rate, smoothed)
-    rate = torch.minimum(torch.minimum(rate, speed_cap), torch.minimum(normal_cap, orientation_cap))
+    rate = torch.minimum(torch.minimum(rate, speed_cap), torch.minimum(normal_cap, yaw_cap))
     uniform = rate.amin(dim=1, keepdim=True).expand_as(rate)
-    rate = torch.where((trajectory_type == SPATIAL_HELIX).unsqueeze(-1), rate, uniform)
+    arc_length_controlled = (
+        (trajectory_type == LISSAJOUS)
+        | (trajectory_type == LATERAL_WAVE)
+        | (trajectory_type == VERTICAL_WAVE)
+        | (trajectory_type == SPATIAL_HELIX)
+        | (trajectory_type == REVERSE_SPATIAL_HELIX)
+    ).unsqueeze(-1)
+    rate = torch.where(arc_length_controlled, rate, uniform)
     chirp_progress = 0.5 + 0.25 * (1.0 - torch.cos(phase))
     rate = torch.where((trajectory_type == CHIRP).unsqueeze(-1), rate * chirp_progress, rate)
-    sharp_ood = ((trajectory_type == LISSAJOUS) | (trajectory_type == CHIRP)).unsqueeze(-1)
+    sharp_ood = (trajectory_type == CHIRP).unsqueeze(-1)
     rate = torch.where(sharp_ood, 0.60 * rate, rate)
     rate = torch.where((trajectory_type == RACETRACK).unsqueeze(-1), 0.95 * rate, rate)
     return rate, table_period
@@ -295,7 +342,7 @@ def _kinematic_scale(
     max_acceleration: torch.Tensor,
     max_jerk: torch.Tensor,
     limits: TrajectoryKinematicLimits,
-    max_orientation: torch.Tensor | None = None,
+    max_yaw_rate: torch.Tensor | None = None,
 ) -> torch.Tensor:
     scale = torch.ones_like(max_speed)
     scale = torch.minimum(scale, torch.full_like(scale, limits.max_speed_mps) / max_speed.clamp_min(1.0e-6))
@@ -307,10 +354,10 @@ def _kinematic_scale(
         scale,
         torch.pow(torch.full_like(scale, limits.max_jerk_mps3) / max_jerk.clamp_min(1.0e-6), 1.0 / 3.0),
     )
-    if max_orientation is not None:
+    if max_yaw_rate is not None:
         scale = torch.minimum(
             scale,
-            torch.full_like(scale, limits.max_orientation_rate_radps) / max_orientation.clamp_min(1.0e-6),
+            torch.full_like(scale, limits.max_yaw_rate_radps) / max_yaw_rate.clamp_min(1.0e-6),
         )
     return torch.clamp(scale, max=1.0)
 
@@ -328,9 +375,14 @@ def _limit_discrete_rate(
             torch.linalg.vector_norm(acceleration, dim=-1).amax(dim=1),
             torch.linalg.vector_norm(jerk, dim=-1).amax(dim=1),
             limits,
-            (geometry["orientation"] * rate).amax(dim=1),
+            (geometry["yaw_rate_per_phase"] * rate).amax(dim=1),
         )
-        rate = rate * scale.unsqueeze(-1)
+        scaled_rate = rate * scale.unsqueeze(-1)
+        rate = torch.where(
+            (geometry["trajectory_type"] == AXIS_SINE).unsqueeze(-1),
+            rate,
+            scaled_rate,
+        )
     return rate
 
 
@@ -372,7 +424,10 @@ def _limit_interpolated_rate(
     rate: torch.Tensor,
     geometry: dict,
     trajectory_type: torch.Tensor,
+    target_speed_mps: torch.Tensor,
+    speed_controlled: torch.Tensor,
     axis: torch.Tensor,
+    wave_count: torch.Tensor,
     amp_x: torch.Tensor,
     amp_y: torch.Tensor,
     amp_z: torch.Tensor,
@@ -385,44 +440,96 @@ def _limit_interpolated_rate(
     harmonic_ratio: float,
     limits: TrajectoryKinematicLimits,
 ) -> torch.Tensor:
+    analytic_only = bool(torch.all(speed_controlled))
+    probe_fractions = (
+        torch.arange(
+            _INTERPOLATION_PROBE_SUBSTEPS,
+            dtype=rate.dtype,
+            device=rate.device,
+        )
+    ) / _INTERPOLATION_PROBE_SUBSTEPS
     for _ in range(4):
         dt, elapsed = _elapsed_for_rate(rate, geometry["phase_step"])
         tables = _probe_tables(rate, elapsed, geometry, trajectory_type, table_requested_period)
-        probe_time = elapsed[:, :-1] + 0.5 * dt
-        probe_phase, probe_rate, probe_acceleration = sample_retimed_phase(tables, probe_time)
-        _, velocity, acceleration, _ = evaluate_retimed_reference(
-            trajectory_type,
-            axis,
-            amp_x,
-            amp_y,
-            amp_z,
-            phase_x,
-            phase_y,
-            probe_phase,
-            probe_rate,
-            probe_acceleration,
-            radius_min=radius_min,
-            radius_max=radius_max,
-            harmonic_ratio=harmonic_ratio,
-        )
-        previous_time = torch.cat((probe_time[:, -1:] - elapsed[:, -1:], probe_time[:, :-1]), dim=1)
-        next_time = torch.cat((probe_time[:, 1:], probe_time[:, :1] + elapsed[:, -1:]), dim=1)
-        jerk = (
-            torch.roll(acceleration, -1, 1) - torch.roll(acceleration, 1, 1)
-        ) / (next_time - previous_time).clamp_min(1.0e-6).unsqueeze(-1)
+        interpolated_max_speed = torch.zeros_like(target_speed_mps)
+        interpolated_max_acceleration = torch.zeros_like(target_speed_mps)
+        interpolated_max_jerk = torch.zeros_like(target_speed_mps)
+        interpolated_max_yaw_rate = torch.zeros_like(target_speed_mps)
+        for fraction in probe_fractions:
+            probe_time = elapsed[:, :-1] + dt * fraction
+            probe_phase, probe_rate, probe_acceleration, probe_jerk = (
+                _sample_retimed_phase_kinematics(tables, probe_time)
+            )
+            _, first, second, third = _geometry_derivatives_through_third(
+                trajectory_type,
+                axis,
+                wave_count,
+                amp_x,
+                amp_y,
+                amp_z,
+                phase_x,
+                phase_y,
+                probe_phase,
+                analytic_only=analytic_only,
+                radius_min=radius_min,
+                radius_max=radius_max,
+                harmonic_ratio=harmonic_ratio,
+            )
+            velocity = first * probe_rate.unsqueeze(-1)
+            acceleration = (
+                second * probe_rate.square().unsqueeze(-1)
+                + first * probe_acceleration.unsqueeze(-1)
+            )
+            jerk = (
+                third * probe_rate.pow(3).unsqueeze(-1)
+                + 3.0
+                * second
+                * probe_rate.unsqueeze(-1)
+                * probe_acceleration.unsqueeze(-1)
+                + first * probe_jerk.unsqueeze(-1)
+            )
+            interpolated_max_speed = torch.maximum(
+                interpolated_max_speed,
+                torch.linalg.vector_norm(velocity, dim=-1).amax(dim=1),
+            )
+            interpolated_max_acceleration = torch.maximum(
+                interpolated_max_acceleration,
+                torch.linalg.vector_norm(acceleration, dim=-1).amax(dim=1),
+            )
+            interpolated_max_jerk = torch.maximum(
+                interpolated_max_jerk,
+                torch.linalg.vector_norm(jerk, dim=-1).amax(dim=1),
+            )
+            interpolated_max_yaw_rate = torch.maximum(
+                interpolated_max_yaw_rate,
+                (_yaw_rate_per_phase(first, second) * probe_rate).amax(dim=1),
+            )
         scale = _kinematic_scale(
-            torch.linalg.vector_norm(velocity, dim=-1).amax(dim=1),
-            torch.linalg.vector_norm(acceleration, dim=-1).amax(dim=1),
-            torch.linalg.vector_norm(jerk, dim=-1).amax(dim=1),
+            interpolated_max_speed,
+            interpolated_max_acceleration,
+            interpolated_max_jerk,
             limits,
+            interpolated_max_yaw_rate,
         )
-        rate = rate * scale.unsqueeze(-1)
+        requested_speed_scale = target_speed_mps / interpolated_max_speed.clamp_min(1.0e-6)
+        scale = torch.where(
+            speed_controlled,
+            torch.minimum(scale, requested_speed_scale),
+            scale,
+        )
+        scaled_rate = rate * scale.unsqueeze(-1)
+        rate = torch.where(
+            (trajectory_type == AXIS_SINE).unsqueeze(-1),
+            rate,
+            scaled_rate,
+        )
     return rate
 
 
 def build_retimed_tables(
     trajectory_type: torch.Tensor,
     axis: torch.Tensor,
+    wave_count: torch.Tensor,
     amp_x: torch.Tensor,
     amp_y: torch.Tensor,
     amp_z: torch.Tensor,
@@ -448,6 +555,7 @@ def build_retimed_tables(
     geometry = _phase_geometry(
         trajectory_type,
         axis,
+        wave_count,
         amp_x,
         amp_y,
         amp_z,
@@ -462,6 +570,8 @@ def build_retimed_tables(
     )
     rate, table_period = _candidate_phase_rate(
         trajectory_type,
+        axis,
+        amp_x,
         amp_y,
         amp_z,
         requested_period_s,
@@ -476,7 +586,10 @@ def build_retimed_tables(
         rate,
         geometry,
         trajectory_type,
+        target_speed_mps,
+        speed_controlled,
         axis,
+        wave_count,
         amp_x,
         amp_y,
         amp_z,
@@ -501,8 +614,11 @@ def build_retimed_tables(
     tables.retimed = effective_period > table_period * (1.0 + 1.0e-4)
     return tables
 
-def sample_retimed_phase(tables: RetimedTrajectoryTables, elapsed_s: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Invert periodic elapsed time with a periodic C² quintic interpolant."""
+def _sample_retimed_phase_kinematics(
+    tables: RetimedTrajectoryTables,
+    elapsed_s: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Invert time and return phase through its third time derivative."""
 
     period = tables.effective_period_s.clamp_min(1.0e-6)
     if elapsed_s.ndim > 1:
@@ -547,12 +663,27 @@ def sample_retimed_phase(tables: RetimedTrajectoryTables, elapsed_s: torch.Tenso
     q = q0 + c1 * s + c2 * s2 + c3 * s3 + c4 * s4 + c5 * s5
     rate = (c1 + 2.0 * c2 * s + 3.0 * c3 * s2 + 4.0 * c4 * s3 + 5.0 * c5 * s4) / interval
     acceleration = (2.0 * c2 + 6.0 * c3 * s + 12.0 * c4 * s2 + 20.0 * c5 * s3) / interval.square()
-    return q, rate, acceleration
+    jerk = (6.0 * c3 + 24.0 * c4 * s + 60.0 * c5 * s2) / interval.pow(3)
+    return q, rate, acceleration, jerk
+
+
+def sample_retimed_phase(
+    tables: RetimedTrajectoryTables,
+    elapsed_s: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Invert periodic elapsed time with a periodic C² quintic interpolant."""
+
+    phase, rate, acceleration, _ = _sample_retimed_phase_kinematics(
+        tables,
+        elapsed_s,
+    )
+    return phase, rate, acceleration
 
 
 def evaluate_retimed_reference(
     trajectory_type: torch.Tensor,
     axis: torch.Tensor,
+    wave_count: torch.Tensor,
     amp_x: torch.Tensor,
     amp_y: torch.Tensor,
     amp_z: torch.Tensor,
@@ -573,6 +704,7 @@ def evaluate_retimed_reference(
     position, first, second = _geometry_derivatives(
         trajectory_type,
         axis,
+        wave_count,
         amp_x,
         amp_y,
         amp_z,

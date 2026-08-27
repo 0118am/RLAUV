@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import json
 import os
 from pathlib import Path
 import queue
@@ -21,11 +22,19 @@ from environment.openfoam.case_execution.planning import (
 )
 from environment.openfoam.case_execution.runner import _run_one, _run_one_with_cpu_slot
 from environment.openfoam.case_execution.validation import _FOAM_API
+from environment.openfoam.build_mesh import validate_mesh_completion
+from environment.openfoam.case_generation.config import load_config
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases-dir", type=Path, default=Path(__file__).with_name("cases"))
+    parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Schema-5 preliminary campaign configuration.",
+    )
     parser.add_argument("--only", action="append", default=[], help="Case-name glob; repeatable.")
     parser.add_argument("--np", type=int, default=4, help="MPI ranks per case; use 1 for serial.")
     parser.add_argument("--jobs", type=int, default=1, help="Cases to execute concurrently.")
@@ -49,7 +58,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--resume",
         action="store_true",
-        help="Skip cases whose .completed marker, solver log, and force outputs still validate.",
+        help="Skip cases that have a matching .completed marker.",
     )
     parser.add_argument("--reconstruct", action="store_true", help="Run reconstructPar after parallel solve.")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing them.")
@@ -71,9 +80,27 @@ def main() -> int:
             _validate_cpu_sets(args.cpu_sets, args.jobs)
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
+    cases_root = args.cases_dir.resolve()
+    config_path = args.config.resolve()
+    load_config(config_path)
+    mesh_valid, mesh_reason = validate_mesh_completion(
+        cases_root,
+    )
+    if not mesh_valid:
+        raise RuntimeError(f"shared mesh is unusable: {mesh_reason}")
+    cases = _discover(cases_root, args.only, args.resume, args.solver)
+    if not cases:
+        print("[resume] all matched cases are completed")
+        return 0
     required = [args.solver]
+    if any(
+        json.loads((case / "case.json").read_text(encoding="utf-8")).get("case_family")
+        == "steady_damping"
+        for case in cases
+    ):
+        required.append("potentialFoam")
     if args.np > 1:
-        required.extend(("foamDictionary", "decomposePar", "mpirun"))
+        required.extend(("decomposePar", "mpirun"))
         if args.cpu_sets:
             required.append("taskset")
         if args.reconstruct:
@@ -89,10 +116,6 @@ def main() -> int:
         if missing:
             raise SystemExit(f"Missing commands: {', '.join(missing)}; source environment/openfoam/env.sh first")
 
-    cases = _discover(args.cases_dir.resolve(), args.only, args.resume, args.solver)
-    if not cases:
-        print("[resume] all matched cases already have validated completion evidence")
-        return 0
     available = os.cpu_count() or 1
     requested = args.np * args.jobs
     if requested > available:

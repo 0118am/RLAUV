@@ -10,30 +10,33 @@ from collections.abc import Sequence
 import torch
 import isaaclab.utils.math as math_utils
 
+from common.tensor_math import quat_apply_wxyz
 from robot.control.trajectory.guidance import (
-    quaternion_align_body_x_with_velocity,
+    horizontal_heading_velocity,
+    quaternion_from_level_heading,
     quaternion_step_angular_velocity_body,
 )
 from robot.control.trajectory import (
     AXIS_SINE,
-    LATERAL_SINE,
     RANDOM_SMOOTH,
     RetimedTrajectoryTables,
-    SPATIAL_HELIX,
+    SPEED_CONTROLLED_TYPES,
     TrajectoryKinematicLimits,
-    VERTICAL_SINE,
     build_retimed_tables,
     evaluate_retimed_reference,
     sample_retimed_phase,
     smooth_startup_time,
 )
+
+
 class AUVTrajectoryMixin:
     """Own reset-time task sampling and moving-reference generation."""
 
     def _sample_evaluation_trajectory(self, env_ids: torch.Tensor) -> None:
         count = int(env_ids.numel())
         self._traj_type[env_ids] = self.cfg.trajectory_eval_type
-        self._traj_axis[env_ids] = 0
+        self._traj_axis[env_ids] = self.cfg.trajectory_eval_axis
+        self._traj_wave_count[env_ids] = self.cfg.trajectory_eval_wave_count
         if self.cfg.trajectory_eval_type == RANDOM_SMOOTH:
             for target, bounds in (
                 (self._traj_amp_x, self.cfg.trajectory_amp_x_range),
@@ -57,89 +60,74 @@ class AUVTrajectoryMixin:
             self._traj_period[env_ids] = self.cfg.trajectory_eval_period
             self._traj_phase_x[env_ids] = 0.0
             self._traj_phase_y[env_ids] = 0.0
-        if self.cfg.trajectory_eval_type in (
-            LATERAL_SINE,
-            VERTICAL_SINE,
-            SPATIAL_HELIX,
-        ):
+        if self.cfg.trajectory_eval_type in SPEED_CONTROLLED_TYPES:
             self._traj_target_speed_mps[env_ids] = float(
                 self.cfg.trajectory_eval_speed_mps
             )
 
     def _sample_training_trajectory(self, env_ids: torch.Tensor) -> None:
         count = int(env_ids.numel())
-        train_types, amp_x_range, amp_y_range, amp_z_range, period_range = (
+        train_types, axes, wave_counts, speeds, amplitude_scales = (
             self._get_trajectory_training_profile()
         )
         train_types = torch.as_tensor(train_types, device=self.device, dtype=torch.long)
-        speed_levels = torch.as_tensor(
-            self.cfg.trajectory_speed_levels_mps,
-            device=self.device,
-            dtype=torch.float32,
+        axes = torch.as_tensor(axes, device=self.device, dtype=torch.long)
+        wave_counts = torch.as_tensor(wave_counts, device=self.device, dtype=torch.long)
+        speeds = torch.as_tensor(speeds, device=self.device, dtype=torch.float32)
+        amplitude_scales = torch.as_tensor(
+            amplitude_scales, device=self.device, dtype=torch.float32
         )
-        if speed_levels.ndim != 1 or speed_levels.numel() == 0 or bool(
-            torch.any(speed_levels <= 0.0)
-        ):
-            raise ValueError(
-                "trajectory_speed_levels_mps must be a non-empty list of positive speeds."
-            )
-        if bool(torch.any(speed_levels > float(self.cfg.trajectory_max_speed_mps))):
-            raise ValueError("trajectory_speed_levels_mps exceeds trajectory_max_speed_mps.")
 
-        controlled_types = (
-            (train_types == LATERAL_SINE)
-            | (train_types == VERTICAL_SINE)
-            | (train_types == SPATIAL_HELIX)
+        # Every recipe entry is already one feasible speed/shape pairing.
+        # Balance that explicit command list directly instead of creating
+        # unsupported high-speed/high-curvature Cartesian combinations.
+        command_count = train_types.numel()
+        complete_batches = count // command_count
+        remainder = count % command_count
+        command_indices = torch.arange(command_count, device=self.device).repeat(
+            complete_batches
         )
-        if bool(torch.all(controlled_types)):
-            combination_count = train_types.numel() * speed_levels.numel()
-            repeats = (count + combination_count - 1) // combination_count
-            combinations = torch.arange(combination_count, device=self.device).repeat(repeats)
-            combinations = combinations[
-                torch.randperm(combinations.numel(), device=self.device)[:count]
-            ]
-            type_indices = torch.div(
-                combinations,
-                speed_levels.numel(),
-                rounding_mode="floor",
+        if remainder:
+            command_indices = torch.cat(
+                (
+                    command_indices,
+                    torch.randperm(command_count, device=self.device)[:remainder],
+                )
             )
-            speed_indices = torch.remainder(combinations, speed_levels.numel())
-        else:
-            type_indices = torch.randint(0, len(train_types), (count,), device=self.device)
-            speed_indices = torch.randint(
-                0,
-                speed_levels.numel(),
-                (count,),
-                device=self.device,
-            )
-        self._traj_type[env_ids] = train_types[type_indices]
-        self._traj_axis[env_ids] = torch.randint(0, 3, (count,), device=self.device)
-        for target, bounds in (
-            (self._traj_amp_x, amp_x_range),
-            (self._traj_amp_y, amp_y_range),
-            (self._traj_amp_z, amp_z_range),
-            (self._traj_period, period_range),
-        ):
-            target[env_ids] = math_utils.sample_uniform(
-                bounds[0], bounds[1], (count,), device=self.device
-            )
+        command_indices = command_indices[torch.randperm(count, device=self.device)]
+        selected_amplitude_scales = amplitude_scales[command_indices]
+
+        self._traj_type[env_ids] = train_types[command_indices]
+        self._traj_axis[env_ids] = axes[command_indices]
+        self._traj_wave_count[env_ids] = wave_counts[command_indices]
+        self._traj_amplitude_scales[env_ids] = selected_amplitude_scales
+        base_amplitudes = torch.stack(
+            tuple(
+                math_utils.sample_uniform(
+                    bounds[0], bounds[1], (count,), device=self.device
+                )
+                for bounds in (
+                    self.cfg.trajectory_amp_x_range,
+                    self.cfg.trajectory_amp_y_range,
+                    self.cfg.trajectory_amp_z_range,
+                )
+            ),
+            dim=-1,
+        )
+        amplitudes = base_amplitudes * selected_amplitude_scales
+        self._traj_amp_x[env_ids] = amplitudes[:, 0]
+        self._traj_amp_y[env_ids] = amplitudes[:, 1]
+        self._traj_amp_z[env_ids] = amplitudes[:, 2]
+        # All supported training types are speed-controlled, so their period is
+        # derived from sampled geometry and target speed by the retimer.
+        self._traj_period[env_ids] = 1.0
         self._traj_phase_x[env_ids] = math_utils.sample_uniform(
             0.0, 2.0 * torch.pi, (count,), device=self.device
         )
         self._traj_phase_y[env_ids] = math_utils.sample_uniform(
             0.0, 2.0 * torch.pi, (count,), device=self.device
         )
-        selected_types = self._traj_type[env_ids]
-        speed_controlled = (
-            (selected_types == LATERAL_SINE)
-            | (selected_types == VERTICAL_SINE)
-            | (selected_types == SPATIAL_HELIX)
-        )
-        self._traj_target_speed_mps[env_ids] = torch.where(
-            speed_controlled,
-            speed_levels[speed_indices],
-            self._traj_target_speed_mps[env_ids],
-        )
+        self._traj_target_speed_mps[env_ids] = speeds[command_indices]
 
     def _init_trajectory_state(self) -> None:
         # Moving-target command buffers shared by training, evaluation, and
@@ -163,17 +151,20 @@ class AUVTrajectoryMixin:
         # CUDA reduction or dynamic-size indexing operation.
 
         # Per-environment trajectory parameters sampled at reset.  traj_type is
-        # 0=circle, 1=Lissajous, 2=single-axis sine, 3=wavy loop, 4=spiral,
+        # 0=circle, 1=Lissajous, 2=single-axis sine, 3=wavy loop, 4=breathing loop,
         # 5=chirp, 6=racetrack, 7=random smooth Fourier curve,
-        # 8=lateral sine, 9=vertical sine, 10=spatial helix.
+        # 8=lateral wave, 9=vertical wave, 10=spatial helix,
+        # 11=the same spatial helix traversed in reverse.
         self._traj_center_w = torch.zeros(self.num_envs, 3, device=self.device)
         self._traj_type = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self._traj_axis = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._traj_wave_count = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
         self._traj_amp_x = torch.zeros(self.num_envs, device=self.device)
         self._traj_amp_y = torch.zeros(self.num_envs, device=self.device)
         self._traj_amp_z = torch.zeros(self.num_envs, device=self.device)
         self._traj_period = torch.ones(self.num_envs, device=self.device)
         self._traj_target_speed_mps = torch.zeros(self.num_envs, device=self.device)
+        self._traj_amplitude_scales = torch.ones(self.num_envs, 3, device=self.device)
         self._traj_phase_x = torch.zeros(self.num_envs, device=self.device)
         self._traj_phase_y = torch.zeros(self.num_envs, device=self.device)
         retime_nodes = int(self.cfg.trajectory_retime_samples) + 1
@@ -184,7 +175,7 @@ class AUVTrajectoryMixin:
         self._traj_effective_period_s = torch.ones(self.num_envs, device=self.device)
         self._traj_retimed = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         self._traj_curvature_m_inv = torch.zeros(self.num_envs, device=self.device)
-        self._traj_target_orientation_rate_radps = torch.zeros(self.num_envs, device=self.device)
+        self._traj_target_yaw_rate_radps = torch.zeros(self.num_envs, device=self.device)
         self._default_root_state = torch.zeros(self.num_envs, 13, device=self.device)
         self._pool_center_w = torch.zeros(self.num_envs, 3, device=self.device)
 
@@ -194,7 +185,7 @@ class AUVTrajectoryMixin:
         return TrajectoryKinematicLimits(
             max_speed_mps=float(self.cfg.trajectory_max_speed_mps),
             max_acceleration_mps2=float(self.cfg.trajectory_max_acceleration_mps2),
-            max_orientation_rate_radps=float(self.cfg.trajectory_max_orientation_rate_radps),
+            max_yaw_rate_radps=float(self.cfg.trajectory_max_yaw_rate_radps),
             max_jerk_mps3=float(self.cfg.trajectory_max_jerk_mps3),
             retime_samples=int(self.cfg.trajectory_retime_samples),
         )
@@ -203,48 +194,26 @@ class AUVTrajectoryMixin:
         """Return the active trajectory curriculum stage from global policy steps."""
 
         if not self.cfg.trajectory_curriculum:
-            return -1
+            return 0
 
         stage = 0
-        for step_boundary in self.cfg.trajectory_curriculum_stage_steps:
-            if self.common_step_counter >= step_boundary:
+        for start_step in self.cfg.trajectory_curriculum_stage_start_steps[1:]:
+            if self.common_step_counter >= start_step:
                 stage += 1
 
-        return min(stage, len(self.cfg.trajectory_curriculum_amp_scales) - 1)
+        return stage
 
     def _get_trajectory_training_profile(self):
         """Return trajectory type/range settings for the current curriculum stage."""
 
-        if not self.cfg.trajectory_curriculum:
-            return (
-                self.cfg.trajectory_train_types,
-                self.cfg.trajectory_amp_x_range,
-                self.cfg.trajectory_amp_y_range,
-                self.cfg.trajectory_amp_z_range,
-                self.cfg.trajectory_period_range,
-            )
-
         stage = self._get_trajectory_curriculum_stage()
-        stage_types = (
-            self.cfg.trajectory_curriculum_stage_0_types,
-            self.cfg.trajectory_curriculum_stage_1_types,
-            self.cfg.trajectory_curriculum_stage_2_types,
-            self.cfg.trajectory_curriculum_stage_3_types,
-        )[stage]
-        amp_scale = self.cfg.trajectory_curriculum_amp_scales[stage]
-        z_amp_scale = self.cfg.trajectory_curriculum_z_amp_scales[stage]
-        amp_x_range = [self.cfg.trajectory_amp_x_range[0] * amp_scale, self.cfg.trajectory_amp_x_range[1] * amp_scale]
-        amp_y_range = [self.cfg.trajectory_amp_y_range[0] * amp_scale, self.cfg.trajectory_amp_y_range[1] * amp_scale]
-        amp_z_range = [
-            self.cfg.trajectory_amp_z_range[0] * z_amp_scale,
-            self.cfg.trajectory_amp_z_range[1] * z_amp_scale,
-        ]
-        period_range = [
-            self.cfg.trajectory_curriculum_period_min[stage],
-            self.cfg.trajectory_curriculum_period_max[stage],
-        ]
-
-        return stage_types, amp_x_range, amp_y_range, amp_z_range, period_range
+        return (
+            self.cfg.trajectory_curriculum_stage_types[stage],
+            self.cfg.trajectory_curriculum_stage_axes[stage],
+            self.cfg.trajectory_curriculum_stage_wave_counts[stage],
+            self.cfg.trajectory_curriculum_stage_speeds_mps[stage],
+            self.cfg.trajectory_curriculum_stage_amplitude_scales[stage],
+        )
 
     def _initialize_trajectory_reset(self, env_ids: torch.Tensor) -> None:
         count = int(env_ids.numel())
@@ -256,24 +225,8 @@ class AUVTrajectoryMixin:
         self._target_ang_vel_w[env_ids] = 0.0
         self._target_derivative_step[env_ids] = -1
         self._traj_target_speed_mps[env_ids] = 0.0
-
-
-
-    def _apply_speed_controlled_geometry(self, env_ids: torch.Tensor) -> None:
-        trajectory_types = self._traj_type[env_ids]
-        overrides = (
-            (self._traj_amp_y, trajectory_types == LATERAL_SINE, self.cfg.trajectory_lateral_sine_amplitude_m),
-            (self._traj_amp_z, trajectory_types == VERTICAL_SINE, self.cfg.trajectory_vertical_sine_amplitude_m),
-            (self._traj_amp_x, trajectory_types == SPATIAL_HELIX, self.cfg.trajectory_spatial_helix_radius_x_m),
-            (self._traj_amp_y, trajectory_types == SPATIAL_HELIX, self.cfg.trajectory_spatial_helix_radius_y_m),
-            (self._traj_amp_z, trajectory_types == SPATIAL_HELIX, self.cfg.trajectory_spatial_helix_amplitude_z_m),
-        )
-        for target, selected, value in overrides:
-            target[env_ids] = torch.where(
-                selected,
-                torch.full_like(target[env_ids], float(value)),
-                target[env_ids],
-            )
+        self._traj_wave_count[env_ids] = 1
+        self._traj_amplitude_scales[env_ids] = 1.0
 
     def _build_trajectory_tables(
         self,
@@ -282,6 +235,7 @@ class AUVTrajectoryMixin:
         tables = build_retimed_tables(
             self._traj_type[env_ids],
             self._traj_axis[env_ids],
+            self._traj_wave_count[env_ids],
             self._traj_amp_x[env_ids],
             self._traj_amp_y[env_ids],
             self._traj_amp_z[env_ids],
@@ -309,13 +263,14 @@ class AUVTrajectoryMixin:
         env_ids: torch.Tensor,
         tables: RetimedTrajectoryTables,
     ) -> None:
-        if not self.cfg.trajectory_align_heading_with_velocity:
+        if not self.cfg.trajectory_align_yaw_with_horizontal_velocity:
             return
         initial_time = torch.zeros(env_ids.numel(), dtype=torch.float32, device=self.device)
         phase, phase_rate, phase_acceleration = sample_retimed_phase(tables, initial_time)
         _, tangent_velocity_w, _, _ = evaluate_retimed_reference(
             self._traj_type[env_ids],
             self._traj_axis[env_ids],
+            self._traj_wave_count[env_ids],
             self._traj_amp_x[env_ids],
             self._traj_amp_y[env_ids],
             self._traj_amp_z[env_ids],
@@ -328,10 +283,12 @@ class AUVTrajectoryMixin:
             radius_max=float(self.cfg.trajectory_eval_radius_max),
             harmonic_ratio=float(self.cfg.trajectory_random_smooth_harmonic_ratio),
         )
-        self._target_quat_w[env_ids] = quaternion_align_body_x_with_velocity(
-            tangent_velocity_w,
+        trajectory_types = self._traj_type[env_ids]
+        fixed_attitude = trajectory_types == AXIS_SINE
+        self._target_quat_w[env_ids] = quaternion_from_level_heading(
+            horizontal_heading_velocity(tangent_velocity_w, fixed_attitude),
             self._target_quat_w[env_ids],
-            self.cfg.trajectory_heading_min_speed,
+            self.cfg.trajectory_heading_min_horizontal_speed,
         )
         self._previous_target_quat_w[env_ids] = self._target_quat_w[env_ids]
 
@@ -344,7 +301,6 @@ class AUVTrajectoryMixin:
             self._sample_evaluation_trajectory(selected)
         else:
             self._sample_training_trajectory(selected)
-        self._apply_speed_controlled_geometry(selected)
         if self.cfg.trajectory_eval_mode and self.cfg.trajectory_eval_type == RANDOM_SMOOTH:
             amplitudes = torch.stack(
                 (
@@ -400,6 +356,7 @@ class AUVTrajectoryMixin:
         offsets_w, target_lin_vel_w, target_lin_acc_w, curvature = evaluate_retimed_reference(
             self._traj_type[env_ids],
             self._traj_axis[env_ids],
+            self._traj_wave_count[env_ids],
             self._traj_amp_x[env_ids],
             self._traj_amp_y[env_ids],
             self._traj_amp_z[env_ids],
@@ -417,13 +374,17 @@ class AUVTrajectoryMixin:
         self._target_lin_vel_w[env_ids, :] = target_lin_vel_w
         self._target_lin_acc_w[env_ids, :] = target_lin_acc_w
         self._traj_curvature_m_inv[env_ids] = curvature
-        if self.cfg.trajectory_align_heading_with_velocity:
-            heading_velocity_w = target_lin_vel_w.clone()
-            heading_velocity_w[self._traj_type[env_ids] == AXIS_SINE] = 0.0
-            self._target_quat_w[env_ids, :] = quaternion_align_body_x_with_velocity(
+        if self.cfg.trajectory_align_yaw_with_horizontal_velocity:
+            trajectory_types = self._traj_type[env_ids]
+            fixed_attitude = trajectory_types == AXIS_SINE
+            heading_velocity_w = horizontal_heading_velocity(
+                target_lin_vel_w,
+                fixed_attitude,
+            )
+            self._target_quat_w[env_ids, :] = quaternion_from_level_heading(
                 heading_velocity_w,
                 self._target_quat_w[env_ids, :],
-                self.cfg.trajectory_heading_min_speed,
+                self.cfg.trajectory_heading_min_horizontal_speed,
             )
 
         current_step = self.episode_length_buf[env_ids].to(dtype=torch.long)
@@ -437,7 +398,7 @@ class AUVTrajectoryMixin:
             self._target_quat_w[env_ids, :],
             dt_s,
         )
-        angular_velocity = math_utils.quat_apply(
+        angular_velocity = quat_apply_wxyz(
             self._previous_target_quat_w[env_ids, :],
             target_ang_vel_previous_b,
         )
@@ -447,7 +408,7 @@ class AUVTrajectoryMixin:
         self._target_ang_vel_w[env_ids, :] = torch.where(
             has_previous.unsqueeze(-1), angular_velocity, torch.zeros_like(angular_velocity)
         )
-        self._traj_target_orientation_rate_radps[env_ids] = torch.linalg.vector_norm(
+        self._traj_target_yaw_rate_radps[env_ids] = torch.linalg.vector_norm(
             self._target_ang_vel_w[env_ids, :], dim=-1
         )
         self._previous_target_quat_w[env_ids, :] = self._target_quat_w[env_ids, :]
@@ -469,7 +430,7 @@ class AUVTrajectoryMixin:
             "target_acceleration_w": self._target_lin_acc_w,
             "target_jerk_w": self._target_lin_jerk_w,
             "target_curvature_m_inv": self._traj_curvature_m_inv,
-            "target_orientation_rate_radps": self._traj_target_orientation_rate_radps,
+            "target_yaw_rate_radps": self._traj_target_yaw_rate_radps,
             "requested_period_s": self._traj_period,
             "requested_speed_mps": self._traj_target_speed_mps,
             "effective_period_s": self._traj_effective_period_s,

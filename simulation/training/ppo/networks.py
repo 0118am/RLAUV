@@ -18,38 +18,30 @@ from robot.control.trajectory.observation_contract import (
 TRAJECTORY_CRITIC_PRIVILEGED_FIELDS = (
     "true_root_state",
     "water_current_b",
-    "filtered_relative_acceleration_b",
+    "generalized_acceleration_b",
     "effective_linear_damping_ratio",
     "effective_quadratic_damping_ratio",
-    "effective_added_mass_ratio",
+    "effective_fluid_added_mass_ratio",
     "effective_buoyant_volume_ratio",
-    "mass_ratio",
-    "principal_inertia_ratio",
-    "center_of_mass_offset_b",
-    "com_to_cob_offset_b",
     "realized_thruster_force",
     "thruster_force_scale",
+    "common_thruster_force_scale",
     "thruster_parameters",
-    "battery_state",
     "tether_slack_ratio",
 )
 
 CRITIC_PRIVILEGED_FIELD_DIMENSIONS = {
     "true_root_state": 13,
     "water_current_b": 3,
-    "filtered_relative_acceleration_b": 6,
+    "generalized_acceleration_b": 6,
     "effective_linear_damping_ratio": 6,
     "effective_quadratic_damping_ratio": 6,
-    "effective_added_mass_ratio": 6,
+    "effective_fluid_added_mass_ratio": 6,
     "effective_buoyant_volume_ratio": 1,
-    "mass_ratio": 1,
-    "principal_inertia_ratio": 3,
-    "center_of_mass_offset_b": 3,
-    "com_to_cob_offset_b": 3,
     "realized_thruster_force": 8,
     "thruster_force_scale": 8,
-    "thruster_parameters": 6,
-    "battery_state": 2,
+    "common_thruster_force_scale": 1,
+    "thruster_parameters": 4,
     "tether_slack_ratio": 1,
 }
 
@@ -64,6 +56,7 @@ class MlpArchitecture:
     critic_privileged_fields: tuple[str, ...]
     actor_hidden_dims: tuple[int, ...]
     critic_hidden_dims: tuple[int, ...]
+    activation: str
     experiment_name: str
 
     @property
@@ -86,47 +79,47 @@ class MlpArchitecture:
         return self.observation_dim + self.critic_privileged_dim
 
 
-MLP_30D = MlpArchitecture(
-    name="mlp_30d",
+MLP_33D = MlpArchitecture(
+    name="mlp_33d",
     history_steps=0,
     history_fields=(),
     critic_privileged_fields=TRAJECTORY_CRITIC_PRIVILEGED_FIELDS,
     actor_hidden_dims=(512, 256, 128),
     critic_hidden_dims=(512, 256, 128),
+    activation="elu",
     experiment_name="auv_traj_mlp",
 )
 
-MLP_HISTORY_5 = MlpArchitecture(
-    name="mlp_history_5",
-    history_steps=5,
+MLP_HISTORY_8 = MlpArchitecture(
+    name="mlp_history_8",
+    # Eight prior 25 Hz samples cover 320 ms: the measured 50 ms sensor delay
+    # plus more than three 80 ms actuator time constants.
+    history_steps=8,
     history_fields=(
         "position_error_b",
         "linear_velocity_error_b",
         "attitude_error_quat",
         "angular_velocity_b",
-        "applied_action",
+        "processed_command",
     ),
     critic_privileged_fields=TRAJECTORY_CRITIC_PRIVILEGED_FIELDS,
-    actor_hidden_dims=(512, 384, 256, 128),
-    critic_hidden_dims=(512, 384, 256, 128),
-    experiment_name="auv_traj_mlp_history_5",
+    actor_hidden_dims=(512, 256, 128),
+    critic_hidden_dims=(512, 256, 128),
+    activation="elu",
+    experiment_name="auv_traj_mlp_history_8",
 )
 
 MLP_ARCHITECTURES = {
     architecture.name: architecture
-    for architecture in (MLP_30D, MLP_HISTORY_5)
+    for architecture in (MLP_33D, MLP_HISTORY_8)
 }
-
-
-def available_mlp_architectures() -> tuple[str, ...]:
-    return tuple(MLP_ARCHITECTURES)
 
 
 def get_mlp_architecture(name: str) -> MlpArchitecture:
     try:
         return MLP_ARCHITECTURES[name]
     except KeyError as error:
-        available = ", ".join(available_mlp_architectures())
+        available = ", ".join(MLP_ARCHITECTURES)
         raise ValueError(
             f"Unknown MLP architecture {name!r}. Available: {available}."
         ) from error
@@ -198,4 +191,3 @@ def load_evaluation_actor(
     actor = actor.to(device)
     actor.eval()
     return actor
-

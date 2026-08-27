@@ -5,22 +5,6 @@ from __future__ import annotations
 import torch
 
 
-def quat_conjugate_wxyz(q: torch.Tensor) -> torch.Tensor:
-    """Quaternion conjugate for IsaacLab's (w, x, y, z) convention."""
-
-    return torch.cat((q[..., 0:1], -q[..., 1:]), dim=-1)
-
-
-def quat_apply_wxyz(q: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
-    """Rotate vectors with quaternions in IsaacLab's (w, x, y, z) convention."""
-
-    q = q.reshape(-1, 4)
-    v = v.reshape(-1, 3)
-    xyz = q[:, 1:]
-    t = 2.0 * torch.cross(xyz, v, dim=-1)
-    return v + q[:, 0:1] * t + torch.cross(xyz, t, dim=-1)
-
-
 def skew_symmetric(vec: torch.Tensor) -> torch.Tensor:
     """Return S(vec), where S(a) b = a x b."""
 

@@ -1,22 +1,22 @@
 """Deployable T60 trajectory guidance and reference generation."""
 
-from typing import TYPE_CHECKING
-
 from .catalog import (
     AXIS_SINE,
     BREATHING_LOOP,
     CHIRP,
     CIRCLE,
     EVALUATION_TRAJECTORY_NAMES,
-    LATERAL_SINE,
+    LATERAL_WAVE,
     LISSAJOUS,
     RACETRACK,
     RANDOM_SMOOTH,
+    REVERSE_SPATIAL_HELIX,
     SPATIAL_HELIX,
     SPEED_CONTROLLED_TYPES,
+    TRAJECTORY_AXIS_BY_NAME,
     TRAJECTORY_GENERATOR_VERSION,
     TRAJECTORY_TYPE_IDS,
-    VERTICAL_SINE,
+    VERTICAL_WAVE,
     WAVY_LOOP,
 )
 from .observation_contract import (
@@ -28,16 +28,15 @@ from .observation_contract import (
     OBSERVATION_NORMALIZATION_SCALES,
     TRAJECTORY_OBSERVATION,
 )
-if TYPE_CHECKING:
-    from .geometry import evaluate_geometry
-    from .retiming import (
-        RetimedTrajectoryTables,
-        TrajectoryKinematicLimits,
-        build_retimed_tables,
-        evaluate_retimed_reference,
-        sample_retimed_phase,
-        smooth_startup_time,
-    )
+from .geometry import evaluate_geometry
+from .retiming import (
+    RetimedTrajectoryTables,
+    TrajectoryKinematicLimits,
+    build_retimed_tables,
+    evaluate_retimed_reference,
+    sample_retimed_phase,
+    smooth_startup_time,
+)
 
 __all__ = [
     "ACTION_DIM",
@@ -47,7 +46,7 @@ __all__ = [
     "CHIRP",
     "CIRCLE",
     "EVALUATION_TRAJECTORY_NAMES",
-    "LATERAL_SINE",
+    "LATERAL_WAVE",
     "LISSAJOUS",
     "OBSERVATION_CONTRACT_VERSION",
     "OBSERVATION_FIELD_DIMENSIONS",
@@ -55,14 +54,16 @@ __all__ = [
     "OBSERVATION_NORMALIZATION_SCALES",
     "RACETRACK",
     "RANDOM_SMOOTH",
+    "REVERSE_SPATIAL_HELIX",
     "RetimedTrajectoryTables",
     "SPATIAL_HELIX",
     "SPEED_CONTROLLED_TYPES",
+    "TRAJECTORY_AXIS_BY_NAME",
     "TRAJECTORY_OBSERVATION",
     "TRAJECTORY_GENERATOR_VERSION",
     "TRAJECTORY_TYPE_IDS",
     "TrajectoryKinematicLimits",
-    "VERTICAL_SINE",
+    "VERTICAL_WAVE",
     "WAVY_LOOP",
     "build_retimed_tables",
     "evaluate_geometry",
@@ -70,22 +71,3 @@ __all__ = [
     "sample_retimed_phase",
     "smooth_startup_time",
 ]
-
-
-def __getattr__(name: str):
-    if name == "evaluate_geometry":
-        from .geometry import evaluate_geometry
-
-        return evaluate_geometry
-    if name in {
-        "RetimedTrajectoryTables",
-        "TrajectoryKinematicLimits",
-        "build_retimed_tables",
-        "evaluate_retimed_reference",
-        "sample_retimed_phase",
-        "smooth_startup_time",
-    }:
-        from . import retiming
-
-        return getattr(retiming, name)
-    raise AttributeError(name)

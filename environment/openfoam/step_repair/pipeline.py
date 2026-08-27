@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import hashlib
 import json
 import math
 import os
@@ -35,6 +36,14 @@ from environment.openfoam.step_repair.pressure_boundary import (
 )
 from environment.openfoam.step_repair.rotor import _locked_rotor_envelope
 from environment.openfoam.step_repair.validation import _validate_config
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 @dataclass(frozen=True)
 class SelectionPlan:
@@ -260,14 +269,16 @@ def _report_payload(
     audit: dict,
 ) -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": str(source),
+        "source_sha256": _sha256(source),
         "cad_backend": {
             "name": "cadquery-ocp-novtk",
             "ocp_version": ocp_version,
             "module_path": str(DEFAULT_OCP_SITE.resolve()),
         },
         "selection_config": str(config_path),
+        "selection_config_sha256": _sha256(config_path),
         "source_units": "mm",
         "output_units": "mm",
         "output_frame": "body_flu_com",
@@ -288,6 +299,7 @@ def _report_payload(
         "main_buoyancy_material": buoyancy,
         "sealed_pressure_boundary": sealed_boundary,
         "output": str(output),
+        "output_sha256": _sha256(temporary_output),
         "output_size_bytes": temporary_output.stat().st_size,
         "output_bbox_body_mm": _bbox(compound_body),
         "triangulation": {

@@ -1,4 +1,4 @@
-"""Orchestrate hydrodynamic matrix fitting from loaded OpenFOAM cases."""
+"""Load the 24 completed cases and fit three full-response 6x6 matrices."""
 
 from __future__ import annotations
 
@@ -8,175 +8,172 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-from .cycles import OddProjectedCase, odd_project
-from .diagnostics import (
-    _cycle_convergence_diagnostic,
-    _full_model_diagnostics,
-    _passivity_diagnostics,
-    _raw_intercept_diagnostic,
+from environment.openfoam.case_generation.config import campaign_specs, load_config
+
+from .cycles import odd_project
+from .identification import (
+    fit_low_amplitude_added_mass,
+    fit_rotational_coefficients,
+    fit_translational_damping,
+    summarize_steady_cases,
 )
-from .matrix_fit import bootstrap, fit_odd_groups
-from .motion import CaseData, load_case_data
-from .output import load_analysis_config, write_fit_outputs
-from .regression import project_symmetric_psd
+from .motion import CaseData, SteadyCaseData, load_case_data, load_steady_case_data
+from .output import write_fit_outputs
 from .types import FitOptions, HydroFitResult
 
+ANALYSIS_ROOT = Path(__file__).resolve().parent
 
-def _apply_matrix_structure(
-    added_mass: np.ndarray,
-    linear: np.ndarray,
-    quadratic: np.ndarray,
-    options: FitOptions,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    if options.diagonal_only:
-        mask = np.eye(6, dtype=bool)
-        structure = {
-            "name": "diagonal",
-            "assumption": "user-selected model reduction",
-            "allowed_mask": mask.tolist(),
+_GENERALIZED_REFLECTION_PARITY = np.asarray((1, -1, 1, -1, 1, -1))
+_PORT_STARBOARD_MASK = (
+    _GENERALIZED_REFLECTION_PARITY[:, None]
+    == _GENERALIZED_REFLECTION_PARITY[None, :]
+)
+
+
+def _case_summaries(
+    steady_cases: Sequence[SteadyCaseData],
+    oscillatory_cases: Sequence[CaseData],
+) -> list[dict[str, Any]]:
+    records = [
+        {
+            "case_name": case.case_name,
+            "case_dir": case.case_dir,
+            "case_family": case.case_family,
+            "dof": case.dof,
+            "body_velocity_b_m_s": case.body_velocity_b_m_s.tolist(),
+            "settle_end_s": case.settle_end_s,
+            "end_time_s": case.end_time_s,
+            "force_files": list(case.force_series.source_files),
         }
-    elif options.port_starboard_symmetry:
-        # Body-FLU reflection parity for [u,v,w,p,q,r] and [X,Y,Z,K,M,N].
-        parity = np.asarray((1, -1, 1, -1, 1, -1), dtype=int)
-        mask = parity[:, None] == parity[None, :]
-        structure = {
-            "name": "port_starboard_reflection_symmetric",
-            "frame": "body FLU",
-            "generalized_parity": parity.tolist(),
-            "even_block": ["u", "w", "q"],
-            "odd_block": ["v", "p", "r"],
-            "allowed_mask": mask.tolist(),
-        }
-    else:
-        mask = np.ones((6, 6), dtype=bool)
-        structure = {"name": "full", "allowed_mask": mask.tolist()}
-    return (
-        np.where(mask, added_mass, 0.0),
-        np.where(mask, linear, 0.0),
-        np.where(mask, quadratic, 0.0),
-        mask,
-        structure,
-    )
-
-
-def _project_added_mass(
-    added_mass: np.ndarray,
-    mask: np.ndarray,
-    options: FitOptions,
-) -> tuple[np.ndarray, dict[str, Any]]:
-    if options.project_added_mass_psd:
-        projected, diagnostics = project_symmetric_psd(
-            added_mass,
-            options.min_added_mass_eigenvalue,
-        )
-    else:
-        projected = added_mass.copy()
-        diagnostics = {
-            "enabled": False,
-            "raw_asymmetry_frobenius": float(np.linalg.norm(added_mass - added_mass.T)),
-        }
-    # Projection acts on the whole matrix and can repopulate forbidden entries.
-    return np.where(mask, projected, 0.0), diagnostics
-
-
-def _fit_diagnostics(
-    cases: Sequence[CaseData],
-    odd_cases: Sequence[OddProjectedCase],
-    added_mass: np.ndarray,
-    linear: np.ndarray,
-    quadratic: np.ndarray,
-    options: FitOptions,
-    matrix_structure: Mapping[str, Any],
-    fit_by_dof: Mapping[str, Any],
-    projection: Mapping[str, Any],
-) -> dict[str, Any]:
-    return {
-        "matrix_structure": dict(matrix_structure),
-        "fit_by_excited_dof": dict(fit_by_dof),
-        "cycle_convergence_by_case": [
-            _cycle_convergence_diagnostic(item) for item in odd_cases
-        ],
-        "raw_intercept_fits": [_raw_intercept_diagnostic(case) for case in cases],
-        "full_model_case_fits": _full_model_diagnostics(
-            cases,
-            added_mass,
-            linear,
-            quadratic,
-        ),
-        "added_mass_projection": dict(projection),
-        "passivity": _passivity_diagnostics(cases, linear, quadratic, options),
-    }
-
-
-def _case_summaries(cases: Sequence[CaseData]) -> list[dict[str, Any]]:
-    return [
+        for case in steady_cases
+    ]
+    records.extend(
         {
             "case_name": case.motion.case_name,
             "case_dir": case.case_dir,
+            "case_family": case.motion.case_family,
             "dof": case.motion.dof,
             "amplitude_si": case.motion.amplitude_si,
             "omega_rad_s": case.motion.omega_rad_s,
+            "ramp_duration_s": case.motion.ramp_duration_s,
             "settle_cycles": case.motion.settle_cycles,
             "sample_cycles": case.motion.sample_cycles,
             "force_files": list(case.force_series.source_files),
         }
-        for case in cases
+        for case in oscillatory_cases
+    )
+    return sorted(records, key=lambda item: item["case_name"])
+
+
+def fit_case_data(
+    steady_cases: Sequence[SteadyCaseData],
+    oscillatory_cases: Sequence[CaseData],
+    config: Mapping[str, Any],
+    *,
+    options: FitOptions | None = None,
+) -> HydroFitResult:
+    fit_options = options or FitOptions.from_mapping(config["analysis"])
+    if len(steady_cases) != 12:
+        raise ValueError(f"Full-response fit requires 12 steady cases, got {len(steady_cases)}")
+    added_cases = [
+        case for case in oscillatory_cases if case.motion.case_family == "added_mass"
     ]
-
-
-def fit_case_data(cases: Sequence[CaseData], options: FitOptions | None = None) -> HydroFitResult:
-    """Fit all 36 entries of each requested matrix from loaded cases."""
-
-    if not cases:
-        raise ValueError("At least one case is required")
-    fit_options = options or FitOptions()
-    odd_cases = [
-        odd_project(
-            case,
-            fit_options.phase_samples_per_cycle,
-            include_rotation_attitude_term=(
-                fit_options.include_rotation_attitude_term
-                and (case.motion.dof != "p" or fit_options.include_roll_attitude_term)
-            ),
+    rotation_cases = [
+        case
+        for case in oscillatory_cases
+        if case.motion.case_family == "oscillatory_damping"
+    ]
+    if len(added_cases) != 6 or len(rotation_cases) != 6 or len(oscillatory_cases) != 12:
+        raise ValueError(
+            "Full-response fit requires six added-mass and six rotational-damping cases"
         )
-        for case in cases
+    added_odd = [
+        odd_project(case, fit_options.phase_samples_per_cycle)
+        for case in added_cases
     ]
-    groups: dict[int, list[OddProjectedCase]] = {}
-    for item in odd_cases:
-        groups.setdefault(item.dof_index, []).append(item)
-    added_raw, linear, quadratic, fit_diagnostics = fit_odd_groups(
-        groups,
-        fit_options.minimum_samples_per_dof,
+    rotation_odd = [
+        odd_project(case, fit_options.phase_samples_per_cycle)
+        for case in rotation_cases
+    ]
+    reference_length_m = float(config["reference_length_m"])
+    low_amplitude_added_mass, added_diagnostics = fit_low_amplitude_added_mass(
+        added_odd, reference_length_m
     )
-    added_raw, linear, quadratic, mask, matrix_structure = _apply_matrix_structure(
-        added_raw,
-        linear,
-        quadratic,
-        fit_options,
+    steady_summaries = summarize_steady_cases(steady_cases)
+    linear_translation, quadratic_translation, steady_diagnostics = (
+        fit_translational_damping(steady_summaries, reference_length_m)
     )
-    added_mass, projection = _project_added_mass(added_raw, mask, fit_options)
-    diagnostics = _fit_diagnostics(
-        cases,
-        odd_cases,
-        added_mass,
-        linear,
-        quadratic,
-        fit_options,
-        matrix_structure,
-        fit_diagnostics,
-        projection,
+    rotational_added_mass, linear_rotation, quadratic_rotation, rotation_diagnostics = (
+        fit_rotational_coefficients(rotation_odd, reference_length_m)
     )
+    added_mass_raw = low_amplitude_added_mass.copy()
+    for excitation in range(3, 6):
+        added_mass_raw[:, excitation] = rotational_added_mass[:, excitation]
+    added_mass_raw = np.where(_PORT_STARBOARD_MASK, added_mass_raw, 0.0)
+    # Potential-flow added mass obeys reciprocity. Independent column fits do
+    # not satisfy it exactly, so publish their least-squares symmetric average.
+    added_mass = 0.5 * (added_mass_raw + added_mass_raw.T)
+    linear = np.where(
+        _PORT_STARBOARD_MASK,
+        linear_translation + linear_rotation,
+        0.0,
+    )
+    quadratic = np.where(
+        _PORT_STARBOARD_MASK,
+        quadratic_translation + quadratic_rotation,
+        0.0,
+    )
+    added_mass_eigenvalues = np.linalg.eigvalsh(added_mass)
+    linear_symmetric_eigenvalues = np.linalg.eigvalsh(0.5 * (linear + linear.T))
+    diagnostics = {
+        "matrix_structure": {
+            "name": "port_starboard_reflection_symmetric_full_response",
+            "reason": (
+                "each single-axis case contributes all six measured wrench responses; "
+                "reflection-forbidden couplings are zero and allowed off-diagonal "
+                "coefficients retain the CFD fit"
+            ),
+            "generalized_reflection_parity": _GENERALIZED_REFLECTION_PARITY.tolist(),
+            "allowed_mask": _PORT_STARBOARD_MASK.tolist(),
+            "cross_axis_load_normalization": (
+                "moments are divided by reference_length_m before RMS ratios"
+            ),
+            "reference_length_m": reference_length_m,
+        },
+        "low_amplitude_added_mass": added_diagnostics,
+        "steady_translational_damping": steady_diagnostics,
+        "joint_oscillatory_rotational_coefficients": rotation_diagnostics,
+        "added_mass_reciprocity": {
+            "method": "symmetric_average_of_independent_full_response_columns",
+            "raw_asymmetry_frobenius": float(
+                np.linalg.norm(added_mass_raw - added_mass_raw.T)
+            ),
+            "published_eigenvalues": added_mass_eigenvalues.tolist(),
+        },
+        "passivity": {
+            "linear_symmetric_eigenvalues": linear_symmetric_eigenvalues.tolist(),
+            "linear_minimum_symmetric_eigenvalue": float(
+                linear_symmetric_eigenvalues[0]
+            ),
+            "minimum_linear_diagonal": float(np.min(np.diag(linear))),
+            "minimum_quadratic_diagonal": float(np.min(np.diag(quadratic))),
+        },
+    }
     return HydroFitResult(
-        added_raw,
         added_mass,
         linear,
         quadratic,
         diagnostics,
-        bootstrap(groups, fit_options),
-        _case_summaries(cases),
+        _case_summaries(steady_cases, oscillatory_cases),
         fit_options,
     )
 
+
+def _load_case_metadata(path: Path) -> dict[str, Any]:
+    value = json.loads((path / "case.json").read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or value.get("schema_version") != 5:
+        raise ValueError(f"{path / 'case.json'} must use schema_version 5")
+    return value
 
 
 def analyze_cases(
@@ -185,33 +182,38 @@ def analyze_cases(
     output_dir: str | Path | None = None,
     config: str | Path | Mapping[str, Any] | None = None,
 ) -> HydroFitResult:
-    """Load generated cases, fit matrices and optionally write result files."""
-
-    config_data = load_analysis_config(config)
-    analysis_config = config_data.get("analysis", config_data)
-    options = FitOptions.from_mapping(analysis_config)
-    overrides = {
-        key: analysis_config[key]
-        for key in ("settle_cycles", "sample_cycles")
-        if key in analysis_config
-    }
-    cases: list[CaseData] = []
-    for path in case_dirs:
-        root = Path(path)
-        with (root / "motion.json").open("r", encoding="utf-8") as stream:
-            motion_metadata = json.load(stream)
-        kind = str(motion_metadata.get("motion_kind", motion_metadata.get("kind", ""))).lower()
-        dof = motion_metadata.get("dof")
-        if (
-            kind in {"baseline", "rest", "static"}
-            or dof is None
-            or motion_metadata.get("include_in_fit") is False
-        ):
-            continue
-        cases.append(load_case_data(root, config_overrides=overrides))
-    if not cases:
-        raise ValueError("No oscillatory single-DOF cases were supplied (baseline cases are skipped)")
-    result = fit_case_data(cases, options)
+    if config is None:
+        config_data = load_config(ANALYSIS_ROOT.parent / "config.json")
+    elif isinstance(config, Mapping):
+        config_data = dict(config)
+    else:
+        config_data = load_config(Path(config).resolve())
+    paths = sorted({Path(path).resolve() for path in case_dirs})
+    expected_names = {spec.name for spec in campaign_specs(config_data)}
+    actual_names = {path.name for path in paths}
+    if actual_names != expected_names:
+        raise ValueError(
+            "Campaign case set mismatch; "
+            f"missing={sorted(expected_names - actual_names)}, "
+            f"extra={sorted(actual_names - expected_names)}"
+        )
+    steady: list[SteadyCaseData] = []
+    oscillatory: list[CaseData] = []
+    for path in paths:
+        metadata = _load_case_metadata(path)
+        if metadata["case_family"] == "steady_damping":
+            case = load_steady_case_data(path)
+            steady.append(case)
+        elif metadata["case_family"] in {"added_mass", "oscillatory_damping"}:
+            case = load_case_data(path)
+            oscillatory.append(case)
+        else:
+            raise ValueError(f"{path.name}: unsupported case family")
+    result = fit_case_data(
+        steady,
+        oscillatory,
+        config_data,
+    )
     if output_dir is not None:
         write_fit_outputs(result, output_dir)
     return result

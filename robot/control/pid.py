@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import torch
 
+from common.tensor_math import quaternion_to_rotation_vector
 from robot.control.allocation import NonlinearThrusterAllocator
 from robot.control.trajectory.observation_contract import (
     BASE_OBSERVATION_DIM,
@@ -101,18 +102,6 @@ class PIDTrajectoryController:
 
         return self.allocator.allocate(desired_wrench_b)
 
-    @staticmethod
-    def _quaternion_rotation_vector(quaternion_wxyz: torch.Tensor) -> torch.Tensor:
-        quaternion = quaternion_wxyz / torch.linalg.vector_norm(
-            quaternion_wxyz,
-            dim=-1,
-            keepdim=True,
-        ).clamp_min(1.0e-8)
-        vector = quaternion[:, 1:4]
-        vector_norm = torch.linalg.vector_norm(vector, dim=-1, keepdim=True)
-        angle = 2.0 * torch.atan2(vector_norm, quaternion[:, 0:1].clamp_min(0.0))
-        return vector / vector_norm.clamp_min(1.0e-8) * angle
-
     def desired_wrench(
         self,
         observations: Mapping[str, torch.Tensor] | torch.Tensor,
@@ -134,7 +123,7 @@ class PIDTrajectoryController:
             current[:, OBSERVATION_FIELD_SLICES["linear_velocity_error_b"]]
             * self.linear_velocity_scale_mps
         )
-        attitude_error = self._quaternion_rotation_vector(
+        attitude_error = quaternion_to_rotation_vector(
             current[:, OBSERVATION_FIELD_SLICES["attitude_error_quat"]]
         )
         angular_velocity_error = (

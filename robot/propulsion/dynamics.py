@@ -1,8 +1,9 @@
-"""Stateful command transport and first-order thruster response."""
+"""Stateful command conditioning and first-order thruster response."""
 
 from __future__ import annotations
 
 import torch
+
 
 class FirstOrderThrusterResponse:
     """Filter T60 body-force targets with a per-environment motor time constant."""
@@ -88,46 +89,30 @@ class FirstOrderThrusterResponse:
 
 
 class ThrusterCommandProcessor:
-    """Apply command delay, dropouts, rate limits, and quantization."""
+    """Apply dropout, quantization, and saturation without transport delay."""
 
     def __init__(
         self,
         num_envs: int,
         num_thrusters: int,
-        max_delay_steps: int,
         device: torch.device,
     ) -> None:
         self.num_envs = num_envs
         self.num_thrusters = num_thrusters
         self.device = device
-        self.max_delay_steps = max(0, int(max_delay_steps))
-        self.history_length = self.max_delay_steps + 1
-        self.history_index = 0
-        self.history = torch.zeros(
-            (self.history_length, self.num_envs, self.num_thrusters),
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self.rate_limited_state = torch.zeros(
+        self.processed_commands = torch.zeros(
             (self.num_envs, self.num_thrusters),
             dtype=torch.float32,
             device=self.device,
         )
-        self._env_indices = torch.arange(self.num_envs, dtype=torch.long, device=self.device)
 
     def reset(self, env_ids: list | torch.Tensor | None = None) -> None:
         selected = slice(None) if env_ids is None else env_ids
-        self.history[:, selected, :] = 0.0
-        self.rate_limited_state[selected, :] = 0.0
-        if env_ids is None:
-            self.history_index = 0
+        self.processed_commands[selected, :] = 0.0
 
     def process(
         self,
         commands: torch.Tensor,
-        delay_steps: torch.Tensor | int,
-        max_rate: torch.Tensor | float,
-        dt: torch.Tensor | float,
         command_resolution: torch.Tensor | float = 0.0,
         dropout_probability: torch.Tensor | float = 0.0,
         *,
@@ -136,16 +121,6 @@ class ThrusterCommandProcessor:
         expected_shape = (self.num_envs, self.num_thrusters)
         if commands.shape != expected_shape:
             raise ValueError(f"commands must have shape {expected_shape}.")
-        self.history[self.history_index, :, :] = commands
-
-        delay_steps = torch.as_tensor(delay_steps, dtype=torch.long, device=commands.device)
-        if delay_steps.ndim == 0:
-            delay_steps = delay_steps.repeat(self.num_envs)
-        delay_steps = torch.clamp(delay_steps.reshape(self.num_envs), min=0, max=self.max_delay_steps)
-
-        delayed_indices = (self.history_index - delay_steps) % self.history_length
-        delayed_cmd = self.history[delayed_indices, self._env_indices, :]
-        self.history_index = (self.history_index + 1) % self.history_length
 
         dropout_probability = torch.clamp(
             _expand_env_thruster_value(dropout_probability, commands),
@@ -156,25 +131,18 @@ class ThrusterCommandProcessor:
             dropout_enabled = bool(torch.any(dropout_probability > 0.0))
         if dropout_enabled:
             dropout_mask = torch.rand_like(commands) < dropout_probability
-            delayed_cmd = torch.where(dropout_mask, self.rate_limited_state, delayed_cmd)
-
-        rate = _expand_env_thruster_value(max_rate, commands)
-        dt_tensor = torch.as_tensor(dt, dtype=commands.dtype, device=commands.device)
-        if dt_tensor.ndim == 0:
-            dt_tensor = dt_tensor.reshape(1, 1)
-        elif dt_tensor.ndim == 1:
-            dt_tensor = dt_tensor.reshape(self.num_envs, 1)
-        max_delta = torch.clamp(rate, min=0.0) * dt_tensor
-
-        delta = delayed_cmd - self.rate_limited_state
-        limited_cmd = self.rate_limited_state + torch.clamp(delta, -max_delta, max_delta)
-        processed_cmd = torch.where(rate <= 0.0, delayed_cmd, limited_cmd)
+            commands = torch.where(dropout_mask, self.processed_commands, commands)
 
         resolution = torch.clamp(_expand_env_thruster_value(command_resolution, commands), min=0.0)
-        quantized_cmd = torch.round(processed_cmd / torch.clamp(resolution, min=1.0e-6)) * resolution
-        self.rate_limited_state = torch.where(resolution > 0.0, quantized_cmd, processed_cmd)
-        self.rate_limited_state = torch.clamp(self.rate_limited_state, min=-1.0, max=1.0)
-        return self.rate_limited_state
+        quantized_commands = (
+            torch.round(commands / torch.clamp(resolution, min=1.0e-6)) * resolution
+        )
+        self.processed_commands = torch.where(
+            resolution > 0.0,
+            quantized_commands,
+            commands,
+        ).clamp(min=-1.0, max=1.0)
+        return self.processed_commands
 
 
 def _expand_env_thruster_value(value: torch.Tensor | float, reference: torch.Tensor) -> torch.Tensor:

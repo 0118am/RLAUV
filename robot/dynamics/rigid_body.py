@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import torch
 
 
@@ -20,17 +21,10 @@ def inertia_matrix_tensor(
             return tensor.reshape(3, 3)
     if tensor.ndim == 2 and tensor.shape == (3, 3):
         return tensor
-    raise ValueError(f"inertia_diag must be a 3-vector, 3x3 matrix, or flat 9-value matrix, got {tuple(tensor.shape)}.")
-
-
-def inertia_diag_tensor(
-    values,
-    device: torch.device,
-    dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    """Return inertia diagonal from any supported inertia tensor shape."""
-
-    return torch.diagonal(inertia_matrix_tensor(values, device, dtype), dim1=-2, dim2=-1)
+    raise ValueError(
+        "inertia_diag must be a 3-vector, 3x3 matrix, or flat 9-value matrix, "
+        f"got {tuple(tensor.shape)}."
+    )
 
 
 def principal_inertia_and_axes(
@@ -70,74 +64,24 @@ def principal_inertia_and_axes(
     return principal_moments.to(dtype=dtype), axes.to(dtype=dtype)
 
 
-def rotation_matrix_to_quat_wxyz(rotation: torch.Tensor) -> torch.Tensor:
-    """Convert one proper 3x3 rotation matrix to a normalized wxyz quaternion."""
+def validate_inertia_tensor(values) -> None:
+    """Validate a rigid-body inertia from its principal moments."""
 
-    if rotation.shape != (3, 3):
-        raise ValueError(f"rotation must have shape (3, 3), got {tuple(rotation.shape)}.")
-    if not torch.allclose(rotation.T @ rotation, torch.eye(3, dtype=rotation.dtype, device=rotation.device), atol=1.0e-6):
-        raise ValueError("rotation must be orthonormal.")
-    if torch.linalg.det(rotation) <= 0.0:
-        raise ValueError("rotation must be right-handed.")
-
-    # This branch formulation is numerically stable near 180 degree rotations.
-    trace = torch.trace(rotation)
-    if trace > 0.0:
-        scale = 2.0 * torch.sqrt(trace + 1.0)
-        quat = torch.stack((0.25 * scale, (rotation[2, 1] - rotation[1, 2]) / scale,
-                            (rotation[0, 2] - rotation[2, 0]) / scale, (rotation[1, 0] - rotation[0, 1]) / scale))
-    elif rotation[0, 0] > rotation[1, 1] and rotation[0, 0] > rotation[2, 2]:
-        scale = 2.0 * torch.sqrt(1.0 + rotation[0, 0] - rotation[1, 1] - rotation[2, 2])
-        quat = torch.stack(((rotation[2, 1] - rotation[1, 2]) / scale, 0.25 * scale,
-                            (rotation[0, 1] + rotation[1, 0]) / scale, (rotation[0, 2] + rotation[2, 0]) / scale))
-    elif rotation[1, 1] > rotation[2, 2]:
-        scale = 2.0 * torch.sqrt(1.0 + rotation[1, 1] - rotation[0, 0] - rotation[2, 2])
-        quat = torch.stack(((rotation[0, 2] - rotation[2, 0]) / scale, (rotation[0, 1] + rotation[1, 0]) / scale,
-                            0.25 * scale, (rotation[1, 2] + rotation[2, 1]) / scale))
+    array = np.asarray(values, dtype=float)
+    if array.shape == (3,):
+        matrix = np.diag(array)
+    elif array.shape == (9,):
+        matrix = array.reshape(3, 3)
+    elif array.shape == (3, 3):
+        matrix = array
     else:
-        scale = 2.0 * torch.sqrt(1.0 + rotation[2, 2] - rotation[0, 0] - rotation[1, 1])
-        quat = torch.stack(((rotation[1, 0] - rotation[0, 1]) / scale, (rotation[0, 2] + rotation[2, 0]) / scale,
-                            (rotation[1, 2] + rotation[2, 1]) / scale, 0.25 * scale))
-    return quat / torch.linalg.norm(quat)
-
-
-def physx_principal_inertia_and_com_quat_xyzw(
-    values,
-    device: torch.device,
-    dtype: torch.dtype = torch.float32,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Return PhysX principal moments and principal-axes quaternion in xyzw order."""
-
-    moments, axes = principal_inertia_and_axes(values, device, dtype)
-    quat_wxyz = rotation_matrix_to_quat_wxyz(axes)
-    return moments, quat_wxyz[[1, 2, 3, 0]]
-
-
-def rigid_body_mass_matrix(
-    mass_kg: float,
-    inertia_values,
-    device: torch.device,
-    dtype: torch.dtype = torch.float32,
-    center_of_mass_offset_m=None,
-) -> torch.Tensor:
-    """Construct the full 6x6 Fossen/Newton--Euler rigid-body mass matrix.
-
-    The validation vehicle uses a COM-centred body origin, so its translation /
-    rotation blocks are zero and the complete (non-diagonal) CAD inertia tensor
-    forms the lower-right block.  A nonzero offset is rejected rather than
-    quietly constructing a matrix with a convention different from the model.
-    """
-
-    if center_of_mass_offset_m is not None:
-        offset = torch.as_tensor(center_of_mass_offset_m, dtype=dtype, device=device)
-        if not torch.allclose(offset, torch.zeros(3, dtype=dtype, device=device), atol=1.0e-12, rtol=0.0):
-            raise ValueError("rigid_body_mass_matrix requires a COM-centred body frame.")
-    if float(mass_kg) <= 0.0:
-        raise ValueError("mass_kg must be positive.")
-    inertia = inertia_matrix_tensor(inertia_values, device, dtype)
-    if torch.linalg.eigvalsh(inertia).min() <= 0.0:
-        raise ValueError("Inertia tensor must be positive definite.")
-    matrix = torch.zeros((6, 6), dtype=dtype, device=device)
-    matrix[:3, :3] = torch.eye(3, dtype=dtype, device=device) * float(mass_kg)
-    matrix[3:, 3:] = inertia
-    return matrix
+        raise ValueError("inertia must be a 3-vector, 3x3 matrix, or flat 9-value matrix.")
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError("inertia must contain only finite values.")
+    if not np.allclose(matrix, matrix.T, atol=1.0e-8, rtol=0.0):
+        raise ValueError("inertia must be symmetric.")
+    principal = np.linalg.eigvalsh(matrix)
+    if principal[0] <= 0.0:
+        raise ValueError("inertia must be positive definite.")
+    if any(moment > principal.sum() - moment + 1.0e-9 for moment in principal):
+        raise ValueError("inertia must satisfy the rigid-body inertia triangle inequalities.")

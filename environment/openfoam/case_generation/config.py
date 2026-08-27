@@ -1,12 +1,13 @@
-"""Configuration validation and case matrix construction."""
+"""Configuration and construction of the preliminary 24-case CFD campaign."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import json
 import math
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 OPENFOAM_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = OPENFOAM_ROOT / "config.json"
@@ -23,294 +24,370 @@ DOFS = {
 }
 
 
-def _config_finite_vector(value: Any, name: str) -> tuple[float, float, float]:
-    if not isinstance(value, (list, tuple)) or len(value) != 3:
-        raise ValueError(f"{name} must contain exactly three numbers.")
-    if any(type(item) not in (int, float) for item in value):
-        raise ValueError(f"{name} must contain exactly three finite numbers.")
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _positive(value: Any, name: str) -> float:
+    result = float(value)
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError(f"{name} must be positive and finite")
+    return result
+
+
+def _positive_values(value: Any, name: str) -> tuple[float, ...]:
+    if not isinstance(value, list):
+        raise ValueError(f"{name} must be a JSON array")
+    result = tuple(_positive(item, name) for item in value)
+    if not result:
+        raise ValueError(f"{name} must not be empty")
+    return result
+
+
+def _vector(value: Any, size: int, name: str) -> tuple[float, ...]:
+    if not isinstance(value, list) or len(value) != size:
+        raise ValueError(f"{name} must contain {size} numbers")
     result = tuple(float(item) for item in value)
     if not all(math.isfinite(item) for item in result):
-        raise ValueError(f"{name} must contain exactly three finite numbers.")
+        raise ValueError(f"{name} must contain finite numbers")
     return result
+
+
+@lru_cache(maxsize=None)
+def ramped_sinusoid_peak_factors(ramp_cycles: float) -> tuple[float, float, float]:
+    """Peak velocity, acceleration, and jerk factors of the quintic ramp."""
+
+    cycles = _positive(ramp_cycles, "ramp_cycles")
+    phase_span = 2.0 * math.pi * cycles
+    peaks = [1.0, 1.0, 1.0]
+    for index in range(20001):
+        x = index / 20000.0
+        ramp = 10.0 * x**3 - 15.0 * x**4 + 6.0 * x**5
+        ramp_x = 30.0 * x**2 - 60.0 * x**3 + 30.0 * x**4
+        ramp_xx = 60.0 * x - 180.0 * x**2 + 120.0 * x**3
+        ramp_xxx = 60.0 - 360.0 * x + 360.0 * x**2
+        phase = phase_span * x
+        sine = math.sin(phase)
+        cosine = math.cos(phase)
+        values = (
+            ramp * cosine + ramp_x * sine / phase_span,
+            -ramp * sine
+            + 2.0 * ramp_x * cosine / phase_span
+            + ramp_xx * sine / phase_span**2,
+            -ramp * cosine
+            - 3.0 * ramp_x * sine / phase_span
+            + 3.0 * ramp_xx * cosine / phase_span**2
+            + ramp_xxx * sine / phase_span**3,
+        )
+        peaks = [max(previous, abs(value)) for previous, value in zip(peaks, values)]
+    return tuple(peaks)
 
 
 @dataclass(frozen=True)
 class CaseSpec:
     name: str
+    family: str
     dof: str | None
     dof_index: int | None
     kind: str
     axis: tuple[int, int, int]
-    amplitude_m: float | None
-    amplitude_deg: float | None
-    amplitude_rad: float | None
-    frequency_hz: float | None
+    amplitude_m: float | None = None
+    amplitude_deg: float | None = None
+    amplitude_rad: float | None = None
+    frequency_hz: float | None = None
+    velocity_amplitude_m_s: float | None = None
+    rate_amplitude_rad_s: float | None = None
+    body_velocity_b_m_s: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    ramp_cycles: float = 0.0
+    settle_cycles_after_ramp: float = 0.0
+    sample_cycles: float = 0.0
     purpose: str = "identification"
 
-
-def _require_base_fields(cfg: dict[str, Any]) -> None:
-    required = (
-        "openfoam_version",
-        "solver",
-        "geometry_filename",
-        "rho_kg_m3",
-        "nu_m2_s",
-        "centre_of_rotation_m",
-        "translation_amplitudes_m",
-        "rotation_amplitudes_deg",
-        "frequencies_hz",
-        "settle_cycles",
-        "sample_cycles",
-        "steps_per_cycle",
-        "initial_delta_t_fraction",
-        "block_mesh",
-        "snappy",
-        "max_co",
-        "wall_function_blending",
-    )
-    missing = [key for key in required if key not in cfg]
-    if missing:
-        raise ValueError(f"Missing config keys: {', '.join(missing)}")
-    if cfg["openfoam_version"] != "v2512" or cfg["solver"] != "pimpleFoam":
-        raise ValueError("This generator targets OpenCFD OpenFOAM v2512 pimpleFoam only.")
+    @property
+    def is_oscillatory(self) -> bool:
+        return self.kind in {"translation", "rotation"}
 
 
-def _validate_frequencies(cfg: dict[str, Any]) -> None:
-    for key in ("translation_amplitudes_m", "rotation_amplitudes_deg", "frequencies_hz"):
-        if not cfg[key] or any(float(value) <= 0 for value in cfg[key]):
-            raise ValueError(f"{key} must contain positive values.")
-    by_dof = cfg.get("frequencies_hz_by_dof")
-    if by_dof is None:
-        return
-    if not isinstance(by_dof, dict):
-        raise ValueError("frequencies_hz_by_dof must be a JSON object.")
-    unknown = sorted(set(by_dof) - set(DOFS))
-    missing = sorted(set(DOFS) - set(by_dof))
-    if unknown or missing:
-        raise ValueError(
-            "frequencies_hz_by_dof must contain exactly u,v,w,p,q,r; "
-            f"unknown={unknown}, missing={missing}"
-        )
-    for dof, values in by_dof.items():
-        valid = (
-            isinstance(values, list)
-            and bool(values)
-            and all(
-                type(value) in (int, float) and math.isfinite(value) and value > 0.0
-                for value in values
-            )
-        )
-        if not valid:
-            raise ValueError(f"frequencies_hz_by_dof.{dof} must contain positive finite numbers.")
-
-
-def _validate_solver_controls(cfg: dict[str, Any]) -> None:
-    for key in ("rho_kg_m3", "nu_m2_s"):
-        if float(cfg[key]) <= 0:
-            raise ValueError(f"{key} must be positive.")
-    for key in (
-        "steps_per_cycle",
-        "writes_per_cycle",
-        "purge_write",
-        "gamg_update_interval",
-        "pimple_outer_correctors",
-        "force_execute_interval",
-    ):
-        value = cfg.get(key, 4) if key in {"writes_per_cycle", "purge_write"} else cfg[key]
-        if type(value) is not int or value < 1:
-            raise ValueError(f"{key} must be a positive integer.")
-    initial_fraction = cfg["initial_delta_t_fraction"]
-    if (
-        type(initial_fraction) not in (int, float)
-        or not math.isfinite(initial_fraction)
-        or not 0.0 < initial_fraction <= 1.0
-    ):
-        raise ValueError("initial_delta_t_fraction must be finite and lie in (0, 1].")
-    max_co = cfg["max_co"]
-    if type(max_co) not in (int, float) or not math.isfinite(max_co) or max_co <= 0:
-        raise ValueError("max_co must be finite and positive.")
-    if type(cfg["move_mesh_outer_correctors"]) is not bool:
-        raise ValueError("move_mesh_outer_correctors must be a boolean.")
-    if cfg.get("wall_function_blending") not in {"stepwise", "exponential"}:
-        raise ValueError("wall_function_blending must be 'stepwise' or 'exponential'.")
-
-
-def _validate_timeline(cfg: dict[str, Any]) -> None:
-    cfg["background_velocity_m_s"] = list(
-        _config_finite_vector(
-            cfg.get("background_velocity_m_s", (0.0, 0.0, 0.0)),
-            "background_velocity_m_s",
-        )
-    )
-    fixed_start = cfg.get("fixed_analysis_start_s")
-    fixed_end = cfg.get("fixed_end_time_s")
-    if (fixed_start is None) != (fixed_end is None):
-        raise ValueError("fixed_analysis_start_s and fixed_end_time_s must be provided together.")
-    if fixed_start is not None:
-        if any(
-            type(value) not in (int, float) or not math.isfinite(value)
-            for value in (fixed_start, fixed_end)
-        ):
-            raise ValueError("fixed analysis times must be finite numbers.")
-        if float(fixed_start) < 0.0 or float(fixed_end) <= float(fixed_start):
-            raise ValueError("fixed times must satisfy 0 <= fixed_analysis_start_s < fixed_end_time_s.")
-
-    convective_lengths = cfg.get("minimum_settle_convective_lengths", 0.0)
-    if (
-        type(convective_lengths) not in (int, float)
-        or not math.isfinite(convective_lengths)
-        or convective_lengths < 0.0
-    ):
-        raise ValueError("minimum_settle_convective_lengths must be finite and non-negative.")
-    if convective_lengths <= 0.0:
-        return
-    characteristic_length = cfg.get("characteristic_length_m")
-    if (
-        type(characteristic_length) not in (int, float)
-        or not math.isfinite(characteristic_length)
-        or characteristic_length <= 0.0
-    ):
-        raise ValueError(
-            "characteristic_length_m must be finite and positive when a convective settle time is requested."
-        )
-    if abs(float(cfg["background_velocity_m_s"][0])) <= 0.0:
-        raise ValueError(
-            "background_velocity_m_s x component must be nonzero when a convective settle time is requested."
-        )
-
-
-def _validate_block_mesh(cfg: dict[str, Any]) -> None:
-    block_mesh = cfg["block_mesh"]
-    if not isinstance(block_mesh, dict):
-        raise ValueError("block_mesh must be a JSON object.")
-    expected = {"domain_min", "domain_max", "base_cells"}
-    missing = sorted(expected - set(block_mesh))
-    unknown = sorted(set(block_mesh) - expected)
-    if missing:
-        raise ValueError(f"Missing block_mesh keys: {', '.join(missing)}")
-    if unknown:
-        raise ValueError(f"Unknown block_mesh keys: {', '.join(unknown)}")
-    domain_min = _config_finite_vector(block_mesh["domain_min"], "block_mesh.domain_min")
-    domain_max = _config_finite_vector(block_mesh["domain_max"], "block_mesh.domain_max")
-    if any(lower >= upper for lower, upper in zip(domain_min, domain_max, strict=True)):
-        raise ValueError("block_mesh.domain_min must be strictly below domain_max on every axis.")
-    base_cells = block_mesh["base_cells"]
-    if (
-        not isinstance(base_cells, (list, tuple))
-        or len(base_cells) != 3
-        or any(type(value) is not int or value < 1 for value in base_cells)
-    ):
-        raise ValueError("block_mesh.base_cells must contain exactly three positive integers.")
-
-
-def _validate_snappy(cfg: dict[str, Any]) -> None:
-    snappy = cfg["snappy"]
-    if not isinstance(snappy, dict):
-        raise ValueError("snappy must be a JSON object.")
-    expected = {
-        "max_local_cells",
-        "max_global_cells",
-        "add_layers",
-        "n_surface_layers",
-        "relative_sizes",
-        "expansion_ratio",
-        "final_layer_thickness",
-        "min_thickness",
-        "n_grow",
-        "n_buffer_cells_no_extrude",
+def _validate_config(cfg: dict[str, Any]) -> None:
+    required = {
+        "schema_version", "design", "design_notes", "target_translation_speed_limit_m_s",
+        "target_rotation_rate_limit_rad_s",
+        "reference_length_m", "openfoam_version", "solver", "flow_model",
+        "fluid_reference", "geometry_filename", "geometry_path", "force_patches",
+        "rho_kg_m3", "nu_m2_s", "ambient_turbulence_reference",
+        "wall_function_blending", "move_mesh_outer_correctors", "gamg_update_interval",
+        "pimple_outer_correctors", "force_execute_interval", "centre_of_rotation_m",
+        "geometry_audit", "damping_identification",
+        "added_mass_identification", "steps_per_cycle", "initial_delta_t_fraction",
+        "max_co", "writes_per_cycle", "purge_write",
+        "block_mesh", "snappy", "locked_rotor_mesh", "analysis",
     }
-    missing = sorted(expected - set(snappy))
-    unknown = sorted(set(snappy) - expected)
-    if missing:
-        raise ValueError(f"Missing snappy keys: {', '.join(missing)}")
-    if unknown:
-        raise ValueError(f"Unknown snappy keys: {', '.join(unknown)}")
-    for key in ("max_local_cells", "max_global_cells"):
-        if type(snappy[key]) is not int or snappy[key] < 1:
-            raise ValueError(f"snappy.{key} must be a positive integer.")
-    if snappy["max_global_cells"] < snappy["max_local_cells"]:
-        raise ValueError("snappy.max_global_cells must be at least max_local_cells.")
-    for key in ("add_layers", "relative_sizes"):
-        if type(snappy[key]) is not bool:
-            raise ValueError(f"snappy.{key} must be a boolean.")
-    for key in ("n_surface_layers", "n_grow", "n_buffer_cells_no_extrude"):
-        if type(snappy[key]) is not int or snappy[key] < 0:
-            raise ValueError(f"snappy.{key} must be a non-negative integer.")
-    if snappy["add_layers"] and snappy["n_surface_layers"] < 1:
-        raise ValueError("snappy.n_surface_layers must be positive when layers are enabled.")
-    for key in ("expansion_ratio", "final_layer_thickness", "min_thickness"):
-        value = snappy[key]
-        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-            raise ValueError(f"snappy.{key} must be finite and positive.")
-    if float(snappy["expansion_ratio"]) < 1.0:
-        raise ValueError("snappy.expansion_ratio must be at least 1.")
+    missing = sorted(required - set(cfg))
+    extra = sorted(set(cfg) - required)
+    if missing or extra:
+        raise ValueError(f"Config keys differ from schema 5; missing={missing}, extra={extra}")
+    if cfg["schema_version"] != 5 or cfg["design"] != "full_response_24_case":
+        raise ValueError("Only schema 5 full_response_24_case is supported")
+    if cfg["openfoam_version"] != "v2512" or cfg["solver"] != "pimpleFoam":
+        raise ValueError("The campaign targets OpenCFD v2512 pimpleFoam")
+    if cfg["flow_model"] != "single_phase_kOmegaSST_wall_function":
+        raise ValueError("The campaign uses fully turbulent kOmegaSST wall functions")
+    if cfg["force_patches"] != ["auv"]:
+        raise ValueError("The no-layer mesh must use the single wall patch ['auv']")
+    if Path(str(cfg["geometry_filename"])).suffix.lower() != ".obj":
+        raise ValueError("geometry_filename must be an OBJ")
+    if Path(str(cfg["geometry_path"])).suffix.lower() != ".obj":
+        raise ValueError("geometry_path must be an OBJ")
+    if any(abs(value) > 1.0e-12 for value in _vector(
+        cfg["centre_of_rotation_m"], 3, "centre_of_rotation_m"
+    )):
+        raise ValueError("centre_of_rotation_m must be the body-FLU COM origin")
 
-
-def _validate_locked_rotor_mesh(cfg: dict[str, Any]) -> None:
-    locked_mesh = cfg.get("locked_rotor_mesh", {})
-    if not locked_mesh.get("enabled"):
-        return
-    for key in (
-        "rotor_radius_m",
-        "rotor_axial_length_m",
-        "shaft_radius_m",
-        "motor_radius_m",
-        "motor_upstream_overlap_m",
-        "near_field_radius_m",
+    translation_limit = _positive(
+        cfg["target_translation_speed_limit_m_s"],
+        "target_translation_speed_limit_m_s",
+    )
+    rotation_limit = _positive(
+        cfg["target_rotation_rate_limit_rad_s"], "target_rotation_rate_limit_rad_s"
+    )
+    for name in (
+        "rho_kg_m3", "nu_m2_s", "reference_length_m", "max_co",
     ):
-        value = locked_mesh.get(key)
-        if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-            raise ValueError(f"locked_rotor_mesh.{key} must be finite and positive.")
-    for key in ("rotor_level", "shaft_level", "motor_level", "near_field_level"):
-        value = locked_mesh.get(key)
-        if type(value) is not int or value < 1:
-            raise ValueError(f"locked_rotor_mesh.{key} must be a positive integer.")
+        _positive(cfg[name], name)
+
+    turbulence = cfg["ambient_turbulence_reference"]
+    if not isinstance(turbulence, dict) or set(turbulence) != {
+        "reference_speed_m_s", "turbulence_intensity_percent",
+        "turbulence_length_scale_m",
+    }:
+        raise ValueError("ambient_turbulence_reference has unexpected keys")
+    for name, value in turbulence.items():
+        _positive(value, f"ambient_turbulence_reference.{name}")
+
+    damping = cfg["damping_identification"]
+    speeds = _positive_values(
+        damping["translation_speeds_m_s"],
+        "damping_identification.translation_speeds_m_s",
+    )
+    rates = _positive_values(
+        damping["rotation_rate_amplitudes_rad_s"],
+        "damping_identification.rotation_rate_amplitudes_rad_s",
+    )
+    if len(speeds) != 2 or len(set(speeds)) != 2:
+        raise ValueError("Exactly two distinct steady speeds are required for DL and DQ")
+    if len(rates) != 2 or len(set(rates)) != 2:
+        raise ValueError("Exactly two distinct rotation-rate amplitudes are required")
+    if max(speeds) > translation_limit or max(rates) > rotation_limit:
+        raise ValueError("Damping cases exceed the target RL velocity envelope")
+    rotation_frequency = _positive(
+        damping["rotation_frequency_hz"],
+        "damping_identification.rotation_frequency_hz",
+    )
+    maximum_angle = max(rates) / (2.0 * math.pi * rotation_frequency)
+    if math.degrees(maximum_angle) > _positive(
+        damping["maximum_rotation_angle_deg"],
+        "damping_identification.maximum_rotation_angle_deg",
+    ):
+        raise ValueError("Rotational damping motion exceeds maximum_rotation_angle_deg")
+    for name in (
+        "steady_settle_body_lengths", "steady_sample_body_lengths",
+        "steady_max_delta_t_s", "ramp_cycles", "settle_cycles_after_ramp",
+        "sample_cycles",
+    ):
+        _positive(damping[name], f"damping_identification.{name}")
+    if int(damping["steady_steps_per_body_length"]) < 1:
+        raise ValueError("steady_steps_per_body_length must be positive")
+
+    added = cfg["added_mass_identification"]
+    frequency = _positive(added["frequency_hz"], "added_mass_identification.frequency_hz")
+    translation_peak = _positive(
+        added["translation_velocity_amplitude_m_s"],
+        "added_mass_identification.translation_velocity_amplitude_m_s",
+    )
+    rotation_peak = _positive(
+        added["rotation_rate_amplitude_rad_s"],
+        "added_mass_identification.rotation_rate_amplitude_rad_s",
+    )
+    if translation_peak >= translation_limit or rotation_peak >= rotation_limit:
+        raise ValueError("Added-mass excitation must remain below the RL velocity envelope")
+    if translation_peak / (2.0 * math.pi * frequency) > _positive(
+        added["max_translation_displacement_m"],
+        "added_mass_identification.max_translation_displacement_m",
+    ):
+        raise ValueError("Added-mass translation exceeds its displacement limit")
+    if math.degrees(rotation_peak / (2.0 * math.pi * frequency)) > _positive(
+        added["max_rotation_angle_deg"],
+        "added_mass_identification.max_rotation_angle_deg",
+    ):
+        raise ValueError("Added-mass rotation exceeds its angle limit")
+    for name in ("ramp_cycles", "settle_cycles_after_ramp", "sample_cycles"):
+        _positive(added[name], f"added_mass_identification.{name}")
+
+    for name in (
+        "steps_per_cycle", "writes_per_cycle", "purge_write", "gamg_update_interval",
+        "pimple_outer_correctors", "force_execute_interval",
+    ):
+        if type(cfg[name]) is not int or cfg[name] < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if not 0.0 < float(cfg["initial_delta_t_fraction"]) <= 1.0:
+        raise ValueError("initial_delta_t_fraction must lie in (0, 1]")
+    if cfg["wall_function_blending"] not in {"stepwise", "exponential"}:
+        raise ValueError("wall_function_blending must be stepwise or exponential")
+
+    block = cfg["block_mesh"]
+    lower = _vector(block["domain_min"], 3, "block_mesh.domain_min")
+    upper = _vector(block["domain_max"], 3, "block_mesh.domain_max")
+    if any(first >= second for first, second in zip(lower, upper)):
+        raise ValueError("block_mesh bounds must be ordered")
+    cells = block["base_cells"]
+    if not isinstance(cells, list) or len(cells) != 3 or any(
+        type(value) is not int or value < 1 for value in cells
+    ):
+        raise ValueError("block_mesh.base_cells must contain three positive integers")
+    snappy = cfg["snappy"]
+    if not isinstance(snappy, dict) or set(snappy) != {
+        "max_local_cells", "max_global_cells", "surface_level", "near_body_level"
+    }:
+        raise ValueError("snappy has unexpected keys")
+    if any(type(value) is not int or value < 1 for value in snappy.values()):
+        raise ValueError("snappy values must be positive integers")
+
+    rotor = cfg["locked_rotor_mesh"]
+    if rotor.get("enabled") is not True:
+        raise ValueError("locked_rotor_mesh.enabled must be true")
+    for name in ("rotor_level", "shaft_level", "motor_level", "near_field_level"):
+        if type(rotor[name]) is not int or rotor[name] < 1:
+            raise ValueError(f"locked_rotor_mesh.{name} must be a positive integer")
+    for name in (
+        "rotor_radius_m", "rotor_axial_length_m", "shaft_radius_m",
+        "motor_radius_m", "motor_upstream_overlap_m", "near_field_radius_m",
+    ):
+        _positive(rotor[name], f"locked_rotor_mesh.{name}")
+
+    analysis = cfg["analysis"]
+    if not isinstance(analysis, dict) or set(analysis) != {"phase_samples_per_cycle"}:
+        raise ValueError("analysis has unexpected keys")
+    phase_samples = analysis["phase_samples_per_cycle"]
+    if type(phase_samples) is not int or phase_samples < 8 or phase_samples % 2:
+        raise ValueError("analysis.phase_samples_per_cycle must be an even integer >= 8")
+
+
+def load_config_with_sources(path: Path) -> tuple[dict[str, Any], tuple[Path, ...]]:
+    source = path.resolve()
+    with source.open(encoding="utf-8") as stream:
+        cfg = json.load(stream, object_pairs_hook=_unique_json_object)
+    if not isinstance(cfg, dict):
+        raise ValueError(f"{source} must contain a JSON object")
+    _validate_config(cfg)
+    return cfg, (source,)
 
 
 def load_config(path: Path) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as stream:
-        cfg = json.load(stream)
-    cfg.setdefault("move_mesh_outer_correctors", True)
-    cfg.setdefault("gamg_update_interval", 1)
-    cfg.setdefault("pimple_outer_correctors", 2)
-    cfg.setdefault("force_execute_interval", 1)
-    _require_base_fields(cfg)
-    if len(cfg["centre_of_rotation_m"]) != 3:
-        raise ValueError("centre_of_rotation_m must contain three values.")
-    _validate_frequencies(cfg)
-    _validate_solver_controls(cfg)
-    _validate_timeline(cfg)
-    _validate_block_mesh(cfg)
-    _validate_snappy(cfg)
-    _validate_locked_rotor_mesh(cfg)
-    return cfg
+    return load_config_with_sources(path)[0]
 
 
 def number_token(value: float, digits: int) -> str:
     return f"{value:.{digits}f}".replace("-", "m").replace(".", "p")
 
 
-def motion_specs(cfg: dict[str, Any]) -> list[CaseSpec]:
-    specs: list[CaseSpec] = []
-    for dof, (index, kind, axis) in DOFS.items():
-        amplitudes: Iterable[float]
-        amplitudes = cfg["translation_amplitudes_m"] if kind == "translation" else cfg["rotation_amplitudes_deg"]
-        frequencies = cfg.get("frequencies_hz_by_dof", {}).get(
-            dof, cfg["frequencies_hz"]
+def _oscillation_spec(
+    *, dof: str, family: str, peak: float, frequency: float,
+    ramp_cycles: float, settle_cycles: float, sample_cycles: float,
+) -> CaseSpec:
+    index, kind, axis = DOFS[dof]
+    amplitude = peak / (2.0 * math.pi * frequency)
+    unit = "mps" if kind == "translation" else "radps"
+    label = "vel" if kind == "translation" else "rate"
+    common = dict(
+        name=f"{family}_{dof}_{label}{number_token(peak, 3)}{unit}_f{number_token(frequency, 3)}hz",
+        family=family,
+        dof=dof,
+        dof_index=index,
+        kind=kind,
+        axis=axis,
+        frequency_hz=frequency,
+        ramp_cycles=ramp_cycles,
+        settle_cycles_after_ramp=settle_cycles,
+        sample_cycles=sample_cycles,
+    )
+    if kind == "translation":
+        return CaseSpec(
+            **common, amplitude_m=amplitude, velocity_amplitude_m_s=peak
         )
-        for amplitude in amplitudes:
-            for frequency in frequencies:
-                amp = float(amplitude)
-                freq = float(frequency)
-                if kind == "translation":
-                    name = f"{dof}_amp{number_token(amp, 3)}m_f{number_token(freq, 2)}hz"
-                    amp_m, amp_deg, amp_rad = amp, None, None
-                else:
-                    name = f"{dof}_amp{number_token(amp, 1)}deg_f{number_token(freq, 2)}hz"
-                    amp_m, amp_deg, amp_rad = None, amp, math.radians(amp)
-                specs.append(CaseSpec(name, dof, index, kind, axis, amp_m, amp_deg, amp_rad, freq))
+    return CaseSpec(
+        **common,
+        amplitude_deg=math.degrees(amplitude),
+        amplitude_rad=amplitude,
+        rate_amplitude_rad_s=peak,
+    )
+
+
+def campaign_specs(cfg: dict[str, Any]) -> list[CaseSpec]:
+    """Return 12 steady, 6 rotational-damping, and 6 added-mass cases."""
+
+    specs: list[CaseSpec] = []
+    damping = cfg["damping_identification"]
+    for dof in ("u", "v", "w"):
+        index, _, axis = DOFS[dof]
+        for speed in damping["translation_speeds_m_s"]:
+            for sign, label in ((1.0, "pos"), (-1.0, "neg")):
+                value = sign * float(speed)
+                specs.append(
+                    CaseSpec(
+                        name=f"steady_damping_{dof}_{label}_{number_token(float(speed), 3)}mps",
+                        family="steady_damping",
+                        dof=dof,
+                        dof_index=index,
+                        kind="steady_translation",
+                        axis=axis,
+                        body_velocity_b_m_s=tuple(value * component for component in axis),
+                    )
+                )
+
+    for dof in ("p", "q", "r"):
+        for rate in damping["rotation_rate_amplitudes_rad_s"]:
+            specs.append(
+                _oscillation_spec(
+                    dof=dof,
+                    family="oscillatory_damping",
+                    peak=float(rate),
+                    frequency=float(damping["rotation_frequency_hz"]),
+                    ramp_cycles=float(damping["ramp_cycles"]),
+                    settle_cycles=float(damping["settle_cycles_after_ramp"]),
+                    sample_cycles=float(damping["sample_cycles"]),
+                )
+            )
+
+    added = cfg["added_mass_identification"]
+    frequency = float(added["frequency_hz"])
+    for dof, (_, kind, _) in DOFS.items():
+        peak = float(
+            added["translation_velocity_amplitude_m_s"]
+            if kind == "translation"
+            else added["rotation_rate_amplitude_rad_s"]
+        )
+        specs.append(
+            _oscillation_spec(
+                dof=dof,
+                family="added_mass",
+                peak=peak,
+                frequency=frequency,
+                ramp_cycles=float(added["ramp_cycles"]),
+                settle_cycles=float(added["settle_cycles_after_ramp"]),
+                sample_cycles=float(added["sample_cycles"]),
+            )
+        )
+    if len(specs) != 24 or len({spec.name for spec in specs}) != 24:
+        raise RuntimeError("The schema-5 design must produce exactly 24 unique cases")
     return specs
 
 
 def stationary_spec(name: str, purpose: str) -> CaseSpec:
-    return CaseSpec(name, None, None, "baseline", (0, 0, 0), None, None, None, None, purpose)
+    return CaseSpec(
+        name, "shared_mesh", None, None, "stationary", (0, 0, 0), purpose=purpose
+    )

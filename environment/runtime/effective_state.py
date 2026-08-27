@@ -35,7 +35,7 @@ class EffectiveHydrodynamicState:
     relative_velocity_b: torch.Tensor
     linear_damping: torch.Tensor
     quadratic_damping: torch.Tensor
-    added_mass: torch.Tensor
+    fluid_added_mass: torch.Tensor
     buoyancy_scale: torch.Tensor
     thruster_scale: torch.Tensor
 

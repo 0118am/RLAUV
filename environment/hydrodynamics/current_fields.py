@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import torch
+import torch.nn.functional as functional
 
 
 def calculate_periodic_water_current(
@@ -70,45 +71,22 @@ def calculate_trilinear_current_field(
             f"got {tuple(values.shape)}."
         )
 
-    ix0, ix1, fx = _axis_indices_and_fraction(positions[:, 0], bounds_tensor[0], bounds_tensor[1], nx)
-    iy0, iy1, fy = _axis_indices_and_fraction(positions[:, 1], bounds_tensor[2], bounds_tensor[3], ny)
-    iz0, iz1, fz = _axis_indices_and_fraction(positions[:, 2], bounds_tensor[4], bounds_tensor[5], nz)
-
-    c000 = values[ix0, iy0, iz0]
-    c100 = values[ix1, iy0, iz0]
-    c010 = values[ix0, iy1, iz0]
-    c110 = values[ix1, iy1, iz0]
-    c001 = values[ix0, iy0, iz1]
-    c101 = values[ix1, iy0, iz1]
-    c011 = values[ix0, iy1, iz1]
-    c111 = values[ix1, iy1, iz1]
-
-    fx = fx.unsqueeze(-1)
-    fy = fy.unsqueeze(-1)
-    fz = fz.unsqueeze(-1)
-    c00 = c000 * (1.0 - fx) + c100 * fx
-    c10 = c010 * (1.0 - fx) + c110 * fx
-    c01 = c001 * (1.0 - fx) + c101 * fx
-    c11 = c011 * (1.0 - fx) + c111 * fx
-    c0 = c00 * (1.0 - fy) + c10 * fy
-    c1 = c01 * (1.0 - fy) + c11 * fy
-    return c0 * (1.0 - fz) + c1 * fz
-
-
-def _axis_indices_and_fraction(
-    position: torch.Tensor,
-    lower: torch.Tensor,
-    upper: torch.Tensor,
-    count: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    if count == 1:
-        zeros_i = torch.zeros_like(position, dtype=torch.long)
-        zeros_f = torch.zeros_like(position)
-        return zeros_i, zeros_i, zeros_f
-
-    normalized = torch.clamp((position - lower) / (upper - lower), min=0.0, max=1.0)
-    grid_coordinate = normalized * float(count - 1)
-    lower_index = torch.floor(grid_coordinate).to(dtype=torch.long)
-    upper_index = torch.clamp(lower_index + 1, max=count - 1)
-    fraction = grid_coordinate - lower_index.to(dtype=position.dtype)
-    return lower_index, upper_index, fraction
+    coordinates = torch.stack(
+        (
+            2.0 * (positions[:, 0] - bounds_tensor[0]) / (bounds_tensor[1] - bounds_tensor[0]) - 1.0,
+            2.0 * (positions[:, 1] - bounds_tensor[2]) / (bounds_tensor[3] - bounds_tensor[2]) - 1.0,
+            2.0 * (positions[:, 2] - bounds_tensor[4]) / (bounds_tensor[5] - bounds_tensor[4]) - 1.0,
+        ),
+        dim=-1,
+    ).clamp(-1.0, 1.0)
+    # grid_sample expects (N, C, D, H, W) and xyz-normalized query points.
+    field = values.permute(3, 2, 1, 0).unsqueeze(0)
+    query = coordinates.reshape(1, -1, 1, 1, 3)
+    sampled = functional.grid_sample(
+        field,
+        query,
+        mode="bilinear",
+        padding_mode="border",
+        align_corners=True,
+    )
+    return sampled[0, :, :, 0, 0].transpose(0, 1)

@@ -6,6 +6,8 @@ import math
 import re
 from collections.abc import Sequence
 
+from simulation.domain_randomization import disturbance_stage_count
+
 
 DEFAULT_EVALUATION_DURATION_S = 32.0
 DEFAULT_RANDOM_CURVE_COUNT = 8
@@ -28,43 +30,59 @@ def format_evaluation_token(value: float) -> str:
     return f"{value:.3g}".replace("-", "m").replace(".", "p")
 
 
-def validate_evaluation_parameters(
-    *,
-    duration_s: float,
-    current_w: Sequence[float] | None = None,
-    current_variation_std: float = 0.0,
-    current_tau: float = 12.0,
-    damping_scale: float = 1.0,
-    thruster_scale: float = 1.0,
-    thruster_tau_scale: float = 1.0,
-    num_envs: int | None = None,
-    random_curve_count: int = DEFAULT_RANDOM_CURVE_COUNT,
-) -> None:
-    """Reject non-finite or physically invalid evaluation requests early."""
+def _scale_coefficients(values, scale: float) -> list:
+    return [
+        [float(item) * scale for item in row]
+        if isinstance(row, (list, tuple))
+        else float(row) * scale
+        for row in values
+    ]
 
-    duration = float(duration_s)
-    if not math.isfinite(duration) or duration <= 0.0:
-        raise ValueError("Evaluation duration must be finite and positive.")
-    if current_w is not None:
-        if len(current_w) != 3 or not all(math.isfinite(float(value)) for value in current_w):
-            raise ValueError("eval_current must contain exactly three finite world-frame components.")
-    variation = float(current_variation_std)
-    if not math.isfinite(variation) or variation < 0.0:
-        raise ValueError("eval_current_variation_std must be finite and non-negative.")
-    positive_values = {
-        "eval_current_tau": current_tau,
-        "eval_damping_scale": damping_scale,
-        "eval_thruster_scale": thruster_scale,
-        "eval_thruster_tau_scale": thruster_tau_scale,
-    }
-    for name, raw_value in positive_values.items():
-        value = float(raw_value)
-        if not math.isfinite(value) or value <= 0.0:
-            raise ValueError(f"{name} must be finite and positive.")
-    if num_envs is not None and (int(num_envs) != num_envs or int(num_envs) <= 0):
-        raise ValueError("num_envs must be a positive integer when provided.")
-    if int(random_curve_count) != random_curve_count or int(random_curve_count) <= 0:
-        raise ValueError("random_curve_count must be a positive integer.")
+
+def apply_evaluation_physics_overlay(cfg) -> None:
+    """Apply CLI-selected evaluation changes after profile and DR resolution."""
+
+    overlay = dict(cfg.evaluation_physics_overlay or {})
+    damping_scale = float(overlay.get("damping_scale", 1.0))
+    cfg.linear_damping = _scale_coefficients(cfg.linear_damping, damping_scale)
+    cfg.quadratic_damping = _scale_coefficients(cfg.quadratic_damping, damping_scale)
+    cfg.dyn_time_constant = float(cfg.dyn_time_constant) * float(
+        overlay.get("thruster_tau_scale", 1.0)
+    )
+
+    current_override = "water_current_w" in overlay or bool(overlay.get("smooth_current", False))
+    if current_override:
+        cfg.water_current_w = [
+            float(value) for value in overlay.get("water_current_w", cfg.water_current_w)
+        ]
+        variation_std = float(overlay.get("current_variation_std", 0.0))
+        current_tau = float(overlay.get("current_tau", DEFAULT_CURRENT_TAU_S))
+        cfg.evaluation_current_override = True
+        cfg.evaluation_current_variation_std = variation_std
+        cfg.evaluation_current_tau = current_tau
+        if bool(overlay.get("smooth_current", False)) or variation_std > 0.0:
+            cfg.domain_randomization.use_custom_randomization = True
+            cfg.domain_randomization.water_current_smooth = True
+            stage_count = disturbance_stage_count(cfg.domain_randomization)
+            cfg.domain_randomization.water_current_variation_std_by_stage = [
+                variation_std
+            ] * stage_count
+            horizontal_max = math.hypot(cfg.water_current_w[0], cfg.water_current_w[1])
+            vertical_max = abs(cfg.water_current_w[2])
+            cfg.domain_randomization.water_current_max_by_stage = [
+                horizontal_max
+            ] * stage_count
+            cfg.domain_randomization.water_current_vertical_max_by_stage = [
+                vertical_max
+            ] * stage_count
+            cfg.domain_randomization.water_current_tau_range = [current_tau, current_tau]
+            cfg.eval_domain_randomization = True
+            if bool(overlay.get("current_feature_only", False)):
+                cfg.domain_randomization.enabled_features = ["current"]
+
+    if "thruster_force_scale" in overlay:
+        cfg.evaluation_thruster_force_scale_override = True
+        cfg.evaluation_thruster_force_scale = float(overlay["thruster_force_scale"])
 
 
 def resolve_positive_scalar_or_range(

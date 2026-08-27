@@ -4,6 +4,37 @@ from __future__ import annotations
 
 import torch
 
+from common.tensor_math import (
+    quat_conjugate_wxyz,
+    quat_multiply_wxyz,
+    quaternion_to_rotation_vector,
+)
+
+
+def horizontal_heading_velocity(
+    velocity_w: torch.Tensor,
+    fixed_attitude: torch.Tensor,
+) -> torch.Tensor:
+    """Return the horizontal velocity used by the level-heading command.
+
+    A reciprocating line has no continuous forward-facing attitude at its
+    zero-speed turnaround: its tangent reverses by 180 degrees.  Those tasks
+    therefore retain a fixed level heading instead of turning the vehicle
+    around at every half-cycle. All other tasks use only the horizontal
+    velocity projection; vertical motion is handled by heave while commanded
+    roll and pitch remain zero.
+    """
+
+    horizontal = torch.stack(
+        (velocity_w[..., 0], velocity_w[..., 1], torch.zeros_like(velocity_w[..., 2])),
+        dim=-1,
+    )
+    return torch.where(
+        fixed_attitude.unsqueeze(-1),
+        torch.zeros_like(horizontal),
+        horizontal,
+    )
+
 
 def root_state_at_tracking_target(
     root_state_w: torch.Tensor,
@@ -41,52 +72,68 @@ def root_state_at_tracking_target(
     return aligned_state
 
 
-def quaternion_align_body_x_with_velocity(
-    velocity_w: torch.Tensor,
+def quaternion_from_level_heading(
+    horizontal_velocity_w: torch.Tensor,
     previous_quaternion_wxyz: torch.Tensor,
-    min_speed: float = 1.0e-3,
+    min_horizontal_speed: float = 1.0e-3,
 ) -> torch.Tensor:
-    """Return a world quaternion whose body ``+X`` axis follows ``velocity_w``.
+    """Return a yaw-only world quaternion from horizontal velocity.
 
-    The quaternion uses Isaac's scalar-first ``(w, x, y, z)`` convention. Roll
-    is fixed to zero; yaw and pitch align the body-forward axis with the full
-    three-dimensional velocity vector. At speeds where direction is undefined,
-    the previous command is retained. Quaternion signs are chosen to stay in
-    the same hemisphere as the previous command, avoiding observation jumps at
-    the ``+pi/-pi`` yaw boundary.
+    The quaternion uses Isaac's scalar-first ``(w, x, y, z)`` convention and
+    always commands zero roll and pitch. At horizontal speeds where heading is
+    undefined, the previous yaw is retained after explicitly projecting it
+    onto a level attitude. Quaternion signs stay in the same hemisphere as the
+    previous command, avoiding observation jumps at the ``+pi/-pi`` yaw
+    boundary.
     """
 
-    horizontal_speed = torch.linalg.vector_norm(velocity_w[..., :2], dim=-1)
-    speed = torch.linalg.vector_norm(velocity_w, dim=-1)
-    yaw = torch.atan2(velocity_w[..., 1], velocity_w[..., 0])
-    pitch = -torch.atan2(velocity_w[..., 2], horizontal_speed)
+    horizontal_speed = torch.linalg.vector_norm(horizontal_velocity_w[..., :2], dim=-1)
 
-    half_yaw = 0.5 * yaw
-    half_pitch = 0.5 * pitch
-    cos_yaw = torch.cos(half_yaw)
-    sin_yaw = torch.sin(half_yaw)
-    cos_pitch = torch.cos(half_pitch)
-    sin_pitch = torch.sin(half_pitch)
-
-    # q = q_yaw * q_pitch, with roll fixed to zero.
-    candidate = torch.stack(
+    previous_w, previous_x, previous_y, previous_z = previous_quaternion_wxyz.unbind(
+        dim=-1
+    )
+    previous_yaw = torch.atan2(
+        2.0 * (previous_w * previous_z + previous_x * previous_y),
+        1.0 - 2.0 * (previous_y.square() + previous_z.square()),
+    )
+    previous_half_yaw = 0.5 * previous_yaw
+    previous_level = torch.stack(
         (
-            cos_yaw * cos_pitch,
-            -sin_yaw * sin_pitch,
-            cos_yaw * sin_pitch,
-            sin_yaw * cos_pitch,
+            torch.cos(previous_half_yaw),
+            torch.zeros_like(previous_half_yaw),
+            torch.zeros_like(previous_half_yaw),
+            torch.sin(previous_half_yaw),
         ),
         dim=-1,
     )
+    previous_level = previous_level * torch.where(
+        torch.sum(previous_level * previous_quaternion_wxyz, dim=-1, keepdim=True)
+        < 0.0,
+        -torch.ones_like(previous_level[..., :1]),
+        torch.ones_like(previous_level[..., :1]),
+    )
 
+    yaw = torch.atan2(horizontal_velocity_w[..., 1], horizontal_velocity_w[..., 0])
+    half_yaw = 0.5 * yaw
+    cos_yaw = torch.cos(half_yaw)
+    sin_yaw = torch.sin(half_yaw)
+    candidate = torch.stack(
+        (
+            cos_yaw,
+            torch.zeros_like(cos_yaw),
+            torch.zeros_like(cos_yaw),
+            sin_yaw,
+        ),
+        dim=-1,
+    )
     same_hemisphere_sign = torch.where(
-        torch.sum(candidate * previous_quaternion_wxyz, dim=-1, keepdim=True) < 0.0,
+        torch.sum(candidate * previous_level, dim=-1, keepdim=True) < 0.0,
         -torch.ones_like(candidate[..., :1]),
         torch.ones_like(candidate[..., :1]),
     )
     candidate = candidate * same_hemisphere_sign
-    has_direction = speed > min_speed
-    return torch.where(has_direction[..., None], candidate, previous_quaternion_wxyz)
+    has_direction = horizontal_speed > min_horizontal_speed
+    return torch.where(has_direction[..., None], candidate, previous_level)
 
 
 def quaternion_step_angular_velocity_body(
@@ -103,27 +150,11 @@ def quaternion_step_angular_velocity_body(
     positive-real quaternion hemisphere removes the ``q``/``-q`` ambiguity.
     """
 
-    previous_conjugate = previous_quaternion_wxyz.clone()
-    previous_conjugate[..., 1:] = -previous_conjugate[..., 1:]
-
-    pw, px, py, pz = previous_conjugate.unbind(dim=-1)
-    cw, cx, cy, cz = current_quaternion_wxyz.unbind(dim=-1)
-    relative = torch.stack(
-        (
-            pw * cw - px * cx - py * cy - pz * cz,
-            pw * cx + px * cw + py * cz - pz * cy,
-            pw * cy - px * cz + py * cw + pz * cx,
-            pw * cz + px * cy - py * cx + pz * cw,
-        ),
-        dim=-1,
+    relative = quat_multiply_wxyz(
+        quat_conjugate_wxyz(previous_quaternion_wxyz),
+        current_quaternion_wxyz,
     )
-    relative = relative / torch.clamp(torch.linalg.vector_norm(relative, dim=-1, keepdim=True), min=1.0e-8)
-    relative = torch.where(relative[..., :1] < 0.0, -relative, relative)
-
-    vector = relative[..., 1:]
-    vector_norm = torch.linalg.vector_norm(vector, dim=-1, keepdim=True)
-    angle = 2.0 * torch.atan2(vector_norm, torch.clamp(relative[..., :1], min=0.0))
-    rotation_vector = vector * (angle / torch.clamp(vector_norm, min=1.0e-8))
+    rotation_vector = quaternion_to_rotation_vector(relative)
     dt = torch.as_tensor(dt_s, dtype=relative.dtype, device=relative.device)
     if dt.ndim == relative.ndim - 1:
         dt = dt.unsqueeze(-1)

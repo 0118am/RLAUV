@@ -60,10 +60,10 @@
     "note": "Shell 30 is the externally wetted main pressure-hull tube and shells 42/43 are its reviewed open annular end fittings. Their CAD solids only meet the tube at zero-common-volume faces and retain service/fastener openings. The waterproof assembled vehicle therefore requires two derived sealing disks at the measured tube mouths, representing the real end seal/O-ring boundary without filling the external fitting recesses. The production geometry represents the fully assembled vehicle with all eight propellers statically locked."
   },
   "volume_validation": {
-    "target_displaced_volume_mm3": 11304505.834,
+    "target_displaced_volume_mm3": 11541000.0,
     "wrapped_surface_relative_tolerance": 0.02,
-    "snappy_excluded_volume_relative_tolerance": 0.055,
-    "source": "Independently identified assembled-vehicle displacement; the SolidWorks material volume 8690716.111 mm^3 is not the displaced volume."
+    "snappy_excluded_volume_relative_tolerance": 0.03,
+    "source": "Pool measurement: at rho=1000 kg/m^3 the 11.301 kg vehicle has 0.24 kg-equivalent positive buoyancy, so displaced volume is (11.301+0.24)/1000 = 0.011541 m^3. The SolidWorks material volume is not displaced volume."
   },
   "motor_replacement": {
     "shape": "smooth_axisymmetric_envelope",
@@ -158,7 +158,7 @@
       "end_disk_hull": 1.0,
       "end_disk_endcap": 1.0
     },
-    "note": "Dimensions are source-specific checks, not construction constants: repair_step measures the coaxial inner/outer radii, axis and two axial endpoints from shell 30. It centres one 1.0 mm disk on each measured tube mouth and extends the radius only 0.5 mm into the tube wall, remaining far inside Rout=65 mm. Each disk must have positive common volume with shell 30 and its reviewed annular end fitting. These disks are waterproof boundary patches, not a full-length solid occupancy: external fitting recesses remain floodable and internal sealed volume is created by surface closure. Final acceptance remains the independent 11.304505834 L ±2% voxel-wrap gate."
+    "note": "Dimensions are source-specific checks, not construction constants: repair_step measures the coaxial inner/outer radii, axis and two axial endpoints from shell 30. It centres one 1.0 mm disk on each measured tube mouth and extends the radius only 0.5 mm into the tube wall, remaining far inside Rout=65 mm. Each disk must have positive common volume with shell 30 and its reviewed annular end fitting. These disks are waterproof boundary patches, not a full-length solid occupancy: external fitting recesses remain floodable and internal sealed volume is created by surface closure. Final acceptance uses the pool-measured 11.541 L ±2% voxel-wrap gate."
   },
   "buoyancy_material_validation": {
     "shell": 257,
@@ -169,7 +169,7 @@
     "volume_relative_tolerance": 0.001,
     "bbox_absolute_tolerance_mm": 0.0001,
     "expected_bbox_step_mm": [-110.0000001, 2.4999999, -160.0000001, 110.0000001, 100.63720669, 140.000000155],
-    "hydrodynamic_accounting": "included_once_by_geometry_union; never add this volume numerically to the 11.304505834 L displacement target",
+    "hydrodynamic_accounting": "included once by geometry union; never add this volume numerically to the 11.541 L displacement target",
     "note": "The flattened STEP does not preserve the SolidWorks component name. The large closed upper-body solid, its 2.674 L volume and placement make shell 257 a high-confidence identification of the user-confirmed main waterproof closed-cell buoyancy material. It remains explicitly preserved; the final voxel union naturally prevents double counting against the sealed pressure boundary."
   },
   "triangulation": {

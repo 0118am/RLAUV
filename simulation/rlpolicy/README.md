@@ -6,11 +6,9 @@
 ```text
 rlpolicy/
 └── <architecture experiment>/
-    ├── _launcher/
     └── <timestamp>_<RUN_NAME>/
         ├── model_*.pt
         ├── params/
-        │   ├── run_manifest.json
         │   └── inputs/
         │       ├── training_recipe.json
         │       ├── environment.json
@@ -19,7 +17,8 @@ rlpolicy/
         └── exports/
 ```
 
-`eval.ipynb` 要求显式设置 `POLICY_RUN_DIR`，不会搜索 IsaacLab 外部日志或猜测最新运行。
-评估、续训和 ONNX 导出均从 run manifest 恢复网络、奖励和输入文件，不使用独立 `_configs`
+训练标准输出由 `train.ipynb` 最后一个单元格直接显示，不在这里创建 launcher PID/日志文件。
+`eval.ipynb` 只在仓库内 `auv_traj_mlp_history_8` 目录自动选择最新完成训练的 run/checkpoint。
+评估、续训和 ONNX 导出均从 checkpoint 同目录的 training recipe 恢复网络、奖励和输入文件，不使用独立 `_configs`
 目录。checkpoint、快照、日志、评估和 ONNX 文件由 `.gitignore` 排除。导出工具位于
 `simulation/training/evaluation/export.py`。

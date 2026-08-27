@@ -31,12 +31,17 @@ def backend_status() -> dict[str, Any]:
         status["reason"] = f"SciPy ndimage unavailable or incompatible: {exc}"
         return status
     try:
+        from skimage.measure import marching_cubes  # noqa: F401
+        import skimage
+
+        status["scikit_image_version"] = str(skimage.__version__)
+    except Exception as exc:
+        status["reason"] = f"scikit-image Lewiner marching cubes unavailable: {exc}"
+        return status
+    try:
         import vtk
 
         status["vtk_version"] = str(vtk.vtkVersion.GetVTKVersion())
-        if not hasattr(vtk, "vtkSurfaceNets3D"):
-            status["reason"] = "VTK lacks vtkSurfaceNets3D (VTK 9.3 or newer is required)"
-            return status
     except Exception as exc:
         status["reason"] = f"VTK unavailable: {exc}"
         return status
@@ -57,9 +62,15 @@ def require_backend() -> tuple[Any, Any, Any, Any, Any]:
 
 
 def read_surface(path: Path, vtk: Any) -> Any:
-    reader = vtk.vtkSTLReader()
+    suffix = path.suffix.lower()
+    if suffix == ".stl":
+        reader = vtk.vtkSTLReader()
+        reader.MergingOn()
+    elif suffix == ".obj":
+        reader = vtk.vtkOBJReader()
+    else:
+        raise VoxelWrapError(f"unsupported surface format: {path}")
     reader.SetFileName(str(path))
-    reader.MergingOn()
     reader.Update()
     if reader.GetOutput().GetNumberOfPolys() <= 0:
         raise VoxelWrapError(f"VTK read no triangles from {path}")
@@ -84,6 +95,25 @@ def connected_regions(surface: Any, vtk: Any) -> int:
     connectivity.SetExtractionModeToAllRegions()
     connectivity.Update()
     return int(connectivity.GetNumberOfExtractedRegions())
+
+
+def largest_connected_region(surface: Any, vtk: Any) -> Any:
+    """Return a compact triangle mesh containing only the largest region."""
+
+    connectivity = vtk.vtkPolyDataConnectivityFilter()
+    connectivity.SetInputData(surface)
+    connectivity.SetExtractionModeToLargestRegion()
+    clean = vtk.vtkCleanPolyData()
+    clean.SetInputConnection(connectivity.GetOutputPort())
+    clean.PointMergingOn()
+    triangles = vtk.vtkTriangleFilter()
+    triangles.SetInputConnection(clean.GetOutputPort())
+    triangles.PassLinesOff()
+    triangles.PassVertsOff()
+    triangles.Update()
+    output = vtk.vtkPolyData()
+    output.ShallowCopy(triangles.GetOutput())
+    return output
 
 
 def feature_edge_count(
@@ -121,28 +151,6 @@ def non_manifold_edges(surface: Any, vtk: Any) -> Any:
     return output
 
 
-def image_from_mask(
-    mask: Any,
-    origin: Sequence[float],
-    spacing: float,
-    vtk: Any,
-    numpy_to_vtk: Any,
-) -> Any:
-    nz, ny, nx = mask.shape
-    image = vtk.vtkImageData()
-    image.SetDimensions(nx, ny, nz)
-    image.SetOrigin(*origin)
-    image.SetSpacing(spacing, spacing, spacing)
-    scalars = numpy_to_vtk(
-        mask.astype("uint8").ravel(order="C"),
-        deep=True,
-        array_type=vtk.VTK_UNSIGNED_CHAR,
-    )
-    scalars.SetName("solid")
-    image.GetPointData().SetScalars(scalars)
-    return image
-
-
 def extract_surface(
     mask: Any,
     origin: Sequence[float],
@@ -150,24 +158,33 @@ def extract_surface(
     vtk: Any,
     numpy_to_vtk: Any,
 ) -> Any:
-    image = image_from_mask(mask, origin, spacing, vtk, numpy_to_vtk)
-    surface_nets = vtk.vtkSurfaceNets3D()
-    surface_nets.SetInputData(image)
-    surface_nets.SetValue(0, 1)
-    surface_nets.SetBackgroundLabel(0)
-    surface_nets.SetOutputStyleToBoundary()
-    surface_nets.SetOutputMeshTypeToTriangles()
-    surface_nets.SmoothingOff()
-    clean = vtk.vtkCleanPolyData()
-    clean.SetInputConnection(surface_nets.GetOutputPort())
-    clean.PointMergingOn()
-    triangles = vtk.vtkTriangleFilter()
-    triangles.SetInputConnection(clean.GetOutputPort())
-    triangles.PassLinesOff()
-    triangles.PassVertsOff()
-    triangles.Update()
+    import numpy as np
+    from skimage.measure import marching_cubes
+    from vtk.util.numpy_support import numpy_to_vtkIdTypeArray
+
+    vertices_zyx, faces, _normals, _values = marching_cubes(
+        mask,
+        level=0.5,
+        spacing=(spacing, spacing, spacing),
+        method="lewiner",
+        allow_degenerate=False,
+    )
+    vertices_xyz = np.ascontiguousarray(vertices_zyx[:, ::-1], dtype=np.float64)
+    vertices_xyz += np.asarray(origin, dtype=np.float64)
+    points = vtk.vtkPoints()
+    points.SetData(numpy_to_vtk(vertices_xyz, deep=True))
+
+    vtk_cells = np.empty((faces.shape[0], 4), dtype=np.int64)
+    vtk_cells[:, 0] = 3
+    vtk_cells[:, 1:] = faces
+    cells = vtk.vtkCellArray()
+    cells.SetCells(
+        int(faces.shape[0]),
+        numpy_to_vtkIdTypeArray(vtk_cells.ravel(), deep=True),
+    )
     output = vtk.vtkPolyData()
-    output.ShallowCopy(triangles.GetOutput())
+    output.SetPoints(points)
+    output.SetPolys(cells)
     return output
 
 
@@ -211,6 +228,38 @@ def point_distances(source: Any, target: Any, vtk: Any, vtk_to_numpy: Any) -> An
     if array is None:
         raise VoxelWrapError("VTK failed to compute point-to-surface distances")
     return vtk_to_numpy(array)
+
+
+def reflect_about_y_plane(surface: Any, plane_y: float, vtk: Any) -> Any:
+    """Return the geometric reflection ``(x, y, z) -> (x, 2a-y, z)``."""
+
+    matrix = vtk.vtkMatrix4x4()
+    matrix.Identity()
+    matrix.SetElement(1, 1, -1.0)
+    matrix.SetElement(1, 3, 2.0 * plane_y)
+    transform = vtk.vtkTransform()
+    transform.SetMatrix(matrix)
+    apply_transform = vtk.vtkTransformPolyDataFilter()
+    apply_transform.SetInputData(surface)
+    apply_transform.SetTransform(transform)
+    apply_transform.Update()
+    reflected = vtk.vtkPolyData()
+    reflected.ShallowCopy(apply_transform.GetOutput())
+    return reflected
+
+
+def scale_uniform(surface: Any, factor: float, vtk: Any) -> Any:
+    """Scale a polydata point field without an intermediate STL quantization."""
+
+    transform = vtk.vtkTransform()
+    transform.Scale(factor, factor, factor)
+    apply_transform = vtk.vtkTransformPolyDataFilter()
+    apply_transform.SetInputData(surface)
+    apply_transform.SetTransform(transform)
+    apply_transform.Update()
+    scaled = vtk.vtkPolyData()
+    scaled.ShallowCopy(apply_transform.GetOutput())
+    return scaled
 
 
 def bounds(surface: Any) -> dict[str, list[float]]:

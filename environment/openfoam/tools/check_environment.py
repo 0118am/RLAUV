@@ -30,9 +30,8 @@ EXIT_STRICT_FAILURE = 2
 DEFAULT_REQUIRED_COMMANDS = (
     "foamEtcFile",
     "blockMesh",
-    "surfaceCheck",
     "surfaceTransformPoints",
-    "surfaceFeatureExtract",
+    "surfaceCheck",
     "snappyHexMesh",
     "checkMesh",
     "decomposePar",

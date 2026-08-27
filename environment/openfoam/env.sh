@@ -57,7 +57,13 @@ for _auv_openfoam_bashrc in "${_auv_openfoam_candidates[@]}"; do
         if (( _auv_openfoam_source_status != 0 )); then
             continue
         fi
+        _auv_openfoam_user_platform="${_auv_openfoam_script_dir}/.runtime/user/platforms/${WM_OPTIONS}"
+        export FOAM_USER_APPBIN="${_auv_openfoam_user_platform}/bin"
+        export FOAM_USER_LIBBIN="${_auv_openfoam_user_platform}/lib"
+        mkdir -p -- "${FOAM_USER_APPBIN}" "${FOAM_USER_LIBBIN}"
         export PATH="${_auv_openfoam_script_dir}/bin:${PATH}"
+        export PATH="${FOAM_USER_APPBIN}:${PATH}"
+        export LD_LIBRARY_PATH="${FOAM_USER_LIBBIN}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
         _auv_openfoam_loaded=true
         break
     fi
@@ -65,6 +71,7 @@ done
 
 unset _auv_openfoam_candidates _auv_openfoam_bashrc _auv_openfoam_local_bashrc
 unset _auv_openfoam_local_lib _auv_openfoam_local_root _auv_openfoam_script_dir
+unset _auv_openfoam_user_platform
 unset _auv_openfoam_restore_nounset _auv_openfoam_source_status
 unset _auv_openfoam_saved_args
 

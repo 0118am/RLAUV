@@ -8,13 +8,11 @@ FoamFile
 
 castellatedMesh true;
 snap            true;
-// __SNAPPY_ADD_LAYERS_BEGIN__
-addLayers       true;
-// __SNAPPY_ADD_LAYERS_END__
+addLayers       false;
 
 geometry
 {
-    auv_visual_m.stl
+    __GEOMETRY_FILENAME__
     {
         type    triSurfaceMesh;
         name    auv;
@@ -30,24 +28,20 @@ geometry
 
 castellatedMeshControls
 {
-// __SNAPPY_CELL_LIMITS_BEGIN__
-    maxLocalCells       16000000;
-    maxGlobalCells      16000000;
-// __SNAPPY_CELL_LIMITS_END__
+    maxLocalCells       __MAX_LOCAL_CELLS__;
+    maxGlobalCells      __MAX_GLOBAL_CELLS__;
     minRefinementCells  10;
     maxLoadUnbalance    0.10;
     nCellsBetweenLevels 3;
 
-    features
-    (
-        { file "auv_visual_m.eMesh"; level 4; }
-    );
+    // The audited voxel-wrap triangles do not represent physical CAD creases.
+    features ();
 
     refinementSurfaces
     {
         auv
         {
-            level (3 4);
+            level (__SURFACE_LEVELS__);
             patchInfo { type wall; }
         }
     }
@@ -59,12 +53,12 @@ castellatedMeshControls
         nearBody
         {
             mode inside;
-            levels ((1e15 2));
+            levels ((1e15 __NEAR_BODY_LEVEL__));
         }
         // __LOCKED_ROTOR_REFINEMENT__
     }
 
-    locationInMesh      (4.041 1.541 1.541);
+    locationInMesh      __LOCATION_IN_MESH__;
     allowFreeStandingZoneFaces true;
 }
 
@@ -74,10 +68,6 @@ snapControls
     tolerance           2.0;
     nSolveIter          100;
     nRelaxIter          8;
-    // The 0.5 mm exterior wrap contains millions of voxel stair-step edges.
-    // Explicit attraction to those artificial edges creates irreducible
-    // tet/twist errors; retain their castellated refinement but snap only to
-    // the watertight surface itself.
     nFeatureSnapIter    8;
     implicitFeatureSnap false;
     explicitFeatureSnap false;
@@ -86,28 +76,22 @@ snapControls
 
 addLayersControls
 {
-    // __SNAPPY_LAYER_CONTROLS_BEGIN__
-    relativeSizes           true;
-    layers
-    {
-        auv { nSurfaceLayers 4; }
-    }
-    expansionRatio          1.2;
-    finalLayerThickness     0.35;
-    minThickness            0.10;
-    nGrow                   0;
-    nBufferCellsNoExtrude   0;
-    // __SNAPPY_LAYER_CONTROLS_END__
-    featureAngle            60;
-    slipFeatureAngle        30;
-    nRelaxIter              5;
-    nSmoothSurfaceNormals   1;
-    nSmoothNormals          3;
-    nSmoothThickness        10;
-    maxFaceThicknessRatio   0.5;
+    relativeSizes       true;
+    layers              {};
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        60;
+    nRelaxIter          3;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
     maxThicknessToMedialRatio 0.3;
-    minMedialAxisAngle      90;
-    nLayerIter              50;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          1;
 }
 
 meshQualityControls
@@ -115,5 +99,5 @@ meshQualityControls
     #include "meshQualityDict"
 }
 
-writeFlags (scalarLevels layerSets layerFields);
+writeFlags (scalarLevels);
 mergeTolerance 1e-6;

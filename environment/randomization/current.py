@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from environment.profiles.random_sampling import sample_bounded_normal, sample_isotropic_bounded_normal, sample_symmetric_bounded_normal
+from common.random_sampling import sample_bounded_normal, sample_isotropic_bounded_normal, sample_symmetric_bounded_normal
 
 
 def reset_current(state, cfg, env_ids: torch.Tensor, stage: int, *, enabled: bool) -> None:
@@ -14,15 +14,15 @@ def reset_current(state, cfg, env_ids: torch.Tensor, stage: int, *, enabled: boo
     state.water_current_mean_w[env_ids] = state.nominal_water_current_w
     state.water_current_horizontal_max[env_ids] = 0.0
     state.water_current_vertical_max[env_ids] = 0.0
-    state.water_current_tau[env_ids] = 12.0
-    if bool(getattr(cfg, "evaluation_current_override", False)):
-        variation_std = float(getattr(cfg, "evaluation_current_variation_std", 0.0))
+    state.water_current_tau[env_ids] = float(cfg.evaluation_current_tau)
+    if cfg.evaluation_current_override:
+        variation_std = float(cfg.evaluation_current_variation_std)
         nominal = state.nominal_water_current_w[0]
         state.water_current_horizontal_max[env_ids] = (
             torch.linalg.vector_norm(nominal[0:2]) + 3.0 * variation_std
         )
         state.water_current_vertical_max[env_ids] = abs(float(nominal[2].item())) + 1.5 * variation_std
-        state.water_current_tau[env_ids] = float(getattr(cfg, "evaluation_current_tau", 12.0))
+        state.water_current_tau[env_ids] = float(cfg.evaluation_current_tau)
         return
     if not enabled:
         return
@@ -54,7 +54,7 @@ def update_smooth_current(
 
     if not enabled:
         return
-    if not getattr(cfg.domain_randomization, "water_current_smooth", False):
+    if not cfg.domain_randomization.water_current_smooth:
         return
 
     variation_std = cfg.domain_randomization.water_current_variation_std_by_stage[stage]

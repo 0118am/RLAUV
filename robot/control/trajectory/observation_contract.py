@@ -7,7 +7,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-OBSERVATION_CONTRACT_VERSION = "t60_trajectory_obs_v1"
+OBSERVATION_CONTRACT_VERSION = "t60_trajectory_obs_v7"
 
 
 @dataclass(frozen=True)
@@ -56,14 +56,15 @@ class TrajectoryObservationContract:
 
 TRAJECTORY_OBSERVATION = TrajectoryObservationContract(
     fields=(
-        ObservationField("position_error_b", 3, 2.0),
-        ObservationField("target_linear_velocity_b", 3, 1.0),
-        ObservationField("linear_velocity_error_b", 3, 1.0),
+        ObservationField("position_error_b", 3, 0.25),
+        ObservationField("target_linear_velocity_b", 3, 0.50),
+        ObservationField("linear_velocity_error_b", 3, 0.20),
         ObservationField("attitude_error_quat", 4, 1.0),
-        ObservationField("angular_velocity_b", 3, 1.0),
-        ObservationField("target_angular_velocity_b", 3, 1.0),
-        ObservationField("target_linear_acceleration_b", 3, 0.5),
-        ObservationField("applied_action", 8, 1.0),
+        ObservationField("projected_gravity_b", 3, 1.0),
+        ObservationField("angular_velocity_b", 3, 0.80),
+        ObservationField("target_angular_velocity_b", 3, 0.80),
+        ObservationField("target_linear_acceleration_b", 3, 0.45),
+        ObservationField("processed_command", 8, 1.0),
     ),
     action_dim=8,
 )

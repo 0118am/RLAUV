@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 from isaaclab.envs.ui import BaseEnvWindow
 
-from environment.hydrodynamics.tensor_ops import quat_apply_wxyz
+from common.tensor_math import quat_apply_wxyz
 
 
 _AXIS_COLORS = (

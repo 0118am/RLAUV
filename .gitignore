@@ -12,3 +12,7 @@ results/
 archives/
 *.pt
 *.onnx
+
+# OpenFOAM user-library build products (source and Make recipes remain tracked)
+environment/openfoam/boundary_conditions/*/Make/linux*/
+environment/openfoam/boundary_conditions/*/lnInclude/

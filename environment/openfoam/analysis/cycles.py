@@ -11,12 +11,12 @@ from .motion import CaseData
 @dataclass(frozen=True)
 class OddProjectedCase:
     case_name: str
+    case_family: str
     dof_index: int
     design: np.ndarray
     target: np.ndarray
     even_target: np.ndarray
     cycle_id: np.ndarray
-    attitude_feature: np.ndarray | None = None
 
 
 def analysis_window(case: CaseData) -> np.ndarray:
@@ -138,22 +138,12 @@ def _interpolated_wrench_components(
 
 
 def _signed_square_velocity(case: CaseData, scalar_nu: np.ndarray) -> np.ndarray:
-    if case.motion.dof_index != 0:
-        return np.abs(scalar_nu) * scalar_nu
-    background_fluid_dof = float(case.motion.background_fluid_velocity_body_m_s[0])
-    if abs(background_fluid_dof) == 0.0:
-        return np.abs(scalar_nu) * scalar_nu
-    background_relative_dof = -background_fluid_dof
-    plus = background_relative_dof + scalar_nu
-    minus = background_relative_dof - scalar_nu
-    return 0.5 * (np.abs(plus) * plus - np.abs(minus) * minus)
+    return np.abs(scalar_nu) * scalar_nu
 
 
 def odd_project(
     case: CaseData,
     phase_samples_per_cycle: int = 256,
-    *,
-    include_rotation_attitude_term: bool = True,
 ) -> OddProjectedCase:
     """Odd-project complete cycles on a fixed phase grid.
 
@@ -169,20 +159,19 @@ def odd_project(
     scalar_eta, scalar_nu, scalar_nudot = case.motion.kinematics(pair_time)
     signed_square = _signed_square_velocity(case, scalar_nu)
     design = np.column_stack((-scalar_nudot, -scalar_nu, -signed_square))
-    attitude_feature = (
-        -scalar_eta
-        if include_rotation_attitude_term and case.motion.motion_kind == "rotation"
-        else None
+    finite = (
+        np.all(np.isfinite(design), axis=1)
+        & np.all(np.isfinite(odd), axis=1)
+        & np.all(np.isfinite(even), axis=1)
     )
-    finite = np.all(np.isfinite(design), axis=1) & np.all(np.isfinite(odd), axis=1)
     if np.count_nonzero(finite) < 3:
         raise ValueError(f"{case.motion.case_name}: too few finite odd-projected samples")
     return OddProjectedCase(
         case.motion.case_name,
+        case.motion.case_family,
         case.motion.dof_index,
         design[finite],
         odd[finite],
         even[finite],
         pair_cycle[finite],
-        None if attitude_feature is None else attitude_feature[finite],
     )

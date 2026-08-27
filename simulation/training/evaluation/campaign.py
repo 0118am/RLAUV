@@ -3,26 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
-from environment.profiles.domain_randomization import load_domain_randomization_spec_json
+from simulation.domain_randomization import load_domain_randomization_spec_json
 from robot.control.trajectory import EVALUATION_TRAJECTORY_NAMES
 from simulation.training.evaluation.config import (
     DEFAULT_CURRENT_TAU_S,
     DEFAULT_DYNAMICS_SCALE,
     build_evaluation_case_label,
     resolve_random_smooth_ranges,
-    validate_evaluation_parameters,
 )
-from simulation.training.recipe import EvalRequest, ExperimentSpec
+from simulation.training.recipe import EvalRequest, ExperimentSpec, run_input_paths
 from simulation.training.campaign import run_command
 from simulation.training.campaign import (
-    checkpoint_iter, resolve_checkpoints, resolve_run,
-)
-from simulation.training.manifest import (
-    RunManifest,
-    load_run_manifest,
-    validate_manifest_selection,
+    checkpoints_in_run_dir,
+    select_checkpoints,
 )
 
 
@@ -31,17 +27,6 @@ def eval_request_case_label(
     *,
     domain_randomization_spec: str | Path | None = None,
 ) -> str:
-    validate_evaluation_parameters(
-        duration_s=request.duration_s,
-        current_w=request.eval_current,
-        current_variation_std=request.eval_current_variation_std,
-        current_tau=request.eval_current_tau,
-        damping_scale=request.eval_damping_scale,
-        thruster_scale=request.eval_thruster_scale,
-        thruster_tau_scale=request.eval_thruster_tau_scale,
-        num_envs=request.num_envs,
-        random_curve_count=request.random_curve_count,
-    )
     spec = None
     if request.sample_domain_randomization:
         selected_spec = request.domain_randomization_spec or domain_randomization_spec
@@ -51,7 +36,7 @@ def eval_request_case_label(
         evaluation_label=request.evaluation_label,
         disturbance_name=request.disturbance_name,
         sample_domain_randomization=request.sample_domain_randomization,
-        domain_randomization_name=spec.name if spec is not None else "run_manifest",
+        domain_randomization_name=spec.name if spec is not None else None,
         seed=request.seed,
         current_w=request.eval_current,
         smooth_current=request.eval_smooth_current,
@@ -62,43 +47,32 @@ def eval_request_case_label(
     )
 
 
-def eval_dir_name(checkpoint: str, trajectory: str, case_label: str = "") -> str:
+@dataclass(frozen=True)
+class EvaluationPaths:
+    directory: Path
+    logs_csv: Path
+    summary_csv: Path
+    domain_samples_csv: Path
+
+
+def evaluation_paths(
+    results_root: str | Path,
+    checkpoint: str,
+    trajectory: str,
+    case_label: str = "",
+) -> EvaluationPaths:
     parts = [Path(checkpoint).stem]
     if trajectory != "lissajous":
         parts.append(trajectory)
     if case_label:
         parts.append(case_label)
-    return "_".join(parts) + "_trajectory_eval"
-
-
-def eval_dir(
-    spec: ExperimentSpec,
-    run_name: str,
-    checkpoint: str,
-    trajectory: str,
-    case_label: str = "",
-) -> Path:
-    return spec.results_root(run_name) / eval_dir_name(checkpoint, trajectory, case_label)
-
-
-def summary_path(
-    spec: ExperimentSpec,
-    run_name: str,
-    checkpoint: str,
-    trajectory: str,
-    case_label: str = "",
-) -> Path:
-    return eval_dir(spec, run_name, checkpoint, trajectory, case_label) / "summary_metrics.csv"
-
-
-def logs_path(
-    spec: ExperimentSpec,
-    run_name: str,
-    checkpoint: str,
-    trajectory: str,
-    case_label: str = "",
-) -> Path:
-    return eval_dir(spec, run_name, checkpoint, trajectory, case_label) / "logs.csv"
+    directory = Path(results_root) / ("_".join(parts) + "_trajectory_eval")
+    return EvaluationPaths(
+        directory=directory,
+        logs_csv=directory / "logs.csv",
+        summary_csv=directory / "summary_metrics.csv",
+        domain_samples_csv=directory / "domain_samples.csv",
+    )
 
 
 def validate_trajectories(trajectories: str | Sequence[str]) -> list[str]:
@@ -114,10 +88,9 @@ def validate_trajectories(trajectories: str | Sequence[str]) -> list[str]:
 def _eval_base_command(
     spec: ExperimentSpec,
     request: EvalRequest,
-    run_name: str,
     checkpoint: str,
     trajectory: str,
-    manifest: RunManifest,
+    run_dir: Path,
 ) -> list[str]:
     return [
         "./isaaclab.sh",
@@ -125,39 +98,21 @@ def _eval_base_command(
         spec.eval_script,
         "--task",
         spec.task_name,
-        "--experiment_name",
-        spec.rsl_experiment_name,
-        "--load_run",
-        run_name,
         "--checkpoint",
-        checkpoint,
-        "--run_manifest",
-        str(manifest.source_path),
-        "--reward_profile",
-        manifest.reward_profile,
+        str(run_dir / checkpoint),
         "--trajectory",
         trajectory,
         "--duration",
         str(request.duration_s),
         "--seed",
         str(request.seed),
-        "--mlp_architecture",
-        spec.architecture.name,
     ]
 
 
-def _append_eval_context(
-    command: list[str], request: EvalRequest, checkpoint: str, manifest: RunManifest
-) -> None:
+def _append_eval_context(command: list[str], request: EvalRequest) -> None:
     optional_paths = (
-        (
-            "--environment_profile",
-            request.environment_profile or manifest.input_path("environment"),
-        ),
-        (
-            "--domain_randomization_spec",
-            request.domain_randomization_spec or manifest.input_path("domain_randomization"),
-        ),
+        ("--environment_profile", request.environment_profile),
+        ("--domain_randomization_spec", request.domain_randomization_spec),
     )
     for flag, value in optional_paths:
         if value is not None:
@@ -168,14 +123,8 @@ def _append_eval_context(
         command.extend(("--eval_disturbance_stage", str(request.eval_disturbance_stage)))
     if request.evaluation_label:
         command.extend(("--evaluation_label", request.evaluation_label))
-    if request.keep_boundaries:
-        command.append("--keep_boundaries")
     if request.num_envs is not None:
         command.extend(("--num_envs", str(request.num_envs)))
-    if checkpoint_iter(checkpoint) == 0:
-        if not request.include_initial_checkpoint:
-            raise ValueError("model_0.pt is excluded from tracking evaluation by default.")
-        command.append("--allow_initial_checkpoint")
     if request.headless:
         command.append("--headless")
     if request.align_initial_target:
@@ -216,8 +165,6 @@ def _append_trajectory_options(
 
 def _append_disturbance_options(command: list[str], request: EvalRequest) -> None:
     if request.eval_current is not None:
-        if len(request.eval_current) != 3:
-            raise ValueError("eval_current must contain exactly three world-frame components.")
         command.extend(("--eval_current", *(str(value) for value in request.eval_current)))
     if request.eval_smooth_current:
         command.append("--eval_smooth_current")
@@ -235,25 +182,13 @@ def _append_disturbance_options(command: list[str], request: EvalRequest) -> Non
         command.extend(("--disturbance_name", request.disturbance_name))
 
 
-def build_eval_command(
+def _assemble_eval_command(
     spec: ExperimentSpec,
     request: EvalRequest,
-    run_name: str,
     checkpoint: str,
     trajectory: str,
+    run_dir: Path,
 ) -> list[str]:
-    # Validate every command-producing path, including callers that bypass
-    # ``run_eval_matrix`` and invoke this helper directly.
-    manifest = load_run_manifest(spec.logs_root / run_name)
-    eval_request_case_label(
-        request,
-        domain_randomization_spec=manifest.input_path("domain_randomization"),
-    )
-    validate_manifest_selection(
-        manifest,
-        mlp_architecture=spec.mlp_architecture,
-        reward_profile=request.reward_profile,
-    )
     random_smooth_ranges = (
         resolve_random_smooth_ranges(
             trajectory_amp_x=request.trajectory_amp_x,
@@ -268,8 +203,8 @@ def build_eval_command(
         if trajectory == "random_smooth"
         else {}
     )
-    command = _eval_base_command(spec, request, run_name, checkpoint, trajectory, manifest)
-    _append_eval_context(command, request, checkpoint, manifest)
+    command = _eval_base_command(spec, request, checkpoint, trajectory, run_dir)
+    _append_eval_context(command, request)
     _append_trajectory_options(command, request, trajectory, random_smooth_ranges)
     _append_disturbance_options(command, request)
     return command
@@ -283,25 +218,18 @@ def run_eval_matrix(
     execute: bool = False,
 ) -> tuple[str, list[list[str]]]:
     if not load_run:
-        raise ValueError("Evaluation requires an explicit run selected from its run manifest.")
-    manifest = load_run_manifest(spec.logs_root / load_run)
-    validate_manifest_selection(
-        manifest,
-        mlp_architecture=spec.mlp_architecture,
-        reward_profile=request.reward_profile,
-    )
-    run = resolve_run(spec, load_run, manifest.reward_profile)
-    checkpoints = resolve_checkpoints(
-        spec,
+        raise ValueError("Evaluation requires an explicit run directory.")
+    run_dir = spec.logs_root / load_run
+    run = run_dir.name
+    inputs = run_input_paths(run_dir)
+    checkpoints = select_checkpoints(
+        checkpoints_in_run_dir(run_dir),
         request.checkpoint,
-        run,
-        reward_profile=manifest.reward_profile,
-        include_initial=request.include_initial_checkpoint,
     )
     trajectories = validate_trajectories(request.trajectories)
     case_label = eval_request_case_label(
         request,
-        domain_randomization_spec=manifest.input_path("domain_randomization"),
+        domain_randomization_spec=inputs.domain_randomization,
     )
     console_log = spec.results_root(run) / "evaluation_console.log"
     if execute:
@@ -309,15 +237,20 @@ def run_eval_matrix(
         console_log.write_text("", encoding="utf-8")
     commands: list[list[str]] = []
     for checkpoint in checkpoints:
-        checkpoint_path = spec.logs_root / run / checkpoint
-        if not checkpoint_path.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
         for trajectory in trajectories:
-            output_summary = summary_path(spec, run, checkpoint, trajectory, case_label)
+            output_summary = evaluation_paths(
+                spec.results_root(run), checkpoint, trajectory, case_label
+            ).summary_csv
             if request.skip_existing and output_summary.exists():
                 print(f"[SKIP] {checkpoint} / {trajectory}: {output_summary}")
                 continue
-            command = build_eval_command(spec, request, run, checkpoint, trajectory)
+            command = _assemble_eval_command(
+                spec,
+                request,
+                checkpoint,
+                trajectory,
+                run_dir,
+            )
             commands.append(command)
             run_command(
                 command,

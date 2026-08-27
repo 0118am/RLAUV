@@ -5,28 +5,31 @@
 
 ## 内容
 
-- `assets/isaac/t60_auv.usd`：Isaac 几何、碰撞体和材质资产。
-- `assets/isaac/spawn.py`：从机器人事实生成 Isaac 资产配置，不保存训练逻辑。
+- `assets/isaac/t60_auv.usd`：T60 的 Isaac 几何、碰撞体和材质表示；Isaac spawn 配置位于
+  `simulation/assets.py`。
 - `dynamics/parameters.py`：质量、惯量、排水体积、质心、浮心、推进器安装与标签。
-- `dynamics/rigid_body.py`：惯量和坐标变换。
+- `dynamics/rigid_body.py`：完整惯量张量归一化、物理检查和主轴分解；四元数转换留在
+  Isaac/PhysX 边界。
 - `dynamics/tether.py`：T60 系绳受力模型。
 - `propulsion/curves.py`：T1–T8 物理 PWM 安装映射、实测 FLU 三轴力曲线与力矩归并。
-- `propulsion/dynamics.py`：命令延迟、限速、量化和一阶执行器响应。
-- `propulsion/effects.py`：电压、入流和尾流干扰修正。
-- `runtime.py`：带来源的执行器响应/延迟、电池和系缆名义运行配置。
-- `runtime_state.py`：质量、惯量、COM、排水体积、payload、执行器、电池、系缆和实际推进器
+- `propulsion/dynamics.py`：指令量化、丢指令、饱和和一阶推力响应。
+- `propulsion/effects.py`：入流和尾流干扰修正。
+- `sensors.py`：无注入噪声的 50 ms 融合状态延迟缓冲。
+- `runtime.py`：带来源的执行器响应、传感器和系缆名义运行配置。
+- `runtime_state.py`：固定质量、惯量、COM、排水体积、执行器、系缆和实际推进器
   输出的显式逐环境状态。
 - `control/pid.py`：只负责从跟踪误差生成六自由度目标力矩。
 - `control/allocation.py`：把目标力矩分配到实测非线性推进器曲线。
-- `control/trajectory/`：分离的轨迹目录、几何、重定时和航向生成。
-- `randomization/`：刚体、负载、推进器和电池随机化执行函数。
+- `control/trajectory/`：分离的轨迹目录、几何、重定时和航向生成；目标姿态严格保持
+  `roll=pitch=0`，仅让 yaw 跟随水平速度方向，往复轴正弦保持固定 yaw。
+- `randomization/`：推进器随机化执行函数。
 
 ## 边界
 
 机器人性质发生变化时在这里更新，再由 `simulation/assembly.py` 读取。`simulation/` 不应保存
-质量、惯量、浮力、推进器曲线、执行器、电池或系缆参数副本。
+质量、惯量、浮力、推进器曲线、执行器或系缆参数副本。
 
-水流、阻尼、附加质量、池壁和自由液面属于 `environment/`。训练中机器人 DR 的具体数值由
+水流、阻尼、流体附加质量、池壁和自由液面属于 `environment/`。训练中执行器 DR 的具体数值由
 版本化训练 recipe 选择，但采样与应用函数仍归本目录管理。机器人随机化不接收整个 Isaac
 环境，也不直接修改环境水动力张量或 PhysX。
 
@@ -35,9 +38,25 @@
 
 ## 推进器约定
 
-策略命令在命令处理器中限制为 `[-1, 1]`，再映射为 `1300–1700 µs`。曲线按物理 PWM 的
-负/正分支保存完整 FLU `(Fx, Fy, Fz)`，不经过标量推力、独立 polarity、spin direction 或
-固定轴重建。正 PWM 时 T5/T6 的 `Fx < 0`，T7/T8 的 `Fx > 0`。
+安装点使用质心原点的 FLU 坐标，单位为毫米；代码中的 T1--T8 通道顺序为：
 
-名义一阶响应时间常数为 `0.08 s`，命令延迟为 `0.13 s`；它们是带来源的外部硬件参考，
-不是 T60 本机测量。运行链路不施加未经测量的反扭矩。
+| 通道 | 安装位 | `[x, y, z] mm` |
+| --- | --- | --- |
+| T1 | 垂直 FR | `[134, -160, -170.98]` |
+| T2 | 垂直 RR | `[-150, -160, -170.98]` |
+| T3 | 垂直 FL | `[134, 160, -170.98]` |
+| T4 | 垂直 RL | `[-150, 160, -170.98]` |
+| T5 | 水平 RL | `[-150.39, 103.6, -63.12]` |
+| T6 | 水平 RR | `[-150.39, -103.6, -63.12]` |
+| T7 | 水平 FL | `[134.39, 103.6, -63.12]` |
+| T8 | 水平 FR | `[134.39, -103.6, -63.12]` |
+
+策略命令在命令处理器中限制为 `[-1, 1]`，再按
+`PWM_model = 1500 + 200·command` 映射为 `1300–1700 µs`。定义物理偏移
+`u = PWM_model - 1500`，正负分支分别只使用 `max(u-25, 0)` 和 `max(-u-25, 0)`，
+调用时不再翻转 `u`。每台推进器依次保存 `(a_positive, b_positive, a_negative, b_negative)`
+四个完整 FLU `(Fx, Fy, Fz)` 系数向量，不经过标量推力、独立 polarity、spin direction、
+固定轴重建或额外 PWM 取负。正 PWM 时 T5/T6 的 `Fx < 0`，T7/T8 的 `Fx > 0`。
+
+用户确认的推力建立一阶时间常数为 `0.08 s`。融合状态传感器可靠，只保留 `0.05 s`
+确定性延迟，不注入位置、姿态、线速度或角速度噪声。运行链路不施加未经测量的反扭矩。

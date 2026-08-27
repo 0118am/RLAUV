@@ -25,16 +25,10 @@ def _vector3(value: Any, name: str) -> np.ndarray:
     return vector
 
 
-def _first(mapping: Mapping[str, Any], names: tuple[str, ...], default: Any = None) -> Any:
-    for name in names:
-        if name in mapping:
-            return mapping[name]
-    return default
-
-
 @dataclass(frozen=True)
 class MotionSpec:
     case_name: str
+    case_family: str
     dof: str
     dof_index: int
     motion_kind: str
@@ -42,11 +36,11 @@ class MotionSpec:
     amplitude_si: float
     omega_rad_s: float
     phase_rad: float = 0.0
+    ramp_duration_s: float = 0.0
     settle_cycles: float = 0.0
     sample_cycles: float | None = None
     cofr_global_m: np.ndarray | None = None
     com_initial_global_m: np.ndarray | None = None
-    background_fluid_velocity_body_m_s: np.ndarray | None = None
     source_path: str | None = None
 
     def __post_init__(self) -> None:
@@ -84,16 +78,6 @@ class MotionSpec:
                 "com_initial_global_m",
             ),
         )
-        object.__setattr__(
-            self,
-            "background_fluid_velocity_body_m_s",
-            _vector3(
-                self.background_fluid_velocity_body_m_s
-                if self.background_fluid_velocity_body_m_s is not None
-                else (0, 0, 0),
-                "background_fluid_velocity_body_m_s",
-            ),
-        )
 
     @property
     def period_s(self) -> float:
@@ -112,88 +96,29 @@ class MotionSpec:
             for key in ("settle_cycles", "sample_cycles"):
                 if key in overrides:
                     merged[key] = overrides[key]
-        dof_value = _first(merged, ("dof", "dof_name"))
-        index_value = _first(merged, ("dof_index", "axis_index"))
-        if dof_value is None and index_value is None:
-            raise ValueError("motion metadata requires dof or dof_index")
-        if dof_value is None:
-            index = int(index_value)
-            if not 0 <= index < 6:
-                raise ValueError(f"dof_index must be in [0, 5], got {index}")
-            dof = DOF_NAMES[index]
-        else:
-            dof = str(dof_value).lower()
-            if dof not in _DOF_INDEX:
-                raise ValueError(f"Unknown DOF {dof!r}; expected one of {DOF_NAMES}")
-            index = _DOF_INDEX[dof]
-            if index_value is not None and int(index_value) != index:
-                raise ValueError(f"dof={dof!r} conflicts with dof_index={index_value}")
-        kind = str(_first(merged, ("motion_kind", "kind"), "translation" if index < 3 else "rotation"))
-
-        amplitude_key = next(
-            (
-                key
-                for key in (
-                    "amplitude_si",
-                    "amplitude_rad",
-                    "amplitude_m",
-                    "amplitude_deg",
-                    "amplitude",
-                    "displacement_amplitude",
-                    "angle_amplitude",
-                )
-                if key in merged and merged[key] is not None
-            ),
-            None,
+        if merged["schema_version"] != 5:
+            raise ValueError("Only preliminary case schema_version 5 is supported")
+        dof = str(merged["dof"]).lower()
+        index = int(merged["dof_index"])
+        kind = str(merged["kind"]).lower()
+        amplitude = float(
+            merged["amplitude_m"] if kind == "translation" else merged["amplitude_rad"]
         )
-        if amplitude_key is None:
-            raise ValueError("motion metadata requires amplitude_si")
-        amplitude = float(merged[amplitude_key])
-        inferred_units = {
-            "amplitude_m": "m",
-            "amplitude_rad": "rad",
-            "amplitude_deg": "deg",
-        }.get(amplitude_key, "m" if index < 3 else "rad")
-        units = str(merged.get("amplitude_units", inferred_units)).lower()
-        if amplitude_key != "amplitude_si" and units in ("deg", "degree", "degrees"):
-            amplitude = math.radians(amplitude)
-        expected_units = ("m", "meter", "metre", "meters", "metres") if index < 3 else ("rad", "radian", "radians", "deg", "degree", "degrees")
-        if units not in expected_units:
-            raise ValueError(f"Unexpected amplitude_units={units!r} for {kind}")
-
-        omega_value = _first(merged, ("omega_rad_s", "omega", "angular_frequency_rad_s"))
-        if omega_value is None:
-            frequency = _first(merged, ("frequency_hz", "frequency"))
-            if frequency is None:
-                raise ValueError("motion metadata requires omega_rad_s or frequency_hz")
-            omega_value = 2.0 * math.pi * float(frequency)
-        default_axis = np.eye(3)[index if index < 3 else index - 3]
         return cls(
-            case_name=str(merged.get("case_name", Path(source_path).parent.name if source_path else dof)),
+            case_name=str(merged["case_name"]),
+            case_family=str(merged["case_family"]),
             dof=dof,
             dof_index=index,
             motion_kind=kind,
-            axis=_first(merged, ("axis", "motion_axis"), default_axis),
+            axis=merged["axis"],
             amplitude_si=amplitude,
-            omega_rad_s=float(omega_value),
-            phase_rad=float(_first(merged, ("phase_rad", "phase"), 0.0)),
-            settle_cycles=float(merged.get("settle_cycles", 0.0)),
-            sample_cycles=None if merged.get("sample_cycles") is None else float(merged["sample_cycles"]),
-            cofr_global_m=_first(
-                merged,
-                ("cofr_global_m", "centre_of_rotation_m", "center_of_rotation_m", "cofr", "CofR"),
-                (0, 0, 0),
-            ),
-            com_initial_global_m=_first(merged, ("com_initial_global_m", "com_initial", "origin"), (0, 0, 0)),
-            background_fluid_velocity_body_m_s=_first(
-                merged,
-                (
-                    "background_fluid_velocity_body_m_s",
-                    "background_velocity_body_m_s",
-                    "background_velocity_m_s",
-                ),
-                (0, 0, 0),
-            ),
+            omega_rad_s=float(merged["omega_rad_s"]),
+            phase_rad=float(merged["phase_rad"]),
+            ramp_duration_s=float(merged["ramp_end_s"]),
+            settle_cycles=float(merged["settle_cycles"]),
+            sample_cycles=float(merged["sample_cycles"]),
+            cofr_global_m=merged["centre_of_rotation_m"],
+            com_initial_global_m=merged["com_initial_global_m"],
             source_path=source_path,
         )
 
@@ -216,10 +141,31 @@ class MotionSpec:
 
         time = np.asarray(time_s, dtype=float)
         argument = self.omega_rad_s * time + self.phase_rad
+        ramp = np.ones_like(time)
+        ramp_rate = np.zeros_like(time)
+        ramp_acceleration = np.zeros_like(time)
+        if self.ramp_duration_s > 0.0:
+            active = time < self.ramp_duration_s
+            x = np.clip(time[active] / self.ramp_duration_s, 0.0, 1.0)
+            ramp[active] = 10.0 * x**3 - 15.0 * x**4 + 6.0 * x**5
+            ramp_rate[active] = (
+                30.0 * x**2 - 60.0 * x**3 + 30.0 * x**4
+            ) / self.ramp_duration_s
+            ramp_acceleration[active] = (
+                60.0 * x - 180.0 * x**2 + 120.0 * x**3
+            ) / self.ramp_duration_s**2
         direction = float(self.axis[self.dof_index if self.dof_index < 3 else self.dof_index - 3])
-        eta = direction * self.amplitude_si * np.sin(argument)
-        nu = direction * self.amplitude_si * self.omega_rad_s * np.cos(argument)
-        nudot = -direction * self.amplitude_si * self.omega_rad_s**2 * np.sin(argument)
+        sine = np.sin(argument)
+        cosine = np.cos(argument)
+        eta = direction * self.amplitude_si * ramp * sine
+        nu = direction * self.amplitude_si * (
+            ramp_rate * sine + ramp * self.omega_rad_s * cosine
+        )
+        nudot = direction * self.amplitude_si * (
+            ramp_acceleration * sine
+            + 2.0 * ramp_rate * self.omega_rad_s * cosine
+            - ramp * self.omega_rad_s**2 * sine
+        )
         return eta, nu, nudot
 
 
@@ -250,6 +196,21 @@ class CaseData:
     force_series: ForceSeries
 
 
+@dataclass(frozen=True)
+class SteadyCaseData:
+    case_dir: str
+    case_name: str
+    case_family: str
+    dof: str
+    dof_index: int
+    body_velocity_b_m_s: np.ndarray
+    settle_end_s: float
+    end_time_s: float
+    time_s: np.ndarray
+    wrench_body: np.ndarray
+    force_series: ForceSeries
+
+
 def transform_wrench_to_body(
     force_series: ForceSeries,
     motion: MotionSpec,
@@ -269,8 +230,7 @@ def transform_wrench_to_body(
         rotations = np.broadcast_to(np.eye(3), (time.size, 3, 3))
         com = motion.com_initial_global_m + scalar_eta[:, None] * motion.axis
     else:
-        physical_angle = motion.amplitude_si * np.sin(motion.omega_rad_s * time + motion.phase_rad)
-        rotations = axis_angle_rotation(motion.axis, physical_angle)
+        rotations = axis_angle_rotation(motion.axis, scalar_eta)
         initial_lever = motion.com_initial_global_m - motion.cofr_global_m
         com = motion.cofr_global_m + np.einsum("nij,j->ni", rotations, initial_lever)
 
@@ -287,7 +247,47 @@ def load_case_data(
     config_overrides: Mapping[str, Any] | None = None,
 ) -> CaseData:
     root = Path(case_dir)
-    motion = MotionSpec.from_json(root / "motion.json", overrides=config_overrides)
+    motion = MotionSpec.from_json(root / "case.json", overrides=config_overrides)
     forces = load_case_forces(root)
     eta, nu, nudot, wrench = transform_wrench_to_body(forces, motion)
     return CaseData(str(root), motion, forces.time_s, eta, nu, nudot, wrench, forces)
+
+
+def load_steady_case_data(case_dir: str | Path) -> SteadyCaseData:
+    root = Path(case_dir)
+    source = root / "case.json"
+    with source.open("r", encoding="utf-8") as stream:
+        data = json.load(stream)
+    if not isinstance(data, Mapping) or data.get("schema_version") != 5:
+        raise ValueError(f"{source} must use schema_version 5")
+    if data.get("case_family") != "steady_damping" or data.get("kind") != "steady_translation":
+        raise ValueError(f"{source} is not a steady translational damping case")
+    dof = str(data["dof"])
+    dof_index = int(data["dof_index"])
+    if dof not in _DOF_INDEX or dof_index != _DOF_INDEX[dof] or dof_index >= 3:
+        raise ValueError(f"{source}: invalid steady translation DOF")
+    velocity = np.asarray(data["body_velocity_b_m_s"], dtype=float)
+    if velocity.shape != (3,) or not np.all(np.isfinite(velocity)):
+        raise ValueError(f"{source}: body_velocity_b_m_s must contain three finite values")
+    off_axis = np.delete(velocity, dof_index)
+    if velocity[dof_index] == 0.0 or np.any(np.abs(off_axis) > 1.0e-12):
+        raise ValueError(f"{source}: steady case must excite exactly its declared DOF")
+    settle_end = float(data["settle_end_s"])
+    end_time = float(data["end_time_s"])
+    if not 0.0 < settle_end < end_time:
+        raise ValueError(f"{source}: invalid steady analysis time window")
+    forces = load_case_forces(root)
+    wrench = np.concatenate((forces.force_global, forces.moment_global), axis=1)
+    return SteadyCaseData(
+        str(root),
+        str(data["case_name"]),
+        str(data["case_family"]),
+        dof,
+        dof_index,
+        velocity,
+        settle_end,
+        end_time,
+        forces.time_s,
+        wrench,
+        forces,
+    )

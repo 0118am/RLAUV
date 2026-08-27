@@ -92,9 +92,11 @@ def parse_total_vector_file(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
             if not header_has_total:
                 raise ValueError(f"{source}:{line_number}: missing OpenCFD v2512 total-vector header")
             values = [float(token) for token in _NUMBER_RE.findall(remainder)]
-            if len(values) != 9:
+            if len(values) not in (9, 12):
                 raise ValueError(
-                    f"{source}:{line_number}: expected 9 v2512 total/pressure/viscous values, got {len(values)}"
+                    f"{source}:{line_number}: expected 9 or 12 v2512 "
+                    "total/pressure/viscous[/porous] values, "
+                    f"got {len(values)}"
                 )
             vector = np.asarray(values[:3], dtype=float)
             times.append(time_s)

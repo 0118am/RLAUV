@@ -1,24 +1,13 @@
-"""Battery, inflow, wake-interaction, and reaction-torque effects."""
+"""Inflow and wake-interaction effects.
+
+Shaft reaction torque is deliberately absent: the available T60 bench record
+contains three-axis force but no shaft torque.  A torque coefficient must not
+be inferred from thrust alone.
+"""
 
 from __future__ import annotations
 
 import torch
-
-def calculate_voltage_thrust_scale(
-    voltage: torch.Tensor | float,
-    nominal_voltage: float,
-    exponent: float = 2.0,
-    min_voltage: float = 0.0,
-) -> torch.Tensor:
-    """Return thrust scaling from battery voltage relative to nominal voltage."""
-
-    if isinstance(voltage, torch.Tensor):
-        voltage_tensor = voltage.to(dtype=torch.float32)
-    else:
-        voltage_tensor = torch.tensor(voltage, dtype=torch.float32)
-    nominal = max(float(nominal_voltage), 1.0e-6)
-    voltage_tensor = torch.clamp(voltage_tensor, min=float(min_voltage))
-    return torch.pow(torch.clamp(voltage_tensor / nominal, min=0.0), float(exponent))
 
 
 def calculate_axial_inflow_thrust_scale(

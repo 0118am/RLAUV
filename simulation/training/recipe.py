@@ -3,19 +3,30 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-import copy
-from dataclasses import asdict, dataclass, fields, replace
-import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal
 
-from environment.profiles.domain_randomization import (
+from pydantic import model_validator
+
+from common.schema import (
+    FiniteJsonValue,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+    StrictBoolean,
+    StrictFrozenModel,
+)
+
+from simulation.domain_randomization import (
+    DOMAIN_RANDOMIZATION_PARAMETER_NAMES,
+    DomainRandomizationProfile,
     DomainRandomizationSpec,
-    domain_randomization_parameter_names,
     load_domain_randomization_spec_json,
     write_domain_randomization_spec_json,
 )
-from environment.profiles.environment_profile import (
+from environment.profile import (
     EnvironmentProfile,
     FreeSurfaceProfile,
     HydrodynamicsProfile,
@@ -24,9 +35,11 @@ from environment.profiles.environment_profile import (
     write_environment_profile_json,
 )
 from robot.control.trajectory import (
+    AXIS_SINE,
     EVALUATION_TRAJECTORY_NAMES,
-    TRAJECTORY_TYPE_IDS,
+    LATERAL_WAVE,
     TrajectoryKinematicLimits,
+    VERTICAL_WAVE,
 )
 from simulation.training.evaluation.config import (
     DEFAULT_CURRENT_TAU_S,
@@ -39,8 +52,8 @@ from simulation.training.rewards import canonical_tracking_reward_policy_name
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-TRAINING_RECIPE_SCHEMA_VERSION = 1
-DEFAULT_TRAINING_RECIPE = PROJECT_ROOT / "simulation/training/recipes/t60_trajectory_policy_6_v1.json"
+TRAINING_RECIPE_SCHEMA_VERSION = 5
+DEFAULT_TRAINING_RECIPE = PROJECT_ROOT / "simulation/training/recipes/t60_trajectory_precision_v11.json"
 
 
 @dataclass(frozen=True)
@@ -49,7 +62,7 @@ class ExperimentSpec:
 
     isaaclab_root: Path
     rlpolicy_root: Path
-    # Supplied by a validated training recipe or a loaded run manifest.
+    # Supplied by the selected training recipe.
     mlp_architecture: str
     task_name: str = "Isaac-AUV-Traj-Direct-v1"
     train_script: str = (
@@ -66,20 +79,6 @@ class ExperimentSpec:
         return get_mlp_architecture(self.mlp_architecture)
 
     @property
-    def policy_architecture(self) -> str:
-        return self.architecture.name
-
-    @property
-    def experiment_name(self) -> str:
-        return self.architecture.experiment_name
-
-    @property
-    def rsl_experiment_name(self) -> str:
-        """Absolute RSL-RL experiment root inside this repository."""
-
-        return str(self.logs_root)
-
-    @property
     def logs_root(self) -> Path:
         return self.rlpolicy_root.expanduser().resolve() / self.architecture.experiment_name
 
@@ -87,45 +86,107 @@ class ExperimentSpec:
         return self.logs_root / run_name / "evaluation"
 
 
-@dataclass(frozen=True)
-class TrajectoryCurriculumRequest:
+class AxisSineLevelRequest(StrictFrozenModel):
+    """One peak-speed/amplitude pair for selected translation axes."""
+
+    axes: tuple[Literal["surge", "sway", "heave"], ...]
+    peak_speed_mps: PositiveFloat
+    amplitude_scale: PositiveFloat
+
+
+class TravelingSineLevelRequest(StrictFrozenModel):
+    """One feasible speed/curvature tier for one traveling-wave plane."""
+
+    trajectory: Literal["lateral_wave", "vertical_wave"]
+    wave_count: PositiveInt
+    path_speed_mps: PositiveFloat
+    longitudinal_scale: PositiveFloat
+    transverse_scales: tuple[PositiveFloat, ...]
+
+
+class TrajectoryCurriculumStageRequest(StrictFrozenModel):
+    """New command levels introduced at one policy step."""
+
+    start_step: NonNegativeInt
+    add_axis_sine_levels: tuple[AxisSineLevelRequest, ...]
+    add_traveling_sine_levels: tuple[TravelingSineLevelRequest, ...]
+
+
+class TrajectoryCurriculumRequest(StrictFrozenModel):
     """Explicit trajectory curriculum for a training campaign."""
 
-    enabled: bool
-    amplitude_x_range: tuple[float, float]
-    amplitude_y_range: tuple[float, float]
-    amplitude_z_range: tuple[float, float]
-    period_range: tuple[float, float]
-    stage_steps: tuple[int, ...]
-    stage_0_types: tuple[int, ...]
-    stage_1_types: tuple[int, ...]
-    stage_2_types: tuple[int, ...]
-    stage_3_types: tuple[int, ...]
-    amplitude_scales: tuple[float, ...]
-    vertical_amplitude_scales: tuple[float, ...]
-    period_min_by_stage: tuple[float, ...]
-    period_max_by_stage: tuple[float, ...]
-    speed_levels_mps: tuple[float, ...] = (0.1, 0.2, 0.3, 0.4)
+    enabled: StrictBoolean
+    amplitude_x_range: tuple[PositiveFloat, PositiveFloat]
+    amplitude_y_range: tuple[PositiveFloat, PositiveFloat]
+    amplitude_z_range: tuple[PositiveFloat, PositiveFloat]
+    stages: tuple[TrajectoryCurriculumStageRequest, ...]
+
+
+RuntimeTrajectoryCommand = tuple[int, int, int, float, tuple[float, float, float]]
+
+
+def expand_trajectory_stage_commands(
+    stage: TrajectoryCurriculumStageRequest,
+) -> tuple[RuntimeTrajectoryCommand, ...]:
+    """Expand one compact recipe stage into balanced runtime commands."""
+
+    commands: list[RuntimeTrajectoryCommand] = []
+    axis_ids = {"surge": 0, "sway": 1, "heave": 2}
+    for level in stage.add_axis_sine_levels:
+        scale = float(level.amplitude_scale)
+        for axis_name in level.axes:
+            commands.append(
+                (
+                    AXIS_SINE,
+                    axis_ids[axis_name],
+                    1,
+                    float(level.peak_speed_mps),
+                    (scale, scale, scale),
+                )
+            )
+    for level in stage.add_traveling_sine_levels:
+        longitudinal_scale = float(level.longitudinal_scale)
+        trajectory_type = (
+            LATERAL_WAVE if level.trajectory == "lateral_wave" else VERTICAL_WAVE
+        )
+        for transverse_scale_value in level.transverse_scales:
+            transverse_scale = float(transverse_scale_value)
+            amplitude_scales = (
+                (longitudinal_scale, transverse_scale, 1.0)
+                if trajectory_type == LATERAL_WAVE
+                else (longitudinal_scale, 1.0, transverse_scale)
+            )
+            commands.append(
+                (
+                    trajectory_type,
+                    0,
+                    int(level.wave_count),
+                    float(level.path_speed_mps),
+                    amplitude_scales,
+                )
+            )
+    return tuple(commands)
+
+
+class InitialStateRequest(StrictFrozenModel):
+    """Target-relative reset errors sampled independently for every episode."""
+
+    position_radius_m: NonNegativeFloat
+    attitude_error_max_rad: NonNegativeFloat
+    linear_velocity_error_max_mps: NonNegativeFloat
+    angular_velocity_error_max_radps: NonNegativeFloat
 
 
 @dataclass(frozen=True)
 class TrainRequest:
     """Parameters controlled by the Python training manager."""
 
-    reward_profile: str
     training_recipe: Path
     seed: int = 42
     num_envs: int = 4096
     run_name: str = "trajectory"
     headless: bool = True
     extra_args: tuple[str, ...] = ("--logger", "tensorboard")
-    max_iterations: int | None = None
-    rollout_steps_per_env: int | None = None
-    # ``None`` preserves the recipe's feature selection. An empty tuple is a
-    # valid explicit request for deterministic reset/step physics while still
-    # retaining the recipe identity in the run manifest.
-    domain_randomization_features: tuple[str, ...] | None = None
-    trajectory_curriculum: TrajectoryCurriculumRequest | None = None
     resume_load_run: str = ""
     resume_checkpoint: str = ""
 
@@ -134,14 +195,12 @@ class TrainRequest:
 class EvalRequest:
     """Parameters controlled by the evaluation notebook."""
 
-    reward_profile: str | None = None
     seed: int = 42
     checkpoint: str | Sequence[str] = "latest"
     trajectories: tuple[str, ...] = EVALUATION_TRAJECTORY_NAMES
     duration_s: float = DEFAULT_EVALUATION_DURATION_S
     headless: bool = True
     skip_existing: bool = True
-    include_initial_checkpoint: bool = False
     align_initial_target: bool = True
     random_curve_count: int = DEFAULT_RANDOM_CURVE_COUNT
     trajectory_amp_x: float | None = None
@@ -160,7 +219,6 @@ class EvalRequest:
     num_envs: int | None = None
     eval_disturbance_stage: int = -1
     evaluation_label: str = ""
-    keep_boundaries: bool = False
     # Deterministic, current-only diagnostics.  These deliberately bypass the
     # sampled DR recipe so a fixed current can be compared on identical curves.
     eval_current: tuple[float, float, float] | None = None
@@ -173,8 +231,7 @@ class EvalRequest:
     disturbance_name: str | None = None
 
 
-@dataclass(frozen=True)
-class TrainingRecipe:
+class TrainingRecipe(StrictFrozenModel):
     """Complete versioned behavior selection for one family of training runs."""
 
     name: str
@@ -182,17 +239,21 @@ class TrainingRecipe:
     reward_profile: str
     environment_base: str
     domain_randomization_base: str
-    max_iterations: int
-    rollout_steps_per_env: int
+    max_iterations: PositiveInt
+    rollout_steps_per_env: PositiveInt
+    episode_length_s: PositiveFloat
+    trajectory_startup_duration_s: NonNegativeFloat
+    use_boundaries: StrictBoolean
+    initial_state: InitialStateRequest
     trajectory_curriculum: TrajectoryCurriculumRequest
     kinematic_limits: TrajectoryKinematicLimits
-    environment_overrides: Mapping[str, Mapping[str, Any]]
-    randomization_overrides: Mapping[str, Any]
-    schema_version: int = TRAINING_RECIPE_SCHEMA_VERSION
+    environment_overrides: dict[str, dict[str, FiniteJsonValue]]
+    randomization_overrides: dict[str, FiniteJsonValue]
+    schema_version: Literal[TRAINING_RECIPE_SCHEMA_VERSION] = TRAINING_RECIPE_SCHEMA_VERSION
     description: str = ""
 
     @property
-    def architecture(self):
+    def architecture(self) -> MlpArchitecture:
         return get_mlp_architecture(self.mlp_architecture)
 
     def resolve_path(self, value: str) -> Path:
@@ -204,84 +265,87 @@ class TrainingRecipe:
             raise ValueError(f"Training recipe path escapes the repository: {value!r}.")
         return resolved
 
-    def validate(self) -> None:
-        if self.schema_version != TRAINING_RECIPE_SCHEMA_VERSION:
-            raise ValueError(
-                f"Unsupported training recipe schema {self.schema_version}; "
-                f"expected {TRAINING_RECIPE_SCHEMA_VERSION}."
-            )
+    @model_validator(mode="after")
+    def validate_recipe(self) -> "TrainingRecipe":
         if not self.name.strip():
             raise ValueError("Training recipe name must be non-empty.")
         self.architecture
-        if canonical_tracking_reward_policy_name(self.reward_profile) == "custom":
-            raise ValueError("Versioned training recipes must select a named reward profile.")
-        if self.max_iterations <= 0 or self.rollout_steps_per_env <= 0:
-            raise ValueError("Training iteration and rollout counts must be positive.")
-        self.kinematic_limits.validate()
-        if not self.trajectory_curriculum.stage_0_types:
-            raise ValueError("Training recipe must select at least one trajectory type.")
-        known_types = set(TRAJECTORY_TYPE_IDS.values())
-        for values in (
-            self.trajectory_curriculum.stage_0_types,
-            self.trajectory_curriculum.stage_1_types,
-            self.trajectory_curriculum.stage_2_types,
-            self.trajectory_curriculum.stage_3_types,
-        ):
-            if not set(values).issubset(known_types):
-                raise ValueError(f"Unknown trajectory type IDs in training recipe: {values}.")
+        canonical_tracking_reward_policy_name(self.reward_profile)
+        stages = self.trajectory_curriculum.stages
+        if not stages or stages[0].start_step != 0:
+            raise ValueError("Trajectory curriculum must start with a stage at policy step 0.")
+        if any(right.start_step <= left.start_step for left, right in zip(stages, stages[1:])):
+            raise ValueError("Trajectory curriculum stage start steps must be strictly increasing.")
+        for stage in stages:
+            stage_speeds = [
+                *(float(level.peak_speed_mps) for level in stage.add_axis_sine_levels),
+                *(float(level.path_speed_mps) for level in stage.add_traveling_sine_levels),
+            ]
+            if stage_speeds and max(stage_speeds) > float(self.kinematic_limits.max_speed_mps):
+                raise ValueError("Trajectory curriculum speed exceeds the kinematic speed limit.")
         if set(self.environment_overrides) - {"hydrodynamics", "pool_boundary", "free_surface"}:
             raise ValueError("environment_overrides accepts only hydrodynamics, pool_boundary, and free_surface.")
+        environment_contracts = {
+            "hydrodynamics": HydrodynamicsProfile.model_fields,
+            "pool_boundary": PoolBoundaryProfile.model_fields,
+            "free_surface": FreeSurfaceProfile.model_fields,
+        }
+        for section, values in self.environment_overrides.items():
+            unknown = sorted(set(values) - set(environment_contracts[section]))
+            if unknown:
+                raise ValueError(
+                    f"Unknown environment_overrides.{section} field(s): " + ", ".join(unknown)
+                )
+        randomization_unknown = sorted(
+            set(self.randomization_overrides) - DOMAIN_RANDOMIZATION_PARAMETER_NAMES
+        )
+        if randomization_unknown:
+            raise ValueError(
+                "Unknown randomization_overrides field(s): " + ", ".join(randomization_unknown)
+            )
         for path in (self.resolve_path(self.environment_base), self.resolve_path(self.domain_randomization_base)):
             if not path.is_file():
                 raise FileNotFoundError(f"Training recipe input does not exist: {path}")
-        # Resolve the complete inputs during validation so unknown override keys
-        # fail before Isaac Sim is launched.
-        self.resolve_profiles()
+        return self
 
     def resolve_profiles(self) -> tuple[EnvironmentProfile, DomainRandomizationSpec]:
-        environment = load_environment_profile_json(self.resolve_path(self.environment_base))
-        environment = replace(
-            environment,
-            name=f"{environment.name}--{self.name}",
-            description=f"{environment.description} Training recipe: {self.name}.",
-            hydrodynamics=replace(
-                environment.hydrodynamics,
-                **copy.deepcopy(dict(self.environment_overrides.get("hydrodynamics", {}))),
-            ),
-            pool_boundary=replace(
-                environment.pool_boundary,
-                **copy.deepcopy(dict(self.environment_overrides.get("pool_boundary", {}))),
-            ),
-            free_surface=replace(
-                environment.free_surface,
-                **copy.deepcopy(dict(self.environment_overrides.get("free_surface", {}))),
-            ),
-        )
-        environment.validate()
+        """Resolve the environment and randomization inputs selected by this recipe."""
 
-        randomization = load_domain_randomization_spec_json(
+        source_environment = load_environment_profile_json(self.resolve_path(self.environment_base))
+        hydrodynamics = HydrodynamicsProfile.model_validate(
+            source_environment.hydrodynamics.model_dump(mode="python")
+            | self.environment_overrides.get("hydrodynamics", {})
+        )
+        pool_boundary = PoolBoundaryProfile.model_validate(
+            source_environment.pool_boundary.model_dump(mode="python")
+            | self.environment_overrides.get("pool_boundary", {})
+        )
+        free_surface = FreeSurfaceProfile.model_validate(
+            source_environment.free_surface.model_dump(mode="python")
+            | self.environment_overrides.get("free_surface", {})
+        )
+        environment = EnvironmentProfile(
+            name=f"{source_environment.name}--{self.name}",
+            description=f"{source_environment.description} Training recipe: {self.name}.",
+            hydrodynamics=hydrodynamics,
+            pool_boundary=pool_boundary,
+            free_surface=free_surface,
+        )
+
+        source_randomization = load_domain_randomization_spec_json(
             self.resolve_path(self.domain_randomization_base)
         )
-        parameters = replace(
-            randomization.parameters,
-            **copy.deepcopy(dict(self.randomization_overrides)),
+        parameters = DomainRandomizationProfile.model_validate(
+            source_randomization.parameters.model_dump(mode="python")
+            | self.randomization_overrides
         )
-        randomization = replace(
-            randomization,
-            name=f"{randomization.name}--{self.name}",
-            description=f"{randomization.description} Training recipe: {self.name}.",
-            base_profile_name=environment.name,
+        randomization = DomainRandomizationSpec(
+            name=f"{source_randomization.name}--{self.name}",
+            description=f"{source_randomization.description} Training recipe: {self.name}.",
             parameters=parameters,
-            metadata={**dict(randomization.metadata), "training_recipe": self.name},
+            metadata={**source_randomization.metadata, "training_recipe": self.name},
         )
-        randomization.validate()
         return environment, randomization
-
-    def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        data["trajectory_curriculum"] = asdict(self.trajectory_curriculum)
-        data["kinematic_limits"] = asdict(self.kinematic_limits)
-        return data
 
 
 @dataclass(frozen=True)
@@ -291,116 +355,105 @@ class RunInputPaths:
     domain_randomization: Path
 
 
-def _strict_json(path: Path) -> Mapping[str, Any]:
-    with path.open("r", encoding="utf-8") as stream:
-        data = json.load(
-            stream,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ValueError(f"Non-finite JSON constant {value!r} is not allowed.")
-            ),
-        )
-    if not isinstance(data, Mapping):
-        raise TypeError(f"{path} must contain a JSON object.")
-    return data
+def run_input_paths(run_dir: str | Path) -> RunInputPaths:
+    """Return the three run-local inputs written beside a checkpoint."""
+
+    input_dir = Path(run_dir).expanduser().resolve() / "params" / "inputs"
+    return RunInputPaths(
+        recipe=input_dir / "training_recipe.json",
+        environment=input_dir / "environment.json",
+        domain_randomization=input_dir / "domain_randomization.json",
+    )
+
+
+def apply_trajectory_kinematic_limits(env_cfg: Any, limits: TrajectoryKinematicLimits) -> Any:
+    """Apply the trajectory-generator limits selected by a recipe."""
+
+    env_cfg.trajectory_max_speed_mps = limits.max_speed_mps
+    env_cfg.trajectory_max_acceleration_mps2 = limits.max_acceleration_mps2
+    env_cfg.trajectory_max_yaw_rate_radps = limits.max_yaw_rate_radps
+    env_cfg.trajectory_max_jerk_mps3 = limits.max_jerk_mps3
+    env_cfg.trajectory_retime_samples = limits.retime_samples
+    return env_cfg
+
+
+def apply_training_recipe(recipe: TrainingRecipe, env_cfg: Any, agent_cfg: Any) -> tuple[Any, Any]:
+    """Apply every behavioral training setting from the single recipe source."""
+
+    architecture = recipe.architecture
+    curriculum = recipe.trajectory_curriculum
+
+    env_cfg.mlp_architecture = architecture.name
+    env_cfg.critic_privileged_fields_override = []
+    env_cfg.tracking_reward_profile = recipe.reward_profile
+    env_cfg.domain_randomization_feature_override_enabled = False
+    env_cfg.episode_length_s = float(recipe.episode_length_s)
+    env_cfg.trajectory_startup_duration_s = float(recipe.trajectory_startup_duration_s)
+    env_cfg.use_boundaries = bool(recipe.use_boundaries)
+    env_cfg.trajectory_initial_position_radius = float(
+        recipe.initial_state.position_radius_m
+    )
+    env_cfg.trajectory_initial_attitude_error_max_rad = float(
+        recipe.initial_state.attitude_error_max_rad
+    )
+    env_cfg.trajectory_initial_linear_velocity_error_max_mps = float(
+        recipe.initial_state.linear_velocity_error_max_mps
+    )
+    env_cfg.trajectory_initial_angular_velocity_error_max_radps = float(
+        recipe.initial_state.angular_velocity_error_max_radps
+    )
+    agent_cfg.policy.actor_hidden_dims = list(architecture.actor_hidden_dims)
+    agent_cfg.policy.critic_hidden_dims = list(architecture.critic_hidden_dims)
+    agent_cfg.policy.activation = architecture.activation
+    agent_cfg.max_iterations = recipe.max_iterations
+    agent_cfg.num_steps_per_env = recipe.rollout_steps_per_env
+
+    env_cfg.trajectory_curriculum = curriculum.enabled
+    env_cfg.trajectory_amp_x_range = list(curriculum.amplitude_x_range)
+    env_cfg.trajectory_amp_y_range = list(curriculum.amplitude_y_range)
+    env_cfg.trajectory_amp_z_range = list(curriculum.amplitude_z_range)
+    env_cfg.trajectory_curriculum_stage_start_steps = [
+        int(stage.start_step) for stage in curriculum.stages
+    ]
+    active_commands: list[RuntimeTrajectoryCommand] = []
+    stage_commands: list[tuple[RuntimeTrajectoryCommand, ...]] = []
+    for stage in curriculum.stages:
+        active_commands.extend(expand_trajectory_stage_commands(stage))
+        stage_commands.append(tuple(active_commands))
+    env_cfg.trajectory_curriculum_stage_types = [
+        [command[0] for command in commands] for commands in stage_commands
+    ]
+    env_cfg.trajectory_curriculum_stage_axes = [
+        [command[1] for command in commands] for commands in stage_commands
+    ]
+    env_cfg.trajectory_curriculum_stage_wave_counts = [
+        [command[2] for command in commands] for commands in stage_commands
+    ]
+    env_cfg.trajectory_curriculum_stage_speeds_mps = [
+        [command[3] for command in commands] for commands in stage_commands
+    ]
+    env_cfg.trajectory_curriculum_stage_amplitude_scales = [
+        [list(command[4]) for command in commands] for commands in stage_commands
+    ]
+    apply_trajectory_kinematic_limits(env_cfg, recipe.kinematic_limits)
+    return env_cfg, agent_cfg
 
 
 def load_training_recipe(path: str | Path = DEFAULT_TRAINING_RECIPE) -> TrainingRecipe:
     """Load one strict recipe and reject misspelled or obsolete fields."""
 
     selected = Path(path).expanduser().resolve()
-    data = _strict_json(selected)
-    allowed = {
-        "schema_version",
-        "name",
-        "description",
-        "mlp_architecture",
-        "reward_profile",
-        "environment_base",
-        "domain_randomization_base",
-        "max_iterations",
-        "rollout_steps_per_env",
-        "trajectory_curriculum",
-        "kinematic_limits",
-        "environment_overrides",
-        "randomization_overrides",
-    }
-    unknown = sorted(set(data) - allowed)
-    if unknown:
-        raise ValueError("Unknown training recipe field(s): " + ", ".join(unknown))
-    required = allowed - {"schema_version", "description"}
-    missing = sorted(required - set(data))
-    if missing:
-        raise ValueError("Training recipe is missing field(s): " + ", ".join(missing))
-    curriculum_data = data["trajectory_curriculum"]
-    limits_data = data["kinematic_limits"]
-    if not isinstance(curriculum_data, Mapping) or not isinstance(limits_data, Mapping):
-        raise TypeError("trajectory_curriculum and kinematic_limits must be JSON objects.")
-    nested_contracts = (
-        ("trajectory_curriculum", curriculum_data, {item.name for item in fields(TrajectoryCurriculumRequest)}),
-        ("kinematic_limits", limits_data, {item.name for item in fields(TrajectoryKinematicLimits)}),
-    )
-    for name, values, field_names in nested_contracts:
-        nested_unknown = sorted(set(values) - field_names)
-        if nested_unknown:
-            raise ValueError(f"Unknown {name} field(s): " + ", ".join(nested_unknown))
-    environment_overrides = data["environment_overrides"]
-    randomization_overrides = data["randomization_overrides"]
-    if not isinstance(environment_overrides, Mapping) or not isinstance(randomization_overrides, Mapping):
-        raise TypeError("environment_overrides and randomization_overrides must be JSON objects.")
-    environment_contracts = {
-        "hydrodynamics": {item.name for item in fields(HydrodynamicsProfile)},
-        "pool_boundary": {item.name for item in fields(PoolBoundaryProfile)},
-        "free_surface": {item.name for item in fields(FreeSurfaceProfile)},
-    }
-    for section, values in environment_overrides.items():
-        if section not in environment_contracts:
-            raise ValueError(f"Unknown environment_overrides section: {section}")
-        if not isinstance(values, Mapping):
-            raise TypeError(f"environment_overrides.{section} must be a JSON object.")
-        nested_unknown = sorted(set(values) - environment_contracts[section])
-        if nested_unknown:
-            raise ValueError(
-                f"Unknown environment_overrides.{section} field(s): " + ", ".join(nested_unknown)
-            )
-    randomization_unknown = sorted(
-        set(randomization_overrides) - domain_randomization_parameter_names()
-    )
-    if randomization_unknown:
-        raise ValueError(
-            "Unknown randomization_overrides field(s): " + ", ".join(randomization_unknown)
-        )
-    recipe = TrainingRecipe(
-        schema_version=int(data.get("schema_version", TRAINING_RECIPE_SCHEMA_VERSION)),
-        name=str(data["name"]),
-        description=str(data.get("description", "")),
-        mlp_architecture=str(data["mlp_architecture"]),
-        reward_profile=str(data["reward_profile"]),
-        environment_base=str(data["environment_base"]),
-        domain_randomization_base=str(data["domain_randomization_base"]),
-        max_iterations=int(data["max_iterations"]),
-        rollout_steps_per_env=int(data["rollout_steps_per_env"]),
-        trajectory_curriculum=TrajectoryCurriculumRequest(**copy.deepcopy(dict(curriculum_data))),
-        kinematic_limits=TrajectoryKinematicLimits(**copy.deepcopy(dict(limits_data))),
-        environment_overrides=copy.deepcopy(dict(environment_overrides)),
-        randomization_overrides=copy.deepcopy(dict(randomization_overrides)),
-    )
-    recipe.validate()
-    return recipe
+    return TrainingRecipe.model_validate_json(selected.read_bytes())
 
 
 def materialize_run_inputs(recipe: TrainingRecipe, run_dir: str | Path) -> RunInputPaths:
     """Write exact resolved inputs inside a newly-created training run."""
 
-    recipe.validate()
     environment, randomization = recipe.resolve_profiles()
-    input_dir = Path(run_dir).resolve() / "params" / "inputs"
+    paths = run_input_paths(run_dir)
+    input_dir = paths.recipe.parent
     input_dir.mkdir(parents=True, exist_ok=True)
-    recipe_path = input_dir / "training_recipe.json"
-    environment_path = input_dir / "environment.json"
-    randomization_path = input_dir / "domain_randomization.json"
-    with recipe_path.open("w", encoding="utf-8") as stream:
-        json.dump(recipe.to_dict(), stream, allow_nan=False, ensure_ascii=False, indent=2, sort_keys=True)
-        stream.write("\n")
-    write_environment_profile_json(environment, environment_path)
-    write_domain_randomization_spec_json(randomization, randomization_path)
-    return RunInputPaths(recipe_path, environment_path, randomization_path)
+    paths.recipe.write_text(recipe.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    write_environment_profile_json(environment, paths.environment)
+    write_domain_randomization_spec_json(randomization, paths.domain_randomization)
+    return paths
