@@ -83,7 +83,7 @@ class AUVModel:
     # installed left/right PWM orientation, and off-axis forces are already
     # encoded. Never negate the PWM offset per thruster at evaluation time.
     thruster_pwm_center_us: float = 1500.0
-    thruster_pwm_half_range_us: float = 200.0
+    thruster_pwm_half_range_us: float = 250.0
     thruster_pwm_deadband_us: float = 25.0
     thruster_force_curve_coefficients: tuple[tuple[tuple[float, float, float], ...], ...] = (
         (

@@ -1,4 +1,4 @@
-"""Common/per-thruster gain, command conditioning, and wake DR feature."""
+"""Common/per-thruster gain, response-time, and wake DR feature."""
 
 from __future__ import annotations
 
@@ -14,8 +14,6 @@ def reset_actuators(state, cfg, env_ids: torch.Tensor, stage: int, *, enabled: b
     state.thruster_force_scale[env_ids] = 1.0
     state.common_thruster_force_scale[env_ids] = 1.0
     state.thruster_time_constant[env_ids] = cfg.dyn_time_constant
-    state.thruster_command_resolution[env_ids] = cfg.thruster_command_resolution
-    state.thruster_command_dropout_probability[env_ids] = cfg.thruster_command_dropout_probability
     state.thruster_wake_loss_coefficient[env_ids] = cfg.thruster_wake_loss_coefficient
     if not enabled:
         if cfg.evaluation_thruster_force_scale_override:
@@ -46,20 +44,6 @@ def reset_actuators(state, cfg, env_ids: torch.Tensor, stage: int, *, enabled: b
             (count,),
             state.device,
         )
-    scalar_ranges = (
-        ("thruster_command_resolution_range", state.thruster_command_resolution),
-        (
-            "thruster_command_dropout_probability_range",
-            state.thruster_command_dropout_probability,
-        ),
-    )
-    for name, destination in scalar_ranges:
-        value_range = getattr(cfg.domain_randomization, name)
-        if value_range is not None:
-            destination[env_ids] = sample_bounded_normal(
-                value_range[0], value_range[1], (count, 1), state.device
-            )
-
     wake_range = cfg.domain_randomization.thruster_wake_loss_coefficient_scale_range
     if wake_range is not None:
         wake_scale = sample_bounded_normal(

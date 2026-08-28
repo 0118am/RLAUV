@@ -48,7 +48,7 @@ class TrackingRewardPolicy:
 
     @property
     def minimum_running_reward(self) -> float:
-        """Lower bound for processed commands in [-1, 1], excluding termination."""
+        """Lower bound for motor commands in [-1, 1], excluding termination."""
 
         maximum_scaled_error = math.pi / self.attitude_recovery_transition
         maximum_huber_loss = maximum_scaled_error - 0.5
@@ -85,7 +85,7 @@ PRECISION_V9 = TrackingRewardPolicy(
     description=(
         "Equal roll/pitch/yaw attitude rewards for level roll/pitch targets and "
         "trajectory yaw, using signed Huber recovery plus 2.5 degree Cauchy "
-        "precision, dual-scale angular velocity, and raw processed-command "
+        "precision, dual-scale angular velocity, and bounded motor-command "
         "magnitude and squared-rate penalties."
     ),
     position_weight=0.35,

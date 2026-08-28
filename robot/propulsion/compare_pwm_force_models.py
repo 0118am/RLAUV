@@ -20,7 +20,7 @@ from robot.propulsion.curves import (
 )
 
 
-PWM_OFFSET_LIMIT_US = 200.0
+PWM_OFFSET_LIMIT_US = AUV.thruster_pwm_half_range_us
 
 # Layout: (thruster, component, a_positive, b_positive, a_negative, b_negative).
 # These are the full-precision values from ols_quadratic_pwm_flu_coefficients.csv
@@ -373,7 +373,7 @@ def main() -> None:
         title="Configured vs accurate T60 force curves at the same physical PWM offset",
         subtitle=(
             "u is never sign-flipped; this view isolates branch ordering and coefficient precision "
-            "over the valid -200...200 us range"
+            f"over the configured -{PWM_OFFSET_LIMIT_US:g}...{PWM_OFFSET_LIMIT_US:g} us range"
         ),
         xlabel="u = PWM_model - 1500 (us)",
     )
@@ -384,8 +384,7 @@ def main() -> None:
         configured_same_command,
         title="Current runtime vs accurate T60 model at the same normalized command",
         subtitle=(
-            f"Accurate mapping: u = 200 command; current mapping: u = "
-            f"{AUV.thruster_pwm_half_range_us:g} command"
+            f"u = {AUV.thruster_pwm_half_range_us:g} command for both models"
         ),
         xlabel="Normalized command",
     )
@@ -398,8 +397,7 @@ def main() -> None:
         ),
     )
 
-    print(f"Accurate PWM offset range: +/-{PWM_OFFSET_LIMIT_US:g} us")
-    print(f"Current configured PWM half range: +/-{AUV.thruster_pwm_half_range_us:g} us")
+    print(f"PWM offset range: +/-{PWM_OFFSET_LIMIT_US:g} us")
     _print_vector_error_table(
         "\nSame physical PWM offset:",
         offset_us,

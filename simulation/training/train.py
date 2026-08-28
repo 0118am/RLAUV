@@ -241,7 +241,7 @@ def execute_training(
     try:
         env = maybe_record_video(env, args_cli, log_dir, gym, print_dict)
         started = time.time()
-        env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+        env = RslRlVecEnvWrapper(env)
         runner = AUVOnPolicyRunner(
             env,
             agent_cfg.to_dict(),

@@ -13,13 +13,12 @@ from common.schema import (
     NonNegativeFloat,
     NonNegativeInt,
     PositiveFloat,
-    Probability,
     StrictBoolean,
     StrictFrozenModel,
 )
 
 
-DOMAIN_RANDOMIZATION_SCHEMA_VERSION = 8
+DOMAIN_RANDOMIZATION_SCHEMA_VERSION = 9
 
 DOMAIN_RANDOMIZATION_FEATURES = (
     "current",
@@ -47,7 +46,6 @@ def normalize_domain_randomization_features(features: Iterable[str]) -> tuple[st
 
 PositiveRange: TypeAlias = tuple[PositiveFloat, PositiveFloat]
 NonNegativeRange: TypeAlias = tuple[NonNegativeFloat, NonNegativeFloat]
-ProbabilityRange: TypeAlias = tuple[Probability, Probability]
 StageValues: TypeAlias = Annotated[tuple[NonNegativeFloat, ...], Field(min_length=1)]
 
 DISTURBANCE_STAGE_FIELDS = (
@@ -69,8 +67,6 @@ class DomainRandomizationProfile(StrictFrozenModel):
     use_custom_randomization: StrictBoolean | None = None
     enabled_features: tuple[DomainRandomizationFeature, ...] | None = None
     thruster_time_constant_range: NonNegativeRange | None = None
-    thruster_command_resolution_range: NonNegativeRange | None = None
-    thruster_command_dropout_probability_range: ProbabilityRange | None = None
     thruster_wake_loss_coefficient_scale_range: NonNegativeRange | None = None
     damping_speed_linear_scale_range: NonNegativeRange | None = None
     damping_speed_quadratic_scale_range: NonNegativeRange | None = None
@@ -95,8 +91,6 @@ class DomainRandomizationProfile(StrictFrozenModel):
 
         range_names = (
             "thruster_time_constant_range",
-            "thruster_command_resolution_range",
-            "thruster_command_dropout_probability_range",
             "thruster_wake_loss_coefficient_scale_range",
             "damping_speed_linear_scale_range",
             "damping_speed_quadratic_scale_range",

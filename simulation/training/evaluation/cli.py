@@ -1,8 +1,7 @@
-"""Command-line entry point for policy and PID evaluation."""
+"""Command-line entry point for bounded-policy evaluation."""
 
 import argparse
 from dataclasses import dataclass
-import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -21,7 +20,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from simulation.training.ppo.networks import get_mlp_architecture
 from simulation.training.recipe import (
-    DEFAULT_TRAINING_RECIPE,
     TrainingRecipe,
     apply_trajectory_kinematic_limits,
     load_training_recipe,
@@ -30,7 +28,6 @@ from simulation.training.recipe import (
 from simulation.training.evaluation.campaign import evaluation_paths
 from simulation.training.evaluation.policy import load_actor
 from robot.control.trajectory import TRAJECTORY_AXIS_BY_NAME, TRAJECTORY_TYPE_IDS
-from robot.control import PIDGains, PIDTrajectoryController
 from isaaclab.app import AppLauncher
 from simulation.training.evaluation.config import (
     DEFAULT_CURRENT_TAU_S,
@@ -91,21 +88,8 @@ parser.add_argument(
 parser.add_argument(
     "--checkpoint",
     type=Path,
-    default=None,
+    required=True,
     help="Path to the PPO model_*.pt checkpoint.",
-)
-parser.add_argument("--controller", choices=("ppo", "pid"), default="ppo", help="Tracking controller to evaluate.")
-_DEFAULT_PID_GAINS = PIDGains()
-parser.add_argument("--pid_position_kp", type=float, nargs=3, default=_DEFAULT_PID_GAINS.position_kp)
-parser.add_argument("--pid_position_ki", type=float, nargs=3, default=_DEFAULT_PID_GAINS.position_ki)
-parser.add_argument("--pid_velocity_kd", type=float, nargs=3, default=_DEFAULT_PID_GAINS.velocity_kd)
-parser.add_argument("--pid_attitude_kp", type=float, nargs=3, default=_DEFAULT_PID_GAINS.attitude_kp)
-parser.add_argument("--pid_attitude_ki", type=float, nargs=3, default=_DEFAULT_PID_GAINS.attitude_ki)
-parser.add_argument(
-    "--pid_angular_velocity_kd",
-    type=float,
-    nargs=3,
-    default=_DEFAULT_PID_GAINS.angular_velocity_kd,
 )
 parser.add_argument(
     "--trajectory",
@@ -251,30 +235,15 @@ parser.add_argument(
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-if args_cli.controller == "ppo":
-    if args_cli.checkpoint is None:
-        parser.error("PPO evaluation requires --checkpoint")
-    args_cli.checkpoint = args_cli.checkpoint.expanduser().resolve()
-    inputs = run_input_paths(args_cli.checkpoint.parent)
-    evaluation_recipe = load_training_recipe(inputs.recipe)
-    args_cli.mlp_architecture = evaluation_recipe.mlp_architecture
-    args_cli.reward_profile = evaluation_recipe.reward_profile
-    if args_cli.environment_profile is None:
-        args_cli.environment_profile = str(inputs.environment)
-    if args_cli.domain_randomization_spec is None:
-        args_cli.domain_randomization_spec = str(inputs.domain_randomization)
-else:
-    args_cli.mlp_architecture = "mlp_33d"
-    evaluation_recipe = load_training_recipe(DEFAULT_TRAINING_RECIPE)
-    args_cli.reward_profile = evaluation_recipe.reward_profile
-    if args_cli.environment_profile is None:
-        args_cli.environment_profile = str(
-            evaluation_recipe.resolve_path(evaluation_recipe.environment_base)
-        )
-    if args_cli.domain_randomization_spec is None:
-        args_cli.domain_randomization_spec = str(
-            evaluation_recipe.resolve_path(evaluation_recipe.domain_randomization_base)
-        )
+args_cli.checkpoint = args_cli.checkpoint.expanduser().resolve()
+inputs = run_input_paths(args_cli.checkpoint.parent)
+evaluation_recipe = load_training_recipe(inputs.recipe)
+args_cli.mlp_architecture = evaluation_recipe.mlp_architecture
+args_cli.reward_profile = evaluation_recipe.reward_profile
+if args_cli.environment_profile is None:
+    args_cli.environment_profile = str(inputs.environment)
+if args_cli.domain_randomization_spec is None:
+    args_cli.domain_randomization_spec = str(inputs.domain_randomization)
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -405,7 +374,7 @@ class EvaluationSetup:
     env_cfg: Any
     log_root: Path
     run_name: str
-    checkpoint_path: str | None
+    checkpoint_path: str
     checkpoint_name: str
     architecture: Any
 
@@ -506,49 +475,23 @@ def configure_evaluation(
         args.seed = int(env_cfg.seed)
     env_cfg.seed = args.seed
 
-    checkpoint_path = None
-    checkpoint_name = "pid"
-    run_name = "pid"
-    if args.controller == "ppo":
-        checkpoint_path = str(args.checkpoint)
-        run_dir = args.checkpoint.parent
-        log_root = run_dir.parent
-        run_name = run_dir.name
-        checkpoint_name = args.checkpoint.name
-    else:
-        log_root = Path(os.path.abspath(os.path.join("logs", "rsl_rl", architecture.experiment_name)))
+    checkpoint_path = str(args.checkpoint)
+    run_dir = args.checkpoint.parent
+    log_root = run_dir.parent
+    run_name = run_dir.name
+    checkpoint_name = args.checkpoint.name
     return EvaluationSetup(env_cfg, log_root, run_name, checkpoint_path, checkpoint_name, architecture)
 
 
-def build_controller(env: Any, setup: EvaluationSetup, args: Any) -> Any:
-    if args.controller == "ppo":
-        print(f"[INFO]: Loading model checkpoint from: {setup.checkpoint_path}")
-        controller = load_actor(
-            setup.checkpoint_path,
-            setup.architecture,
-            device=env.unwrapped.device,
-        )
-        print("[INFO]: Controller: PPO feed-forward MLP")
-        return controller
-
-    gains = PIDGains(
-        position_kp=args.pid_position_kp,
-        position_ki=args.pid_position_ki,
-        velocity_kd=args.pid_velocity_kd,
-        attitude_kp=args.pid_attitude_kp,
-        attitude_ki=args.pid_attitude_ki,
-        angular_velocity_kd=args.pid_angular_velocity_kd,
+def load_policy(env: Any, setup: EvaluationSetup) -> Any:
+    print(f"[INFO]: Loading model checkpoint from: {setup.checkpoint_path}")
+    policy = load_actor(
+        setup.checkpoint_path,
+        setup.architecture,
+        device=env.unwrapped.device,
     )
-    print("[INFO]: Controller: 6-DOF PID with measured nonlinear vector-force allocation")
-    robot_runtime = env.unwrapped.robot_runtime
-    return PIDTrajectoryController(
-        num_envs=env.unwrapped.num_envs,
-        dt=env.unwrapped.cfg.sim.dt * env.unwrapped.cfg.decimation,
-        thruster_positions_b=robot_runtime.thruster_com_offsets[0],
-        thruster_force_curve_coefficients=robot_runtime.thruster_force_curve_coefficients,
-        mass_kg=robot_runtime.masses,
-        gains=gains,
-    )
+    print("[INFO]: Policy: tanh-squashed PPO feed-forward MLP")
+    return policy
 
 
 def main() -> None:
@@ -558,7 +501,7 @@ def main() -> None:
 
     env = RslRlVecEnvWrapper(gym.make(args_cli.task, cfg=setup.env_cfg))
     observations = env.get_observations()
-    policy = build_controller(env, setup, args_cli)
+    policy = load_policy(env, setup)
     disturbance_label = build_evaluation_case_label(
         disturbance_name=args_cli.disturbance_name,
         sample_domain_randomization=bool(args_cli.eval_domain_randomization),

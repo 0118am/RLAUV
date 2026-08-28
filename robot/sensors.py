@@ -1,4 +1,4 @@
-"""Deterministically delayed fused-state sensor used by the controller."""
+"""Deterministically delayed fused-state sensor used by the policy."""
 
 from __future__ import annotations
 

@@ -7,7 +7,7 @@
 
 | 目录 | 唯一职责 |
 | --- | --- |
-| `robot/` | 机器人质量、惯量、浮心、推进器、执行器、系缆、PID 和可部署轨迹几何 |
+| `robot/` | 机器人质量、惯量、浮心、推进器、执行器、系缆和可部署轨迹几何 |
 | `environment/` | 水流、完整水动力矩阵、池壁/自由液面、确定性环境 profile 和逐步流体力计算 |
 | `simulation/` | environment+robot 组合、跨域 DR、PhysX 动力学桥和 Isaac 场景组装 |
 | `simulation/training/` | 仅训练相关：网络、PPO、奖励、观测、训练轨迹接入、评估、可视化、导出和进程管理 |
@@ -47,7 +47,7 @@ robot/
 ├── assets/isaac/              T60 的 Isaac USD 表示
 ├── dynamics/                  刚体参数、变换和系缆
 ├── propulsion/                T1–T8 实测 FLU 曲线、执行器动态和安装点合成
-├── control/                   PID、分配器和可部署轨迹生成
+├── control/                   可部署轨迹生成
 ├── randomization/             刚体与推进器随机化
 ├── runtime.py                 执行器、传感器和系缆名义运行参数
 └── runtime_state.py           刚体、执行器和系缆的显式逐环境状态
@@ -83,7 +83,7 @@ simulation/
 - 执行器响应、传感器和系缆：`robot/runtime.py`
 - 最近一次完整开水域 CFD 水动力矩阵：
   `environment/hydrodynamics/coefficients/auv_open_water_openfoam_full_hydrodynamics_v2.json`
-- DR 基准：`simulation/training/recipes/auv_open_water_openfoam_hydrodynamics_dr_v8.json`
+- DR 基准：`simulation/training/recipes/auv_open_water_openfoam_hydrodynamics_dr_v9.json`
 
 名义质量为 `11.301 kg`。实测浮力比重力多 `0.24 kg` 等效质量，因此在
 `ρ=1000 kg/m³` 时排水体积为 `0.011541 m³`，净上浮力约 `2.3544 N`。
@@ -101,14 +101,13 @@ x ∈ [-0.75, 5.75] m, y ∈ [-0.75, 3.75] m, z ∈ [-0.60, 1.60] m
 
 每个 `100 Hz` 物理步执行一次：
 
-1. 策略输出限制到 `[-1, 1]`，再按 `PWM_model = 1500 + 200·command` 映射为物理
-   `1300–1700 µs`；
-2. 施加可选量化和丢指令，再将归一化指令饱和到 `[-1,1]`，不添加命令传输延迟；
+1. 策略通过 tanh-squashed Gaussian 直接产生 `(-1, 1)` 归一化电机指令；
+2. 按 `PWM_model = 1500 + 250·command` 映射为物理 `1250–1750 µs`；
 3. 用正/反 PWM 分支计算每台推进器实测 FLU `(Fx,Fy,Fz)`；
 4. 对三分量目标力施加名义 `0.08 s` 一阶响应；
 5. 在八个安装点计算 `ΣFᵢ` 和 `Σ(rᵢ×Fᵢ)`；
 6. 叠加浮力、流体力和可选系缆力；
-7. `assembly.py` 只向 PhysX 提交一次机体系合力与合矩。
+7. `assembly.py` 每个物理子步只向 PhysX 提交一次机体系合力与合矩。
 
 `1475–1525 µs` 是闭区间零推力死区。正 PWM 时 T5/T6 正转，但安装朝 `F−`，所以
 `Fx<0`；T7/T8 朝 `F+`，所以 `Fx>0`。三个分量的符号均来自实测曲线，不存在第二套
@@ -148,11 +147,11 @@ Actor 当前样本为 33 维：位置误差 3、目标线速度 3、线速度误
 | 网络 | Actor 输入 | Actor/Critic 隐藏层 |
 | --- | ---: | --- |
 | `mlp_33d` | 当前 33 维 | `512,256,128` |
-| `mlp_history_8` | 当前 33 维 + 8 个历史样本，共 201 维 | `512,384,256,128` |
+| `mlp_history_8` | 当前 33 维 + 8 个历史样本，共 201 维 | `512,256,128` |
 
 8 个先前样本覆盖 320 ms，超过 50 ms 状态延迟加三个 80 ms 推进器时间常数。每个样本包含
 位置误差、线速度误差、姿态误差、角速度和实际应用动作。Actor 的艇体状态全部直接取自
-50 ms 延迟环形缓冲，不再按 40 ms 观测周期重抽位置或姿态白噪声。Critic 额外接收 74 维
+50 ms 延迟环形缓冲，不再按 40 ms 观测周期重抽位置或姿态白噪声。Critic 额外接收 61 维
 模拟器特权状态，并保留当前真值；奖励也始终使用
 当前真值。Actor 和导出的 ONNX 不使用特权字段。
 
@@ -201,17 +200,19 @@ Huber 转折点为 `π/18 rad`、在 `π/3 rad` 过零；每轴精度半宽为 `
 （`0.08 m/s`），角速度
 同时使用权重 `0.03` 的 `0.30 rad/s` 宽项与权重 `0.02` 的 `0.15 rad/s` 精度项。垂向运动
 由 heave 推进器完成，不通过动态 pitch 指令倾斜艇体。reward 中的控制代价对全部
-processed command 的平方均值收费（权重 `0.010`），并对以 `25 action/s` 归一化的
+有界电机指令的平方均值收费（权重 `0.010`），并对以 `25 action/s` 归一化的
 `du/dt` 平方均值收费（权重 `0.010`），不对推力死区作奖励豁免。正常单步奖励位于约
 `[-0.59541, 1.0]`，安全终止另减 1。
 
-二阶平滑不再扣 reward，而是直接加入确定性 Actor 均值的优化目标：
-`2.5 · mean(||(μ_t - 2μ_{t-1} + μ_{t-2}) / (dt² · 625)||₂ / √8)`，其中
+策略使用 `z ~ Normal(μ, σ)`、`a = tanh(z)` 的有界动作分布；训练采样、PPO log-prob、
+确定性评估和新 checkpoint 导出都以 `a ∈ [-1,1]` 作为电机指令。二阶平滑不再扣 reward，
+而是直接加入确定性有界指令 `a_t = tanh(μ_t)` 的优化目标：
+`2.5 · mean(||(a_t - 2a_{t-1} + a_{t-2}) / (dt² · 625)||₂ / √8)`，其中
 `dt=0.04 s`，只使用 rollout 内同一 episode 的有效三连帧。当前尺度下
 `dt² · 625 = 1`。总 loss 仍为 clipped surrogate、系数 `1.0` 的 value loss、系数为零的
 entropy 项，再加上述 Actor 曲率项。TensorBoard 中 `reward/*` 显示实际 reward 分量，
 `Loss/action_curvature` 显示已乘 `2.5` 的曲率 loss；
-`processed_command_acceleration_rms_per_s2` 继续作为物理诊断量，不参与 reward。
+`action_acceleration_rms_per_s2` 继续作为物理诊断量，不参与 reward。
 
 PPO 当前默认值：
 
@@ -227,10 +228,13 @@ PPO 当前默认值：
 | learning-rate schedule | `fixed` |
 | entropy / max grad norm | `0.0 / 1.0` |
 | Actor action curvature coef | `2.5` |
-| 初始动作标准差 | `0.5` |
+| vertical action curvature coef | `0.5` |
+| action distribution | `tanh_gaussian_v1` |
+| latent Gaussian 初始标准差 | `0.5` |
 
 PPO 使用同一个 Adam 的两个参数组。Actor（含 `log_std`）固定为 `3e-5`，Critic 固定为
-`3e-4`，两组梯度分别裁剪；不再根据 minibatch KL 改变学习率。解析 KL 超过 `0.015` 后只停止
+`3e-4`，两组梯度分别裁剪；不再根据 minibatch KL 改变学习率。固定可逆 tanh 不改变 KL，
+因此在 latent Gaussian 上计算的解析 KL 也是有界策略的 KL。该值超过 `0.015` 后只停止
 本轮剩余 Actor 更新，Critic 仍完成全部 minibatch 更新。
 
 ## 训练与评估

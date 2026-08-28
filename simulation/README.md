@@ -19,6 +19,7 @@ Assembly 从 PhysX 构造只读 `BodyKinematics`，分别传给 `EnvironmentRunt
 `RobotRuntimeState`。两个 runtime 不访问 PhysX；reset 后的质量、惯量和 COM，以及每个物理步
 唯一一次合成 wrench，均由 Assembly 写回。
 
-当前训练轨迹契约为 `curve_v5` / `t60_trajectory_obs_v7`：目标姿态始终水平，只生成 yaw
-角速度；姿态 reward 对实际 roll、pitch 与目标 yaw 使用三轴独立误差。评估日志 schema v7 分别记录
-目标 yaw 角速度、艇首到目标 heading 的水平夹角和艇首到实际运动 heading 的水平夹角。
+当前训练轨迹契约为 `curve_v5` / `t60_trajectory_obs_v8`：目标姿态始终水平，只生成 yaw
+角速度；姿态 reward 对实际 roll、pitch 与目标 yaw 使用三轴独立误差。评估日志 schema v9
+记录有界电机指令、pre-tanh policy 均值、动作饱和比例、目标 yaw 角速度，以及艇首到目标和
+实际运动 heading 的水平夹角。

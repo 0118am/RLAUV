@@ -21,6 +21,7 @@ class AUVSmoothPpoAlgorithmCfg(RslRlPpoAlgorithmCfg):
     class_name: str = "AUVSmoothPPO"
     critic_learning_rate: float = 3.0e-4
     action_curvature_loss_coef: float = 2.5
+    vertical_action_curvature_loss_coef: float = 0.5
     action_curvature_policy_dt_s: float = ACTION_CURVATURE_POLICY_DT_S
     action_curvature_scale_per_s2: float = ACTION_CURVATURE_SCALE_PER_S2
 
@@ -43,8 +44,9 @@ class AUVTrajPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # simulation.training overrides its widths and input layout together.
     experiment_name = "auv_traj_mlp"
     policy = RslRlPpoActorCriticCfg(
-        # Keep the initial unsquashed Gaussian mostly inside the actuator's
-        # normalized range; execution still clamps and reports any overflow.
+        class_name="AUVTanhGaussianActorCritic",
+        # The network parameterizes a latent Gaussian; the training policy
+        # transforms every sample through tanh before it becomes a motor command.
         init_noise_std=0.5,
         # Positive log-standard-deviation parameterization for the native
         # Gaussian policy.

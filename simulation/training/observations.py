@@ -114,8 +114,6 @@ class AUVCriticObservationMixin:
             "thruster_parameters": torch.cat(
                 (
                     (robot.thruster_time_constant / self._critic_nominal_tau).unsqueeze(-1),
-                    robot.thruster_command_resolution,
-                    robot.thruster_command_dropout_probability,
                     robot.thruster_wake_loss_coefficient.unsqueeze(-1),
                 ),
                 dim=-1,
@@ -249,7 +247,7 @@ class AUVObservationMixin(AUVCriticObservationMixin):
 
         The current sample remains at indices ``[0:33]``.  This makes a
         feed-forward MLP causal while preserving the exact information that a
-        real controller can cache between 25-Hz policy updates.
+        deployed policy runtime can cache between 25-Hz updates.
         """
 
         if self._mlp_history.shape[1] == 0:

@@ -207,25 +207,19 @@ def _actuator_metrics(log: pd.DataFrame) -> dict[str, Any]:
         "physx_applied_wrench_b_force_y_n",
         "physx_applied_wrench_b_force_z_n",
     ]
-    processed_columns = sorted(
-        (name for name in log.columns if re.fullmatch(r"processed_command_\d+", name)),
+    action_columns = sorted(
+        (name for name in log.columns if re.fullmatch(r"action_\d+", name)),
         key=lambda name: int(name.rsplit("_", 1)[1]),
     )
-    processed = log[processed_columns].to_numpy(dtype=np.float64)
+    actions = log[action_columns].to_numpy(dtype=np.float64)
     deadband = AUV.thruster_pwm_deadband_us / AUV.thruster_pwm_half_range_us
     return {
         "mean_action_rms": float(log["action_rms"].mean()),
         "mean_action_rate_rms_per_s": float(log["action_rate_rms_per_s"].mean()),
-        "raw_policy_action_clip_fraction": float(log["raw_policy_action_clip_fraction"].mean()),
-        "mean_requested_to_processed_command_rms": _finite_statistic(
-            log["requested_to_processed_command_rms"], np.mean
+        "mean_action_acceleration_rms_per_s2": float(
+            log["action_acceleration_rms_per_s2"].mean()
         ),
-        "mean_processed_command_rate_rms_per_s": _finite_statistic(
-            log["processed_command_rate_rms_per_s"], np.mean
-        ),
-        "mean_processed_command_acceleration_rms_per_s2": _finite_statistic(
-            log["processed_command_acceleration_rms_per_s2"], np.mean
-        ),
+        "mean_action_saturation_fraction": float(log["action_saturation_fraction"].mean()),
         "mean_realized_thruster_force_abs_n": _finite_statistic(
             log["realized_thruster_force_abs_mean_n"], np.mean
         ),
@@ -238,7 +232,7 @@ def _actuator_metrics(log: pd.DataFrame) -> dict[str, Any]:
         "mean_physx_applied_wrench_force_norm_n": _finite_statistic(
             np.linalg.norm(log[physx_force_columns].to_numpy(), axis=1), np.mean
         ),
-        "processed_command_deadband_fraction": float(np.mean(np.abs(processed) <= deadband)),
+        "action_deadband_fraction": float(np.mean(np.abs(actions) <= deadband)),
     }
 
 
@@ -296,12 +290,6 @@ def _domain_metrics(domain_samples: pd.DataFrame) -> dict[str, float]:
         "fluid_added_mass_scale_max": float(np.max(fluid_added_mass_scales)),
         "thruster_time_constant_mean_s": float(domain_samples["sampled_thruster_time_constant_s"].mean()),
         "pose_sensor_delay_s": float(domain_samples["pose_sensor_delay_s"].mean()),
-        "thruster_command_resolution_mean": float(
-            domain_samples["sampled_thruster_command_resolution_mean"].mean()
-        ),
-        "thruster_command_dropout_probability_mean": float(
-            domain_samples["sampled_thruster_command_dropout_probability_mean"].mean()
-        ),
     }
 
 
@@ -352,7 +340,6 @@ def build_evaluation_summary(
     cfg = env.unwrapped.cfg
     summary: dict[str, Any] = {
         "evaluation_log_schema_version": int(log["log_schema_version"].iloc[0]),
-        "controller": args.controller,
         "trajectory": args.trajectory,
         "reward_profile": args.reward_profile,
         "seed": int(cfg.seed),
@@ -606,15 +593,14 @@ def plot_eval_detail(
 
     ax_control = fig.add_subplot(grid[2, 1])
     ax_control.plot(frame["time"], frame["velocity_error"], label=f"velocity RMSE {vel_rmse:.3f} m/s")
-    ax_control.plot(frame["time"], frame["action_norm"], alpha=0.75, label="clipped command norm")
-    if "raw_policy_action_norm" in frame.columns:
-        ax_control.plot(
-            frame["time"],
-            frame["raw_policy_action_norm"],
-            "--",
-            alpha=0.55,
-            label="raw policy action norm",
-        )
+    ax_control.plot(frame["time"], frame["action_norm"], alpha=0.75, label="bounded action norm")
+    ax_control.plot(
+        frame["time"],
+        frame["latent_policy_mean_norm"],
+        "--",
+        alpha=0.55,
+        label="latent policy mean norm",
+    )
     if "reward" in frame.columns:
         ax_control.plot(frame["time"], frame["reward"], alpha=0.65, label="reward")
     ax_control.set(title="Velocity error, action and reward", xlabel="time [s]")

@@ -10,7 +10,7 @@ import torch
 
 from common.tensor_math import quat_apply_wxyz, quaternion_error_magnitude
 
-EVALUATION_LOG_SCHEMA_VERSION = 7
+EVALUATION_LOG_SCHEMA_VERSION = 9
 
 
 def indexed_columns(prefix: str, count: int, suffix: str = "") -> tuple[str, ...]:
@@ -33,18 +33,13 @@ def evaluation_log_columns(action_dim: int) -> tuple[str, ...]:
         "quat_w", "quat_x", "quat_y", "quat_z",
         "angular_velocity_b_x_radps", "angular_velocity_b_y_radps", "angular_velocity_b_z_radps",
         *indexed_columns("action_", action_dim),
-        *indexed_columns("raw_policy_action_", action_dim),
-        *indexed_columns("raw_policy_action_clipped_", action_dim),
+        *indexed_columns("latent_policy_mean_", action_dim),
         "position_error", "velocity_error", "attitude_error",
         "nose_to_target_heading_angle_rad", "nose_to_motion_heading_angle_rad",
-        "action_norm", "action_rms", "action_rate_rms_per_s",
-        "raw_policy_action_norm", "raw_policy_action_rms", "raw_policy_action_clip_fraction",
+        "action_norm", "action_rms", "action_rate_rms_per_s", "action_acceleration_rms_per_s2",
+        "action_saturation_fraction", "latent_policy_mean_norm", "latent_policy_mean_rms",
         "reward",
-        *indexed_columns("processed_command_", action_dim),
-        *indexed_columns("requested_to_processed_command_delta_", action_dim),
         *indexed_columns("realized_thruster_force_", action_dim, "_n"),
-        "requested_to_processed_command_rms", "processed_command_rate_rms_per_s",
-        "processed_command_acceleration_rms_per_s2",
         "realized_thruster_force_abs_mean_n", "realized_thruster_force_abs_max_n",
         "thruster_wrench_b_force_x_n", "thruster_wrench_b_force_y_n", "thruster_wrench_b_force_z_n",
         "thruster_wrench_b_torque_x_nm", "thruster_wrench_b_torque_y_nm", "thruster_wrench_b_torque_z_nm",
@@ -160,12 +155,13 @@ class TrackingSnapshot:
 
 @dataclass(frozen=True)
 class ActionSnapshot:
-    raw: torch.Tensor
-    requested: torch.Tensor
-    clip_mask: torch.Tensor
+    action: torch.Tensor
+    latent_mean: torch.Tensor
     norm: torch.Tensor
     rms: torch.Tensor
     rate_rms_per_s: torch.Tensor
+    acceleration_rms_per_s2: torch.Tensor
+    saturation_fraction: torch.Tensor
 
 
 @dataclass(frozen=True)
@@ -244,24 +240,34 @@ def _sample_actions(
     observations: Any,
     active_envs: torch.Tensor,
     previous_actions: torch.Tensor,
+    previous_previous_actions: torch.Tensor,
     policy_dt_s: float,
 ) -> ActionSnapshot:
-    raw = policy(observations)
-    requested = torch.where(
+    action, latent_mean = policy.action_and_latent_mean(observations)
+    action = torch.where(
         active_envs.unsqueeze(-1),
-        torch.clamp(raw, -1.0, 1.0),
-        torch.zeros_like(raw),
+        action,
+        torch.zeros_like(action),
     )
-    delta = requested - previous_actions
+    latent_mean = torch.where(
+        active_envs.unsqueeze(-1),
+        latent_mean,
+        torch.zeros_like(latent_mean),
+    )
+    delta = action - previous_actions
+    second_delta = action - 2.0 * previous_actions + previous_previous_actions
     return ActionSnapshot(
-        raw=raw,
-        requested=requested,
-        clip_mask=raw.abs() > 1.0,
-        norm=torch.norm(requested, dim=1),
-        rms=torch.sqrt(torch.mean(requested.square(), dim=1)),
+        action=action,
+        latent_mean=latent_mean,
+        norm=torch.norm(action, dim=1),
+        rms=torch.sqrt(torch.mean(action.square(), dim=1)),
         rate_rms_per_s=torch.sqrt(
             torch.mean((delta / policy_dt_s).square(), dim=1)
         ),
+        acceleration_rms_per_s2=torch.sqrt(
+            torch.mean((second_delta / (policy_dt_s * policy_dt_s)).square(), dim=1)
+        ),
+        saturation_fraction=(action.abs() > 0.95).to(dtype=torch.float32).mean(dim=1),
     )
 
 
@@ -291,9 +297,8 @@ def _transition_end_values(env: Any, tracking: TrackingSnapshot, actions: Action
             tracking.root_pos_local,
             tracking.root_quat_w,
             tracking.root_ang_vel_b,
-            actions.requested,
-            actions.raw,
-            actions.clip_mask.to(dtype=torch.float32),
+            actions.action,
+            actions.latent_mean,
             tracking.position_error.unsqueeze(-1),
             tracking.velocity_error.unsqueeze(-1),
             tracking.attitude_error.unsqueeze(-1),
@@ -302,45 +307,23 @@ def _transition_end_values(env: Any, tracking: TrackingSnapshot, actions: Action
             actions.norm.unsqueeze(-1),
             actions.rms.unsqueeze(-1),
             actions.rate_rms_per_s.unsqueeze(-1),
-            torch.linalg.vector_norm(actions.raw, dim=1, keepdim=True),
-            torch.sqrt(torch.mean(actions.raw.square(), dim=1, keepdim=True)),
-            actions.clip_mask.to(dtype=torch.float32).mean(dim=1, keepdim=True),
+            actions.acceleration_rms_per_s2.unsqueeze(-1),
+            actions.saturation_fraction.unsqueeze(-1),
+            torch.linalg.vector_norm(actions.latent_mean, dim=1, keepdim=True),
+            torch.sqrt(torch.mean(actions.latent_mean.square(), dim=1, keepdim=True)),
         ),
         dim=1,
     )
 
 
-def _post_step_actuator_values(
-    env: Any,
-    requested_actions: torch.Tensor,
-    previous_processed_commands: torch.Tensor,
-    previous_previous_processed_commands: torch.Tensor,
-    policy_dt_s: float,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    processed = env.unwrapped.robot_runtime.thruster_command_processor.processed_commands
-    processed_rate_per_s = (processed - previous_processed_commands) / policy_dt_s
-    processed_acceleration_per_s2 = (
-        processed
-        - 2.0 * previous_processed_commands
-        + previous_previous_processed_commands
-    ) / (policy_dt_s * policy_dt_s)
-    requested_to_processed = requested_actions - processed
+def _post_step_propulsion_values(env: Any) -> torch.Tensor:
+    """Return realized thruster and PhysX-wrench diagnostics after one policy step."""
+
     robot = env.unwrapped.robot_runtime
     thruster_force = robot.realized_thruster_force_n
-    values = torch.cat(
+    return torch.cat(
         (
-            processed,
-            requested_to_processed,
             thruster_force,
-            torch.sqrt(torch.mean(requested_to_processed.square(), dim=1, keepdim=True)),
-            torch.sqrt(
-                torch.mean(processed_rate_per_s.square(), dim=1, keepdim=True)
-            ),
-            torch.sqrt(
-                torch.mean(
-                    processed_acceleration_per_s2.square(), dim=1, keepdim=True
-                )
-            ),
             thruster_force.abs().mean(dim=1, keepdim=True),
             thruster_force.abs().amax(dim=1, keepdim=True),
             robot.realized_thruster_wrench_b,
@@ -349,7 +332,6 @@ def _post_step_actuator_values(
         ),
         dim=1,
     )
-    return values, processed.clone(), previous_processed_commands.clone()
 
 
 def _update_visualizer(
@@ -391,8 +373,6 @@ def collect_domain_samples(env: Any) -> pd.DataFrame:
         "sampled_thruster_scale_max",
         "sampled_thruster_time_constant_s",
         "pose_sensor_delay_s",
-        "sampled_thruster_command_resolution_mean",
-        "sampled_thruster_command_dropout_probability_mean",
         "sampled_common_thruster_force_scale",
     )
     sensor_delay = torch.full(
@@ -413,8 +393,6 @@ def collect_domain_samples(env: Any) -> pd.DataFrame:
             robot.thruster_force_scale.amax(dim=1, keepdim=True),
             robot.thruster_time_constant.reshape(-1, 1),
             sensor_delay,
-            robot.thruster_command_resolution.mean(dim=1, keepdim=True),
-            robot.thruster_command_dropout_probability.mean(dim=1, keepdim=True),
             robot.common_thruster_force_scale,
         ),
         dim=1,
@@ -445,10 +423,7 @@ def run_evaluation(
         dtype=torch.float32,
         device=env.unwrapped.device,
     )
-    previous_processed_commands = (
-        env.unwrapped.robot_runtime.thruster_command_processor.processed_commands.clone()
-    )
-    previous_previous_processed_commands = previous_processed_commands.clone()
+    previous_previous_actions = previous_actions.clone()
     active_envs = torch.ones(env.unwrapped.num_envs, dtype=torch.bool, device=env.unwrapped.device)
     any_failure = torch.zeros_like(active_envs)
     first_failure_time_s = torch.full(
@@ -466,11 +441,13 @@ def run_evaluation(
                 observations,
                 active_envs,
                 previous_actions,
+                previous_previous_actions,
                 step_dt,
             )
-            previous_actions = actions.requested.clone()
+            previous_previous_actions = previous_actions.clone()
+            previous_actions = actions.action.clone()
 
-            observations, rewards, _, _ = env.step(actions.requested)
+            observations, rewards, _, _ = env.step(actions.action)
             terminated = env.unwrapped.reset_terminated.clone() & active_envs
             any_failure |= terminated
             first_failure_time_s = torch.where(
@@ -482,17 +459,7 @@ def run_evaluation(
             tracking = _capture_tracking_snapshot(env)
             _update_visualizer(visualizer, active_envs, tracking, step + 1, time_s)
             transition_end = _transition_end_values(env, tracking, actions)
-            (
-                post_step,
-                previous_processed_commands,
-                previous_previous_processed_commands,
-            ) = _post_step_actuator_values(
-                env,
-                actions.requested,
-                previous_processed_commands,
-                previous_previous_processed_commands,
-                step_dt,
-            )
+            post_step = _post_step_propulsion_values(env)
             values = torch.cat(
                 (
                     transition_end,

@@ -111,15 +111,16 @@ def test_precision_recipe_covers_full_curve_and_actuator_transient() -> None:
         for index in range(len(curriculum.stages))
     ) == (3, 13, 27, 35)
     assert architecture.history_steps * 0.04 == 0.32
-    assert recipe.schema_version == 5
-    assert OBSERVATION_CONTRACT_VERSION == "t60_trajectory_obs_v7"
+    assert recipe.schema_version == 6
+    assert recipe.action_distribution == "tanh_gaussian_v1"
+    assert OBSERVATION_CONTRACT_VERSION == "t60_trajectory_obs_v8"
     assert BASE_OBSERVATION_DIM == 33
     assert TRAJECTORY_OBSERVATION.field("projected_gravity_b").width == 3
-    assert TRAJECTORY_OBSERVATION.field("processed_command").width == 8
+    assert TRAJECTORY_OBSERVATION.field("motor_command").width == 8
     assert TRAJECTORY_OBSERVATION.field("target_linear_velocity_b").physical_scale == 0.5
     assert architecture.observation_dim == 201
-    assert architecture.critic_privileged_dim == 63
-    assert architecture.critic_observation_dim == 264
+    assert architecture.critic_privileged_dim == 61
+    assert architecture.critic_observation_dim == 262
     training_types = {
         command[0]
         for stage in curriculum.stages
@@ -137,7 +138,7 @@ def test_precision_recipe_covers_full_curve_and_actuator_transient() -> None:
         "actuators",
     }
     assert randomization.parameters.thruster_time_constant_range == (0.064, 0.096)
-    assert randomization.schema_version == 8
+    assert randomization.schema_version == 9
     assert randomization.parameters.disturbance_curriculum_stage_steps == (
         12_800,
         25_600,
@@ -370,6 +371,7 @@ def test_explicit_runtime_nominal_dr_and_wrench_contract() -> None:
         device="cpu",
     )
     env_ids = torch.arange(num_envs)
+    robot.reset_dynamic_buffers(env_ids, physics_time_s=0.0)
 
     reset_current(environment, cfg, env_ids, 0, enabled=False)
     reset_hydrodynamics(environment, cfg, env_ids, 0, enabled=False)

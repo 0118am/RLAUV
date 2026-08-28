@@ -9,7 +9,7 @@ from environment.hydrodynamics import current_fields, models, pool_effects
 from simulation.dynamics import calculate_total_inertia_physx_wrench
 from robot.dynamics import tether
 from robot.propulsion import curves
-from robot.propulsion.dynamics import FirstOrderThrusterResponse, ThrusterCommandProcessor
+from robot.propulsion.dynamics import FirstOrderThrusterResponse
 from robot.runtime import T60_RUNTIME
 from robot.sensors import DelayedPoseSensor
 
@@ -269,14 +269,33 @@ def test_thruster_positions_preserve_verified_com_relative_channel_order() -> No
     assert torch.equal(actual_m, expected_m)
 
 
+def test_normalized_thruster_command_maps_to_1250_1750_us() -> None:
+    commands = torch.tensor([[-1.0, 0.0, 1.0]], dtype=torch.float64)
+
+    pwm_us = curves.normalized_command_to_pwm_us(commands)
+
+    assert torch.equal(pwm_us, torch.tensor([[1250.0, 1500.0, 1750.0]]))
+
+
 def test_pwm_branches_select_complete_installed_flu_vectors_without_sign_flip() -> None:
-    pwm = torch.full((1, 8), 1700.0, dtype=torch.float64)
+    maximum_pwm_us = (
+        T60_RUNTIME.model.thruster_pwm_center_us
+        + T60_RUNTIME.model.thruster_pwm_half_range_us
+    )
+    minimum_pwm_us = (
+        T60_RUNTIME.model.thruster_pwm_center_us
+        - T60_RUNTIME.model.thruster_pwm_half_range_us
+    )
+    pwm = torch.full((1, 8), maximum_pwm_us, dtype=torch.float64)
     forces = curves.thruster_body_forces_from_pwm_us(pwm)[0]
     coefficients = torch.tensor(
         T60_RUNTIME.model.thruster_force_curve_coefficients,
         dtype=torch.float64,
     )
-    q = 1700.0 - T60_RUNTIME.model.thruster_pwm_center_us - T60_RUNTIME.model.thruster_pwm_deadband_us
+    q = (
+        T60_RUNTIME.model.thruster_pwm_half_range_us
+        - T60_RUNTIME.model.thruster_pwm_deadband_us
+    )
 
     # Positive physical PWM selects (a_positive, b_positive) directly for all
     # thrusters. The installed orientation is already part of each FLU vector.
@@ -292,38 +311,15 @@ def test_pwm_branches_select_complete_installed_flu_vectors_without_sign_flip() 
     assert torch.allclose(forces[6, [0, 2]], forces[7, [0, 2]])
     assert torch.allclose(forces[6, 1], -forces[7, 1])
 
-    negative_pwm = torch.full((1, 8), 1300.0, dtype=torch.float64)
+    negative_pwm = torch.full((1, 8), minimum_pwm_us, dtype=torch.float64)
     negative_forces = curves.thruster_body_forces_from_pwm_us(negative_pwm)[0]
     expected_negative_flu = coefficients[:, 2, :] * q**2 + coefficients[:, 3, :] * q
     assert torch.allclose(negative_forces, expected_negative_flu)
     assert torch.all(negative_forces[:4, 2] > 0.0)
 
 
-def test_installed_curve_jacobian_matches_all_three_flu_components() -> None:
-    commands = torch.full((1, 8), 0.8, dtype=torch.float64)
-    epsilon = 1.0e-5
-    numerical = (
-        curves.measured_thruster_body_forces(commands + epsilon)
-        - curves.measured_thruster_body_forces(commands - epsilon)
-    ) / (2.0 * epsilon)
-    analytical = curves.measured_thruster_force_jacobian(commands)
-    assert torch.allclose(analytical, numerical, rtol=1.0e-6, atol=1.0e-6)
-
-
-def test_nominal_thruster_response_is_80_ms_without_command_delay() -> None:
+def test_nominal_thruster_response_has_an_80_ms_time_constant() -> None:
     assert T60_RUNTIME.thruster_time_constant_s == 0.08
-
-    processor = ThrusterCommandProcessor(1, 8, torch.device("cpu"))
-    commands = torch.ones((1, 8))
-    processed = processor.process(commands)
-    assert torch.equal(processed, commands)
-
-    saturator = ThrusterCommandProcessor(1, 8, torch.device("cpu"))
-    out_of_range = torch.tensor([[-2.0, 2.0] * 4])
-    assert torch.equal(
-        saturator.process(out_of_range),
-        torch.tensor([[-1.0, 1.0] * 4]),
-    )
 
     response = FirstOrderThrusterResponse(
         1,
@@ -332,12 +328,38 @@ def test_nominal_thruster_response_is_80_ms_without_command_delay() -> None:
         torch.device("cpu"),
     )
     target = torch.ones((1, 8, 3))
+    response.reset(None, time_s=0.0)
     assert torch.equal(response.advance(target, 0.0), torch.zeros_like(target))
+    first_substep = response.advance(target, 0.01)
+    expected_first_substep = 1.0 - torch.exp(torch.tensor(-0.01 / 0.08))
+    assert torch.allclose(first_substep, torch.full_like(target, expected_first_substep))
+    response.reset(None, time_s=0.0)
     realized = response.advance(target, T60_RUNTIME.thruster_time_constant_s)
     assert torch.allclose(realized, torch.full_like(target, 1.0 - torch.exp(torch.tensor(-1.0))))
 
     instantaneous = FirstOrderThrusterResponse(1, 8, 0.0, torch.device("cpu"))
+    instantaneous.reset(None, time_s=0.0)
     assert torch.equal(instantaneous.advance(target, 0.0), target)
+
+
+def test_motor_command_maps_directly_through_curve_response_and_wrench() -> None:
+    command = torch.tensor(
+        [[-1.0, -0.75, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0]],
+        dtype=torch.float32,
+    )
+    target_forces_b = curves.measured_thruster_body_forces(command)
+    response = FirstOrderThrusterResponse(1, 8, 0.08, torch.device("cpu"))
+    response.reset(None, time_s=0.0)
+
+    realized_forces_b = response.advance(target_forces_b, 0.01)
+
+    fraction = 1.0 - torch.exp(torch.tensor(-0.01 / 0.08))
+    torch.testing.assert_close(realized_forces_b, fraction * target_forces_b)
+    positions_b = curves.get_thruster_positions(torch.device("cpu")).unsqueeze(0)
+    torch.testing.assert_close(
+        curves.reduce_point_forces_to_wrench(positions_b, realized_forces_b),
+        curves.reduce_point_forces_to_wrench(positions_b, fraction * target_forces_b),
+    )
 
 
 def test_pose_sensor_applies_exact_50_ms_delay_on_the_100_hz_truth_grid() -> None:

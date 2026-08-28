@@ -18,7 +18,7 @@ from robot.propulsion.curves import (
     measured_thruster_body_forces,
     reduce_point_forces_to_wrench,
 )
-from robot.propulsion.dynamics import FirstOrderThrusterResponse, ThrusterCommandProcessor
+from robot.propulsion.dynamics import FirstOrderThrusterResponse
 from robot.propulsion.effects import (
     calculate_axial_inflow_thrust_scale,
     calculate_thruster_wake_interaction_scale,
@@ -77,11 +77,6 @@ class RobotRuntimeState:
         self.thruster_force_curve_coefficients = torch.as_tensor(
             model.thruster_force_curve_coefficients, dtype=torch.float32, device=self.device
         )
-        self.thruster_command_processor = ThrusterCommandProcessor(
-            self.num_envs,
-            self.num_thrusters,
-            self.device,
-        )
         self.pose_sensor = DelayedPoseSensor(
             self.num_envs,
             cfg.pose_sensor_delay_steps,
@@ -104,15 +99,6 @@ class RobotRuntimeState:
         self.thruster_wake_reference_force_n = max(
             float(torch.abs(endpoint_axial_thrust).max().item()), 1.0e-6
         )
-        dropout_range = cfg.domain_randomization.thruster_command_dropout_probability_range
-        self.thruster_command_dropout_enabled = (
-            float(cfg.thruster_command_dropout_probability) > 0.0
-            or (
-                dropout_range is not None
-                and max(float(value) for value in dropout_range) > 0.0
-            )
-        )
-
         self.realized_thruster_force_n = torch.zeros(
             (self.num_envs, self.num_thrusters), dtype=torch.float32, device=self.device
         )
@@ -136,12 +122,6 @@ class RobotRuntimeState:
         self.thruster_time_constant = torch.full(
             (self.num_envs,), float(cfg.dyn_time_constant), dtype=torch.float32, device=self.device
         )
-        self.thruster_command_resolution = torch.full(
-            (self.num_envs, 1), float(cfg.thruster_command_resolution), device=self.device
-        )
-        self.thruster_command_dropout_probability = torch.full(
-            (self.num_envs, 1), float(cfg.thruster_command_dropout_probability), device=self.device
-        )
         self.thruster_wake_loss_coefficient = torch.full(
             (self.num_envs,), float(cfg.thruster_wake_loss_coefficient), device=self.device
         )
@@ -153,13 +133,7 @@ class RobotRuntimeState:
     def advance_thruster_forces(
         self, actions: torch.Tensor, *, physics_time_s: float
     ) -> torch.Tensor:
-        commands = self.thruster_command_processor.process(
-            actions,
-            self.thruster_command_resolution,
-            self.thruster_command_dropout_probability,
-            dropout_enabled=self.thruster_command_dropout_enabled,
-        )
-        targets = measured_thruster_body_forces(commands, self.thruster_force_curve_coefficients)
+        targets = measured_thruster_body_forces(actions, self.thruster_force_curve_coefficients)
         return self.thruster_response.advance(targets, physics_time_s)
 
     def compose_thruster_wrench(
@@ -263,9 +237,8 @@ class RobotRuntimeState:
         torque_b = torch.cross(attach_offset_from_current_com, force_b, dim=-1)
         return force_b * additional_scale, torque_b * additional_scale
 
-    def reset_dynamic_buffers(self, env_ids: torch.Tensor) -> None:
-        self.thruster_response.reset(env_ids)
-        self.thruster_command_processor.reset(env_ids)
+    def reset_dynamic_buffers(self, env_ids: torch.Tensor, *, physics_time_s: float) -> None:
+        self.thruster_response.reset(env_ids, time_s=physics_time_s)
         self.realized_thruster_force_n[env_ids] = 0.0
         self.realized_thruster_forces_b[env_ids] = 0.0
         self.realized_thruster_wrench_b[env_ids] = 0.0

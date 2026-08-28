@@ -1,4 +1,4 @@
-"""Single deployable observation contract shared by training and controllers."""
+"""Single deployable observation contract shared by training and inference."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-OBSERVATION_CONTRACT_VERSION = "t60_trajectory_obs_v7"
+OBSERVATION_CONTRACT_VERSION = "t60_trajectory_obs_v8"
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,7 @@ TRAJECTORY_OBSERVATION = TrajectoryObservationContract(
         ObservationField("angular_velocity_b", 3, 0.80),
         ObservationField("target_angular_velocity_b", 3, 0.80),
         ObservationField("target_linear_acceleration_b", 3, 0.45),
-        ObservationField("processed_command", 8, 1.0),
+        ObservationField("motor_command", 8, 1.0),
     ),
     action_dim=8,
 )

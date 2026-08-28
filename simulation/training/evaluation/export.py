@@ -44,17 +44,13 @@ def main() -> None:
         architecture,
         device="cpu",
     )
-    deployable_policy = torch.nn.Sequential(
-        policy,
-        torch.nn.Hardtanh(min_val=-1.0, max_val=1.0),
-    )
 
     output_dir = args.output_dir or checkpoint.parent / "exports"
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = args.checkpoint.stem
     output_path = output_dir / f"{args.prefix}_{architecture.name}_{args.date}_{stem}.onnx"
     torch.onnx.export(
-        deployable_policy,
+        policy,
         (torch.zeros(1, architecture.observation_dim),),
         output_path,
         opset_version=18,

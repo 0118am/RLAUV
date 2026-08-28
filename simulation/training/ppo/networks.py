@@ -14,6 +14,10 @@ from robot.control.trajectory.observation_contract import (
     BASE_OBSERVATION_DIM,
     OBSERVATION_FIELD_DIMENSIONS,
 )
+from simulation.training.ppo.squashed_actor_critic import (
+    ACTION_SQUASH_VERSION,
+    ACTION_SQUASH_VERSION_STATE_KEY,
+)
 
 
 TRAJECTORY_CRITIC_PRIVILEGED_FIELDS = (
@@ -42,7 +46,7 @@ CRITIC_PRIVILEGED_FIELD_DIMENSIONS = {
     "realized_thruster_force": 8,
     "thruster_force_scale": 8,
     "common_thruster_force_scale": 1,
-    "thruster_parameters": 4,
+    "thruster_parameters": 2,
     "tether_slack_ratio": 1,
 }
 
@@ -101,7 +105,7 @@ MLP_HISTORY_8 = MlpArchitecture(
         "linear_velocity_error_b",
         "attitude_error_quat",
         "angular_velocity_b",
-        "processed_command",
+        "motor_command",
     ),
     critic_privileged_fields=TRAJECTORY_CRITIC_PRIVILEGED_FIELDS,
     actor_hidden_dims=(512, 256, 128),
@@ -142,7 +146,7 @@ def get_mlp_architecture(name: str) -> MlpArchitecture:
 
 
 class TrajectoryEvaluationActor(torch.nn.Module):
-    """Deterministic feed-forward actor without critic modules."""
+    """Deterministic tanh-squashed actor without critic modules."""
 
     def __init__(
         self,
@@ -153,6 +157,10 @@ class TrajectoryEvaluationActor(torch.nn.Module):
         normalize_observations: bool = False,
     ) -> None:
         super().__init__()
+        self.register_buffer(
+            ACTION_SQUASH_VERSION_STATE_KEY,
+            torch.tensor(ACTION_SQUASH_VERSION, dtype=torch.int64),
+        )
         self.actor_obs_normalizer = (
             EmpiricalNormalization(observation_dim)
             if normalize_observations
@@ -160,7 +168,12 @@ class TrajectoryEvaluationActor(torch.nn.Module):
         )
         self.actor = MLP(observation_dim, action_dim, hidden_dims, activation)
 
-    def forward(self, observations: Mapping[str, torch.Tensor] | torch.Tensor) -> torch.Tensor:
+    def latent_action_mean(
+        self,
+        observations: Mapping[str, torch.Tensor] | torch.Tensor,
+    ) -> torch.Tensor:
+        """Return the unconstrained Gaussian mean before the action transform."""
+
         policy_observation = (
             observations["policy"]
             if not isinstance(observations, torch.Tensor)
@@ -168,16 +181,18 @@ class TrajectoryEvaluationActor(torch.nn.Module):
         )
         return self.actor(self.actor_obs_normalizer(policy_observation))
 
+    def action_and_latent_mean(
+        self,
+        observations: Mapping[str, torch.Tensor] | torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return the bounded command and its pre-tanh mean in one Actor pass."""
 
-def _state_with_prefix(
-    state_dict: Mapping[str, torch.Tensor],
-    prefix: str,
-) -> dict[str, torch.Tensor]:
-    return {
-        name.removeprefix(prefix): value
-        for name, value in state_dict.items()
-        if name.startswith(prefix)
-    }
+        latent_mean = self.latent_action_mean(observations)
+        return torch.tanh(latent_mean), latent_mean
+
+    def forward(self, observations: Mapping[str, torch.Tensor] | torch.Tensor) -> torch.Tensor:
+        actions, _ = self.action_and_latent_mean(observations)
+        return actions
 
 
 def load_evaluation_actor(
@@ -193,7 +208,11 @@ def load_evaluation_actor(
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True, mmap=True)
     state_dict = checkpoint["model_state_dict"]
-    normalizer_state = _state_with_prefix(state_dict, "actor_obs_normalizer.")
+    normalizer_state = {
+        name: value
+        for name, value in state_dict.items()
+        if name.startswith("actor_obs_normalizer.")
+    }
     actor = TrajectoryEvaluationActor(
         observation_dim,
         action_dim,
@@ -201,9 +220,14 @@ def load_evaluation_actor(
         activation,
         normalize_observations=bool(normalizer_state),
     )
-    actor.actor.load_state_dict(_state_with_prefix(state_dict, "actor."))
-    if normalizer_state:
-        actor.actor_obs_normalizer.load_state_dict(normalizer_state)
+    deployable_state = {
+        name: value
+        for name, value in state_dict.items()
+        if name == ACTION_SQUASH_VERSION_STATE_KEY
+        or name.startswith("actor.")
+        or name.startswith("actor_obs_normalizer.")
+    }
+    actor.load_state_dict(deployable_state)
     actor = actor.to(device)
     actor.eval()
     return actor

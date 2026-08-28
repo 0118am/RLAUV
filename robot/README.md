@@ -12,14 +12,12 @@
   Isaac/PhysX 边界。
 - `dynamics/tether.py`：T60 系绳受力模型。
 - `propulsion/curves.py`：T1–T8 物理 PWM 安装映射、实测 FLU 三轴力曲线与力矩归并。
-- `propulsion/dynamics.py`：指令量化、丢指令、饱和和一阶推力响应。
+- `propulsion/dynamics.py`：一阶推力响应。
 - `propulsion/effects.py`：入流和尾流干扰修正。
 - `sensors.py`：无注入噪声的 50 ms 融合状态延迟缓冲。
 - `runtime.py`：带来源的执行器响应、传感器和系缆名义运行配置。
 - `runtime_state.py`：固定质量、惯量、COM、排水体积、执行器、系缆和实际推进器
   输出的显式逐环境状态。
-- `control/pid.py`：只负责从跟踪误差生成六自由度目标力矩。
-- `control/allocation.py`：把目标力矩分配到实测非线性推进器曲线。
 - `control/trajectory/`：分离的轨迹目录、几何、重定时和航向生成；目标姿态严格保持
   `roll=pitch=0`，仅让 yaw 跟随水平速度方向，往复轴正弦保持固定 yaw。
 - `randomization/`：推进器随机化执行函数。
@@ -51,8 +49,8 @@
 | T7 | 水平 FL | `[134.39, 103.6, -63.12]` |
 | T8 | 水平 FR | `[134.39, -103.6, -63.12]` |
 
-策略命令在命令处理器中限制为 `[-1, 1]`，再按
-`PWM_model = 1500 + 200·command` 映射为 `1300–1700 µs`。定义物理偏移
+策略直接输出 `tanh(z) ∈ (-1, 1)` 的有界命令，再按
+`PWM_model = 1500 + 250·command` 映射为 `1250–1750 µs`。定义物理偏移
 `u = PWM_model - 1500`，正负分支分别只使用 `max(u-25, 0)` 和 `max(-u-25, 0)`，
 调用时不再翻转 `u`。每台推进器依次保存 `(a_positive, b_positive, a_negative, b_negative)`
 四个完整 FLU `(Fx, Fy, Fz)` 系数向量，不经过标量推力、独立 polarity、spin direction、

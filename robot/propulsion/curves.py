@@ -31,7 +31,7 @@ def thruster_body_forces_from_pwm_us(
 ) -> torch.Tensor:
     """Evaluate the canonical absolute-PWM to FLU vector-force curve.
 
-    ``pwm_us`` has shape ``(..., 8)`` and must already be in 1300...1700 us.
+    ``pwm_us`` has shape ``(..., 8)`` and must already be in 1250...1750 us.
     The coefficient layout is ``(8, 4, 3)`` with rows
     ``(a_positive, b_positive, a_negative, b_negative)`` and final components
     ``(Fx, Fy, Fz)``.  PWM values in the inclusive 1475...1525 us dead zone
@@ -75,42 +75,6 @@ def measured_thruster_body_forces(
         normalized_command_to_pwm_us(command),
         coefficients,
     )
-
-
-def measured_thruster_force_jacobian(
-    command: torch.Tensor,
-    coefficients: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """Return d(Fx,Fy,Fz)/d(action) with shape ``(..., 8, 3)``."""
-
-    if command.shape[-1] != len(AUV.thruster_labels):
-        raise ValueError(f"command must have {len(AUV.thruster_labels)} T1...T8 values.")
-    coeff = (
-        torch.as_tensor(AUV.thruster_force_curve_coefficients, dtype=command.dtype, device=command.device)
-        if coefficients is None
-        else coefficients.to(dtype=command.dtype, device=command.device)
-    )
-    if coeff.shape != (len(AUV.thruster_labels), 4, 3):
-        raise ValueError("coefficients must have shape (8, 4, 3).")
-    offset_us = AUV.thruster_pwm_half_range_us * command
-    q_positive = torch.clamp(offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
-    q_negative = torch.clamp(-offset_us - AUV.thruster_pwm_deadband_us, min=0.0).unsqueeze(-1)
-    positive_slope = AUV.thruster_pwm_half_range_us * (
-        2.0 * coeff[:, 0, :] * q_positive + coeff[:, 1, :]
-    )
-    negative_slope = -AUV.thruster_pwm_half_range_us * (
-        2.0 * coeff[:, 2, :] * q_negative + coeff[:, 3, :]
-    )
-    branch_slope = torch.where(
-        (offset_us > AUV.thruster_pwm_deadband_us).unsqueeze(-1),
-        positive_slope,
-        torch.where(
-            (offset_us < -AUV.thruster_pwm_deadband_us).unsqueeze(-1),
-            negative_slope,
-            torch.zeros_like(positive_slope),
-        ),
-    )
-    return branch_slope
 
 
 def reduce_point_forces_to_wrench(positions_b: torch.Tensor, forces_b: torch.Tensor) -> torch.Tensor:

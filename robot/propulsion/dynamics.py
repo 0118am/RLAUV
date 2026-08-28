@@ -1,4 +1,4 @@
-"""Stateful command conditioning and first-order thruster response."""
+"""Stateful first-order thruster response."""
 
 from __future__ import annotations
 
@@ -41,12 +41,17 @@ class FirstOrderThrusterResponse:
             raise ValueError("time_constant_s must be scalar or have shape (num_envs,).")
         self.time_constant_s = value.clone()
 
-    def reset(self, env_ids: list | torch.Tensor | None = None) -> None:
-        """Clear the realized force and timing state for selected environments."""
+    def reset(
+        self,
+        env_ids: list | torch.Tensor | None,
+        *,
+        time_s: float,
+    ) -> None:
+        """Clear realized force and anchor selected environments at ``time_s``."""
 
         selected = slice(None) if env_ids is None else env_ids
         self.output_forces_b[selected] = 0.0
-        self.last_update_time_s[selected] = torch.nan
+        self.last_update_time_s[selected] = float(time_s)
 
     def advance(self, target_forces_b: torch.Tensor, time_s: torch.Tensor | float) -> torch.Tensor:
         """Advance the exact discrete first-order response to ``time_s``."""
@@ -69,11 +74,7 @@ class FirstOrderThrusterResponse:
             dtype=target_forces_b.dtype,
             device=target_forces_b.device,
         )
-        elapsed_s = torch.where(
-            torch.isfinite(previous_time_s),
-            torch.clamp(current_time_s - previous_time_s, min=0.0),
-            torch.zeros_like(current_time_s),
-        )
+        elapsed_s = torch.clamp(current_time_s - previous_time_s, min=0.0)
         time_constant_s = self.time_constant_s.to(
             dtype=target_forces_b.dtype,
             device=target_forces_b.device,
@@ -86,79 +87,3 @@ class FirstOrderThrusterResponse:
         self.output_forces_b = self.output_forces_b * blend + (1.0 - blend) * target_forces_b
         self.last_update_time_s[:] = current_time_s
         return self.output_forces_b
-
-
-class ThrusterCommandProcessor:
-    """Apply dropout, quantization, and saturation without transport delay."""
-
-    def __init__(
-        self,
-        num_envs: int,
-        num_thrusters: int,
-        device: torch.device,
-    ) -> None:
-        self.num_envs = num_envs
-        self.num_thrusters = num_thrusters
-        self.device = device
-        self.processed_commands = torch.zeros(
-            (self.num_envs, self.num_thrusters),
-            dtype=torch.float32,
-            device=self.device,
-        )
-
-    def reset(self, env_ids: list | torch.Tensor | None = None) -> None:
-        selected = slice(None) if env_ids is None else env_ids
-        self.processed_commands[selected, :] = 0.0
-
-    def process(
-        self,
-        commands: torch.Tensor,
-        command_resolution: torch.Tensor | float = 0.0,
-        dropout_probability: torch.Tensor | float = 0.0,
-        *,
-        dropout_enabled: bool | None = None,
-    ) -> torch.Tensor:
-        expected_shape = (self.num_envs, self.num_thrusters)
-        if commands.shape != expected_shape:
-            raise ValueError(f"commands must have shape {expected_shape}.")
-
-        dropout_probability = torch.clamp(
-            _expand_env_thruster_value(dropout_probability, commands),
-            min=0.0,
-            max=1.0,
-        )
-        if dropout_enabled is None:
-            dropout_enabled = bool(torch.any(dropout_probability > 0.0))
-        if dropout_enabled:
-            dropout_mask = torch.rand_like(commands) < dropout_probability
-            commands = torch.where(dropout_mask, self.processed_commands, commands)
-
-        resolution = torch.clamp(_expand_env_thruster_value(command_resolution, commands), min=0.0)
-        quantized_commands = (
-            torch.round(commands / torch.clamp(resolution, min=1.0e-6)) * resolution
-        )
-        self.processed_commands = torch.where(
-            resolution > 0.0,
-            quantized_commands,
-            commands,
-        ).clamp(min=-1.0, max=1.0)
-        return self.processed_commands
-
-
-def _expand_env_thruster_value(value: torch.Tensor | float, reference: torch.Tensor) -> torch.Tensor:
-    tensor = torch.as_tensor(value, dtype=reference.dtype, device=reference.device)
-    if tensor.ndim == 0:
-        return tensor.reshape(1, 1)
-    if tensor.ndim == 1:
-        if tensor.shape[0] == reference.shape[0]:
-            return tensor.reshape(reference.shape[0], 1)
-        if tensor.shape[0] == reference.shape[1]:
-            return tensor.reshape(1, reference.shape[1])
-    if tensor.ndim == 2:
-        if tensor.shape == (reference.shape[0], 1):
-            return tensor
-        if tensor.shape == (1, reference.shape[1]):
-            return tensor
-    if tensor.shape == reference.shape:
-        return tensor
-    raise ValueError(f"Cannot broadcast value with shape {tuple(tensor.shape)} to {tuple(reference.shape)}.")

@@ -1,8 +1,9 @@
-"""PPO with a deterministic Actor action-curvature loss.
+"""PPO with deterministic Actor action-curvature losses.
 
-The temporal term uses the unnormalized second-difference core of Grad-CAPS
-with a fixed physical scale; it is not the displacement-normalized Grad-CAPS
-objective.
+The temporal terms use the unnormalized second-difference core of Grad-CAPS
+with a fixed physical scale. One term covers all actions and one applies extra
+weight to the four vertical-thruster actions; neither is the
+displacement-normalized Grad-CAPS objective.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tensordict import TensorDict
+from torch.distributions import Normal, kl_divergence
 
 from rsl_rl.algorithms import PPO
 
@@ -25,13 +27,10 @@ def diagonal_gaussian_kl_divergence(
 ) -> torch.Tensor:
     """Return KL(old || new), summed over independent action dimensions."""
 
-    return torch.sum(
-        torch.log(new_std / old_std)
-        + (old_std.square() + (old_mean - new_mean).square())
-        / (2.0 * new_std.square())
-        - 0.5,
-        dim=-1,
-    )
+    return kl_divergence(
+        Normal(old_mean, old_std),
+        Normal(new_mean, new_std),
+    ).sum(dim=-1)
 
 
 def normalized_action_curvature_loss(
@@ -52,13 +51,31 @@ def normalized_action_curvature_loss(
     )
 
 
+def normalized_vertical_action_curvature_loss(
+    action_mean: torch.Tensor,
+    previous_action_mean: torch.Tensor,
+    previous_previous_action_mean: torch.Tensor,
+    *,
+    policy_dt_s: float,
+    acceleration_scale_per_s2: float,
+) -> torch.Tensor:
+    """Return the RMS normalized second difference of T1--T4 actions."""
+
+    normalized_curvature = (
+        action_mean - 2.0 * previous_action_mean + previous_previous_action_mean
+    ) / (policy_dt_s * policy_dt_s * acceleration_scale_per_s2)
+    vertical_curvature = normalized_curvature[:, :4]
+    return torch.linalg.vector_norm(vertical_curvature, dim=-1).mean() / math.sqrt(4.0)
+
+
 class AUVSmoothPPO(PPO):
-    """Current feed-forward RSL-RL PPO plus Actor mean action curvature."""
+    """PPO over bounded motor commands plus deterministic action curvature."""
 
     def __init__(
         self,
         *args,
         action_curvature_loss_coef: float,
+        vertical_action_curvature_loss_coef: float,
         action_curvature_policy_dt_s: float,
         action_curvature_scale_per_s2: float,
         critic_learning_rate: float,
@@ -66,6 +83,7 @@ class AUVSmoothPPO(PPO):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.action_curvature_loss_coef = action_curvature_loss_coef
+        self.vertical_action_curvature_loss_coef = vertical_action_curvature_loss_coef
         self.action_curvature_policy_dt_s = action_curvature_policy_dt_s
         self.action_curvature_scale_per_s2 = action_curvature_scale_per_s2
         self.critic_learning_rate = critic_learning_rate
@@ -84,6 +102,44 @@ class AUVSmoothPPO(PPO):
         self._actor_parameters = actor_parameters
         self._critic_parameters = critic_parameters
 
+    def init_storage(self, *args, **kwargs) -> None:
+        """Allocate exact pre-tanh samples beside executed motor commands."""
+
+        super().init_storage(*args, **kwargs)
+        self.storage.pre_tanh_actions = torch.zeros_like(self.storage.actions)
+
+    def act(self, obs: TensorDict) -> torch.Tensor:
+        """Record the squashed action and its latent Gaussian sample."""
+
+        if self.policy.is_recurrent:
+            self.transition.hidden_states = self.policy.get_hidden_states()
+        self.transition.actions = self.policy.act(obs).detach()
+        self.transition.values = self.policy.evaluate(obs).detach()
+        self.transition.actions_log_prob = (
+            self.policy.get_actions_log_prob_from_latent(
+                self.policy.last_latent_actions
+            ).detach()
+        )
+        self.transition.action_mean = self.policy.action_mean.detach()
+        self.transition.action_sigma = self.policy.action_std.detach()
+        self.transition.observations = obs
+        self.transition.pre_tanh_actions = self.policy.last_latent_actions.detach()
+        return self.transition.actions
+
+    def process_env_step(
+        self,
+        obs: TensorDict,
+        rewards: torch.Tensor,
+        dones: torch.Tensor,
+        extras: dict[str, torch.Tensor],
+    ) -> None:
+        """Persist the latent sample before RSL-RL clears the transition."""
+
+        self.storage.pre_tanh_actions[self.storage.step].copy_(
+            self.transition.pre_tanh_actions
+        )
+        super().process_env_step(obs, rewards, dones, extras)
+
     def _indexed_mini_batch_generator(self):
         """Match the native feed-forward generator and retain flat rollout indices."""
 
@@ -98,6 +154,7 @@ class AUVSmoothPPO(PPO):
 
         observations = storage.observations.flatten(0, 1)
         actions = storage.actions.flatten(0, 1)
+        pre_tanh_actions = storage.pre_tanh_actions.flatten(0, 1)
         values = storage.values.flatten(0, 1)
         returns = storage.returns.flatten(0, 1)
         old_actions_log_prob = storage.actions_log_prob.flatten(0, 1)
@@ -113,6 +170,7 @@ class AUVSmoothPPO(PPO):
                     batch_indices,
                     observations[batch_indices],
                     actions[batch_indices],
+                    pre_tanh_actions[batch_indices],
                     values[batch_indices],
                     advantages[batch_indices],
                     returns[batch_indices],
@@ -121,11 +179,11 @@ class AUVSmoothPPO(PPO):
                     old_std[batch_indices],
                 )
 
-    def _action_curvature_loss(
+    def _action_curvature_losses(
         self,
         batch_indices: torch.Tensor,
         action_mean: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Evaluate valid same-episode action triples from the rollout."""
 
         storage = self.storage
@@ -144,7 +202,8 @@ class AUVSmoothPPO(PPO):
         )
         valid_positions = candidate_positions[same_episode]
         if valid_positions.numel() == 0:
-            return action_mean.sum() * 0.0
+            zero = action_mean.sum() * 0.0
+            return zero, zero
 
         valid_times = time_indices[valid_positions]
         valid_envs = environment_indices[valid_positions]
@@ -164,12 +223,22 @@ class AUVSmoothPPO(PPO):
         )
         past_action_mean = self.policy.act_inference(past_observations)
         previous_action_mean, previous_previous_action_mean = past_action_mean.chunk(2)
-        return normalized_action_curvature_loss(
-            action_mean[valid_positions],
-            previous_action_mean,
-            previous_previous_action_mean,
-            policy_dt_s=self.action_curvature_policy_dt_s,
-            acceleration_scale_per_s2=self.action_curvature_scale_per_s2,
+        current_action_mean = action_mean[valid_positions]
+        return (
+            normalized_action_curvature_loss(
+                current_action_mean,
+                previous_action_mean,
+                previous_previous_action_mean,
+                policy_dt_s=self.action_curvature_policy_dt_s,
+                acceleration_scale_per_s2=self.action_curvature_scale_per_s2,
+            ),
+            normalized_vertical_action_curvature_loss(
+                current_action_mean,
+                previous_action_mean,
+                previous_previous_action_mean,
+                policy_dt_s=self.action_curvature_policy_dt_s,
+                acceleration_scale_per_s2=self.action_curvature_scale_per_s2,
+            ),
         )
 
     def update(self) -> dict[str, float]:
@@ -179,6 +248,7 @@ class AUVSmoothPPO(PPO):
         mean_surrogate_loss = 0.0
         mean_entropy = 0.0
         mean_action_curvature_loss = 0.0
+        mean_vertical_action_curvature_loss = 0.0
         mean_kl = 0.0
         max_kl = 0.0
         number_of_kl_checks = 0
@@ -191,7 +261,8 @@ class AUVSmoothPPO(PPO):
         for (
             batch_indices,
             obs_batch,
-            actions_batch,
+            _actions_batch,
+            pre_tanh_actions_batch,
             target_values_batch,
             advantages_batch,
             returns_batch,
@@ -220,17 +291,24 @@ class AUVSmoothPPO(PPO):
             loss = self.value_loss_coef * value_loss
             if actor_updates_enabled:
                 self.policy.act(obs_batch)
-                actions_log_prob_batch = self.policy.get_actions_log_prob(actions_batch)
-                action_mean = self.policy.action_mean
-                action_std = self.policy.action_std
+                actions_log_prob_batch = (
+                    self.policy.get_actions_log_prob_from_latent(
+                        pre_tanh_actions_batch
+                    )
+                )
+                latent_action_mean = self.policy.action_mean
+                latent_action_std = self.policy.action_std
+                bounded_action_mean = self.policy.bounded_action_mean
                 entropy_batch = self.policy.entropy
 
                 with torch.no_grad():
+                    # KL is invariant under the same bijective tanh transform,
+                    # so the analytic diagonal-Gaussian value is exact here.
                     kl = diagonal_gaussian_kl_divergence(
                         old_mean_batch,
                         old_std_batch,
-                        action_mean,
-                        action_std,
+                        latent_action_mean,
+                        latent_action_std,
                     )
                     kl_mean = kl.mean()
                     if self.is_multi_gpu:
@@ -263,23 +341,34 @@ class AUVSmoothPPO(PPO):
                         surrogate,
                         surrogate_clipped,
                     ).mean()
-                    action_curvature_loss = self._action_curvature_loss(
+                    (
+                        action_curvature_loss,
+                        vertical_action_curvature_loss,
+                    ) = self._action_curvature_losses(
                         batch_indices,
-                        action_mean,
+                        bounded_action_mean,
                     )
                     weighted_action_curvature_loss = (
                         self.action_curvature_loss_coef * action_curvature_loss
+                    )
+                    weighted_vertical_action_curvature_loss = (
+                        self.vertical_action_curvature_loss_coef
+                        * vertical_action_curvature_loss
                     )
                     loss = (
                         loss
                         + surrogate_loss
                         - self.entropy_coef * entropy_batch.mean()
                         + weighted_action_curvature_loss
+                        + weighted_vertical_action_curvature_loss
                     )
                     mean_surrogate_loss += surrogate_loss.item()
                     mean_entropy += entropy_batch.mean().item()
                     mean_action_curvature_loss += (
                         weighted_action_curvature_loss.item()
+                    )
+                    mean_vertical_action_curvature_loss += (
+                        weighted_vertical_action_curvature_loss.item()
                     )
                     number_of_actor_updates += 1
 
@@ -305,6 +394,7 @@ class AUVSmoothPPO(PPO):
         mean_surrogate_loss /= number_of_actor_updates
         mean_entropy /= number_of_actor_updates
         mean_action_curvature_loss /= number_of_actor_updates
+        mean_vertical_action_curvature_loss /= number_of_actor_updates
         mean_kl /= number_of_kl_checks
         self.storage.clear()
 
@@ -313,6 +403,7 @@ class AUVSmoothPPO(PPO):
             "surrogate": mean_surrogate_loss,
             "entropy": mean_entropy,
             "action_curvature": mean_action_curvature_loss,
+            "vertical_action_curvature": mean_vertical_action_curvature_loss,
             "kl": mean_kl,
             "kl_max": max_kl,
             "actor_update_fraction": (

@@ -1,4 +1,4 @@
-"""Pure-data checks for the schema-v7 evaluation summaries."""
+"""Pure-data checks for the current evaluation summaries."""
 
 from types import SimpleNamespace
 
@@ -14,7 +14,7 @@ from simulation.training.evaluation.metrics import (
 from simulation.training.evaluation.runtime import (
     EVALUATION_LOG_SCHEMA_VERSION,
     _capture_tracking_snapshot,
-    _post_step_actuator_values,
+    _post_step_propulsion_values,
     evaluation_log_columns,
 )
 
@@ -43,10 +43,8 @@ def _log() -> pd.DataFrame:
         "reward": [0.9, 0.9],
         "action_rms": [0.0, 0.0],
         "action_rate_rms_per_s": [0.0, 0.0],
-        "raw_policy_action_clip_fraction": [0.0, 0.0],
-        "requested_to_processed_command_rms": [0.0, 0.0],
-        "processed_command_rate_rms_per_s": [0.0, 0.0],
-        "processed_command_acceleration_rms_per_s2": [250.0, 500.0],
+        "action_acceleration_rms_per_s2": [250.0, 500.0],
+        "action_saturation_fraction": [0.0, 0.25],
         "realized_thruster_force_abs_mean_n": [1.0, 1.0],
         "realized_thruster_force_abs_max_n": [2.0, 2.0],
         "thruster_wrench_b_force_x_n": [3.0, 3.0],
@@ -64,17 +62,18 @@ def _log() -> pd.DataFrame:
         "quat_z": [0.0, 0.0],
     }
     for index in range(8):
-        data[f"processed_command_{index}"] = [0.0, 0.0]
+        data[f"action_{index}"] = [0.0, 0.0]
     return pd.DataFrame(data)
 
 
-def test_schema_v7_has_level_heading_and_physical_command_derivatives() -> None:
+def test_schema_v9_has_direct_action_and_propulsion_diagnostics() -> None:
     columns = evaluation_log_columns(8)
-    assert EVALUATION_LOG_SCHEMA_VERSION == 7
-    assert len(columns) == len(set(columns)) == 111
+    assert EVALUATION_LOG_SCHEMA_VERSION == 9
+    assert len(columns) == len(set(columns)) == 85
+    assert "latent_policy_mean_0" in columns
+    assert "action_saturation_fraction" in columns
     assert "action_rate_rms_per_s" in columns
-    assert "processed_command_rate_rms_per_s" in columns
-    assert "processed_command_acceleration_rms_per_s2" in columns
+    assert "action_acceleration_rms_per_s2" in columns
     assert "target_yaw_rate_radps" in columns
     assert "nose_to_target_heading_angle_rad" in columns
     assert "thruster_wrench_b_force_x_n" in columns
@@ -122,12 +121,8 @@ def test_target_heading_metric_uses_commanded_yaw_during_vertical_motion() -> No
     assert torch.isnan(snapshot.nose_to_motion_heading_angle).all()
 
 
-def test_post_step_actuator_log_uses_physical_command_derivatives() -> None:
-    processed = torch.tensor([[0.6, -0.4], [0.2, 0.8]])
-    previous = torch.tensor([[0.2, -0.1], [0.1, 0.3]])
-    previous_previous = torch.tensor([[0.0, 0.2], [-0.1, 0.0]])
+def test_post_step_propulsion_log_uses_realized_forces_and_wrenches() -> None:
     robot = SimpleNamespace(
-        thruster_command_processor=SimpleNamespace(processed_commands=processed),
         realized_thruster_force_n=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         realized_thruster_wrench_b=torch.zeros(2, 6),
     )
@@ -139,26 +134,12 @@ def test_post_step_actuator_log_uses_physical_command_derivatives() -> None:
         )
     )
 
-    values, next_previous, next_previous_previous = _post_step_actuator_values(
-        env,
-        requested_actions=torch.zeros_like(processed),
-        previous_processed_commands=previous,
-        previous_previous_processed_commands=previous_previous,
-        policy_dt_s=0.04,
-    )
+    values = _post_step_propulsion_values(env)
 
-    expected_rate = (processed - previous) / 0.04
-    expected_acceleration = (processed - 2.0 * previous + previous_previous) / 0.04**2
-    expected_rate_rms = torch.sqrt(torch.mean(expected_rate.square(), dim=1))
-    expected_acceleration_rms = torch.sqrt(
-        torch.mean(expected_acceleration.square(), dim=1)
-    )
-    rate_column = 3 * processed.shape[1] + 1
-    acceleration_column = 3 * processed.shape[1] + 2
-    torch.testing.assert_close(values[:, rate_column], expected_rate_rms)
-    torch.testing.assert_close(values[:, acceleration_column], expected_acceleration_rms)
-    torch.testing.assert_close(next_previous, processed)
-    torch.testing.assert_close(next_previous_previous, previous)
+    torch.testing.assert_close(values[:, :2], robot.realized_thruster_force_n)
+    torch.testing.assert_close(values[:, 2], torch.tensor([1.5, 3.5]))
+    torch.testing.assert_close(values[:, 3], torch.tensor([2.0, 4.0]))
+    assert values.shape == (2, 16)
 
 
 def test_tracking_metrics_report_axis_bias_and_steady_window() -> None:
@@ -188,6 +169,7 @@ def test_actuator_and_boundary_metrics_separate_thruster_from_physx_wrench() -> 
     boundary = _boundary_metrics(_log(), cfg)
     assert actuator["mean_thruster_wrench_force_norm_n"] == 5.0
     assert actuator["mean_physx_applied_wrench_force_norm_n"] == 110.0
-    assert actuator["processed_command_deadband_fraction"] == 1.0
-    assert actuator["mean_processed_command_acceleration_rms_per_s2"] == 375.0
+    assert actuator["action_deadband_fraction"] == 1.0
+    assert actuator["mean_action_saturation_fraction"] == 0.125
+    assert actuator["mean_action_acceleration_rms_per_s2"] == 375.0
     assert np.isclose(boundary["minimum_vehicle_boundary_clearance_m"], 0.75)

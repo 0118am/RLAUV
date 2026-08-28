@@ -5,14 +5,17 @@ from __future__ import annotations
 import torch
 from tensordict import TensorDict
 
-from rsl_rl.modules import ActorCritic
 from rsl_rl.networks import MLP
 
 from simulation.training.ppo.networks import initialize_ppo_mlp
+from simulation.training.ppo.squashed_actor_critic import (
+    AUVTanhGaussianActorCritic,
+)
 from simulation.training.ppo.smooth_ppo import (
     AUVSmoothPPO,
     diagonal_gaussian_kl_divergence,
     normalized_action_curvature_loss,
+    normalized_vertical_action_curvature_loss,
 )
 
 
@@ -36,12 +39,12 @@ def _smooth_ppo() -> tuple[AUVSmoothPPO, TensorDict]:
     torch.manual_seed(7)
     num_envs = 32
     observation_dim = 4
-    action_dim = 2
+    action_dim = 8
     observations = TensorDict(
         {"policy": torch.randn(num_envs, observation_dim)},
         batch_size=[num_envs],
     )
-    policy = ActorCritic(
+    policy = AUVTanhGaussianActorCritic(
         obs=observations,
         obs_groups={"policy": ["policy"], "critic": ["policy"]},
         num_actions=action_dim,
@@ -68,6 +71,7 @@ def _smooth_ppo() -> tuple[AUVSmoothPPO, TensorDict]:
         device="cpu",
         critic_learning_rate=3.0e-4,
         action_curvature_loss_coef=2.5,
+        vertical_action_curvature_loss_coef=0.5,
         action_curvature_policy_dt_s=0.04,
         action_curvature_scale_per_s2=625.0,
     )
@@ -85,6 +89,75 @@ def _collect_rollout(algorithm: AUVSmoothPPO, observations: TensorDict) -> None:
             {},
         )
     algorithm.compute_returns(observations)
+
+
+def test_training_policy_samples_bounded_motor_commands() -> None:
+    algorithm, observations = _smooth_ppo()
+
+    actions = algorithm.act(observations)
+
+    assert torch.all(actions > -1.0)
+    assert torch.all(actions < 1.0)
+    torch.testing.assert_close(
+        actions,
+        torch.tanh(algorithm.policy.last_latent_actions),
+    )
+    torch.testing.assert_close(
+        algorithm.policy.act_inference(observations),
+        algorithm.policy.bounded_action_mean,
+    )
+
+
+def test_squashed_log_prob_matches_torch_transformed_distribution() -> None:
+    algorithm, observations = _smooth_ppo()
+    policy = algorithm.policy
+    policy.act(observations)
+    latent_actions = policy.last_latent_actions
+    transform = torch.distributions.TanhTransform(cache_size=1)
+    actions = transform(latent_actions)
+    expected = torch.distributions.TransformedDistribution(
+        policy.distribution,
+        [transform],
+    ).log_prob(actions).sum(dim=-1)
+
+    from_latent = policy.get_actions_log_prob_from_latent(latent_actions)
+    from_actions = policy.get_actions_log_prob(actions)
+
+    torch.testing.assert_close(from_latent, expected)
+    torch.testing.assert_close(from_actions, expected, rtol=1.0e-5, atol=1.0e-5)
+
+
+def test_squashed_log_prob_remains_finite_when_float_tanh_reaches_endpoint() -> None:
+    algorithm, observations = _smooth_ppo()
+    output_layer = [
+        layer
+        for layer in algorithm.policy.actor
+        if isinstance(layer, torch.nn.Linear)
+    ][-1]
+    with torch.no_grad():
+        output_layer.weight.zero_()
+        output_layer.bias.fill_(30.0)
+
+    actions = algorithm.policy.act(observations)
+    log_prob = algorithm.policy.get_actions_log_prob_from_latent(
+        algorithm.policy.last_latent_actions
+    )
+
+    assert torch.all(actions == 1.0)
+    assert torch.all(torch.isfinite(log_prob))
+    assert torch.all(torch.isfinite(algorithm.policy.entropy))
+
+
+def test_rollout_stores_executed_and_pre_tanh_actions_consistently() -> None:
+    algorithm, observations = _smooth_ppo()
+    _collect_rollout(algorithm, observations)
+
+    assert torch.all(algorithm.storage.actions > -1.0)
+    assert torch.all(algorithm.storage.actions < 1.0)
+    torch.testing.assert_close(
+        algorithm.storage.actions,
+        torch.tanh(algorithm.storage.pre_tanh_actions),
+    )
 
 
 def test_smooth_ppo_uses_separate_fixed_actor_and_critic_rates() -> None:
@@ -117,6 +190,7 @@ def test_smooth_ppo_uses_separate_fixed_actor_and_critic_rates() -> None:
         "surrogate",
         "entropy",
         "action_curvature",
+        "vertical_action_curvature",
         "kl",
         "kl_max",
         "actor_update_fraction",
@@ -189,3 +263,52 @@ def test_normalized_action_curvature_is_zero_for_ramp_and_positive_for_reversal(
 
     torch.testing.assert_close(ramp_loss, torch.tensor(0.0))
     torch.testing.assert_close(reversal_loss, torch.tensor(1.0))
+
+
+def test_vertical_action_curvature_penalizes_each_t1_t4_channel() -> None:
+    previous = torch.zeros((1, 8))
+    previous_previous = torch.tensor(
+        [[-0.5, 0.5, -0.5, 0.5, 0.0, 0.0, 0.0, 0.0]]
+    )
+    ramp = -previous_previous
+    reversal = previous_previous
+    common_vertical_reversal = torch.tensor(
+        [[-0.5, -0.5, -0.5, -0.5, 0.0, 0.0, 0.0, 0.0]]
+    )
+    horizontal_reversal = torch.tensor(
+        [[0.0, 0.0, 0.0, 0.0, -0.5, -0.5, -0.5, -0.5]]
+    )
+
+    ramp_loss = normalized_vertical_action_curvature_loss(
+        ramp,
+        previous,
+        previous_previous,
+        policy_dt_s=0.04,
+        acceleration_scale_per_s2=625.0,
+    )
+    reversal_loss = normalized_vertical_action_curvature_loss(
+        reversal,
+        previous,
+        previous_previous,
+        policy_dt_s=0.04,
+        acceleration_scale_per_s2=625.0,
+    )
+    common_vertical_loss = normalized_vertical_action_curvature_loss(
+        common_vertical_reversal,
+        previous,
+        common_vertical_reversal,
+        policy_dt_s=0.04,
+        acceleration_scale_per_s2=625.0,
+    )
+    horizontal_loss = normalized_vertical_action_curvature_loss(
+        horizontal_reversal,
+        previous,
+        horizontal_reversal,
+        policy_dt_s=0.04,
+        acceleration_scale_per_s2=625.0,
+    )
+
+    torch.testing.assert_close(ramp_loss, torch.tensor(0.0))
+    torch.testing.assert_close(reversal_loss, torch.tensor(1.0))
+    torch.testing.assert_close(common_vertical_loss, torch.tensor(1.0))
+    torch.testing.assert_close(horizontal_loss, torch.tensor(0.0))

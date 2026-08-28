@@ -52,8 +52,8 @@ from simulation.training.rewards import canonical_tracking_reward_policy_name
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-TRAINING_RECIPE_SCHEMA_VERSION = 5
-DEFAULT_TRAINING_RECIPE = PROJECT_ROOT / "simulation/training/recipes/t60_trajectory_precision_v14.json"
+TRAINING_RECIPE_SCHEMA_VERSION = 6
+DEFAULT_TRAINING_RECIPE = PROJECT_ROOT / "simulation/training/recipes/t60_trajectory_precision_v16.json"
 
 
 @dataclass(frozen=True)
@@ -236,6 +236,7 @@ class TrainingRecipe(StrictFrozenModel):
 
     name: str
     mlp_architecture: str
+    action_distribution: Literal["tanh_gaussian_v1"]
     reward_profile: str
     environment_base: str
     domain_randomization_base: str

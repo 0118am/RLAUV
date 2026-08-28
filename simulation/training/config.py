@@ -80,9 +80,9 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     # [position_error_b(3), target_linear_velocity_b(3), linear_velocity_error_b(3),
     #  attitude_error_quat(4), projected_gravity_b(3), angular_velocity_b(3),
     #  target_angular_velocity_b(3),
-    #  target_linear_acceleration_b(3), processed_command(8)]. Vehicle terms come from
+    #  target_linear_acceleration_b(3), motor_command(8)]. Vehicle terms come from
     # the exact 50 ms delayed fused state, target terms from the reference generator,
-    # and processed_command from the controller after dropout, quantization, and saturation. No
+    # and motor_command directly from the bounded Actor output. No
     # simulator-only hydrodynamic or DR truth enters the Actor.
     #
     # ``mlp_architecture`` is selected by simulation.training. The current
@@ -154,7 +154,7 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
 
     # Every reset initializes both trajectory and vehicle velocity at zero.
     # The reference then reaches its retimed speed smoothly over this interval;
-    # the vehicle follows it through ordinary learned/controller forces.
+    # the vehicle follows it through ordinary learned-policy forces.
     trajectory_startup_duration_s = 4.0
     # Training always starts around, rather than exactly on, the t=0 target.
     # The four independent error limits prevent a zero-error reset shortcut.

@@ -98,7 +98,7 @@ class AUVTrajEnv(
         # history-expanded observation space before IsaacLab allocates its
         # vector-environment buffers.
         self._configure_mlp_observation_space(cfg)
-        self._last_action_transport_log_step = None
+        self._last_action_diagnostics_log_step = None
         self._last_domain_randomization_log_step = None
         super().__init__(cfg, render_mode, **kwargs)
 
@@ -129,15 +129,11 @@ class AUVTrajEnv(
     def _init_action_state(self, action_dim: int) -> None:
         """Allocate policy-action and applied-wrench lifecycle buffers."""
 
-        self._raw_actions = torch.zeros(self.num_envs, action_dim, device=self.device)
         self._actions = torch.zeros(self.num_envs, action_dim, device=self.device)
         self._previous_actions = torch.zeros(
             self.num_envs, action_dim, device=self.device
         )
-        self._previous_processed_commands = torch.zeros_like(self._previous_actions)
-        self._previous_previous_processed_commands = torch.zeros_like(
-            self._previous_actions
-        )
+        self._previous_previous_actions = torch.zeros_like(self._previous_actions)
         self._thrust = torch.zeros(self.num_envs, 1, 3, device=self.device)
         self._moment = torch.zeros_like(self._thrust)
 
@@ -182,64 +178,38 @@ class AUVTrajEnv(
             enabled=self._domain_randomization_feature_enabled("current"),
             policy_dt=self.physics_dt * self.cfg.decimation,
         )
+        self._previous_previous_actions[:] = self._previous_actions
         self._previous_actions[:] = self._actions
-        # Snapshot the processed command from the preceding policy step. The
-        # separate first-order response owns the physically realized force.
-        self._previous_previous_processed_commands[:] = self._previous_processed_commands
-        self._previous_processed_commands[:] = (
-            self.robot_runtime.thruster_command_processor.processed_commands
-        )
         incoming_actions = actions.to(device=self.device, dtype=self._actions.dtype)
-        self._raw_actions.copy_(incoming_actions)
-        self._actions.copy_(incoming_actions.clamp(min=-1.0, max=1.0))
+        self._actions.copy_(incoming_actions)
 
-    def _log_action_transport_diagnostics(self) -> None:
-        """Periodically expose PPO-command-to-thruster transport statistics."""
+    def _log_action_diagnostics(self) -> None:
+        """Periodically expose bounded-command and realized-thrust statistics."""
 
         interval = int(self.cfg.domain_randomization_log_interval_steps)
-        last_step = self._last_action_transport_log_step
+        last_step = self._last_action_diagnostics_log_step
         if last_step is not None and self.common_step_counter - last_step < interval:
             return
-        self._last_action_transport_log_step = self.common_step_counter
+        self._last_action_diagnostics_log_step = self.common_step_counter
 
         robot = self.robot_runtime
-        processed_commands = robot.thruster_command_processor.processed_commands
         policy_dt_s = self.physics_dt * self.cfg.decimation
-        raw_clipped = self._raw_actions.abs() > 1.0
-        transport_delta = self._actions - processed_commands
         log = self.extras.setdefault("log", {})
-        log["raw_action_clip_fraction"] = raw_clipped.to(dtype=torch.float32).mean()
-        log["raw_action_vector_clip_fraction"] = raw_clipped.any(dim=1).to(dtype=torch.float32).mean()
-        log["requested_action_saturation_fraction"] = (
+        log["action_saturation_fraction"] = (
             self._actions.abs() > 0.95
         ).to(dtype=torch.float32).mean()
-        log["processed_command_saturation_fraction"] = (
-            processed_commands.abs() > 0.95
-        ).to(dtype=torch.float32).mean()
-        log["requested_to_processed_command_rms"] = torch.sqrt(torch.mean(transport_delta**2))
-        log["requested_to_processed_command_fraction"] = (
-            transport_delta.abs() > 1.0e-4
-        ).to(dtype=torch.float32).mean()
-        log["requested_action_rate_rms_per_s"] = torch.sqrt(
+        log["action_rate_rms_per_s"] = torch.sqrt(
             torch.mean(
                 ((self._actions - self._previous_actions) / policy_dt_s).square()
             )
         )
-        log["processed_command_rate_rms_per_s"] = torch.sqrt(
-            torch.mean(
-                (
-                    (processed_commands - self._previous_processed_commands)
-                    / policy_dt_s
-                ).square()
-            )
-        )
-        processed_acceleration_per_s2 = (
-            processed_commands
-            - 2.0 * self._previous_processed_commands
-            + self._previous_previous_processed_commands
+        action_acceleration_per_s2 = (
+            self._actions
+            - 2.0 * self._previous_actions
+            + self._previous_previous_actions
         ) / (policy_dt_s * policy_dt_s)
-        log["processed_command_acceleration_rms_per_s2"] = torch.sqrt(
-            torch.mean(processed_acceleration_per_s2.square())
+        log["action_acceleration_rms_per_s2"] = torch.sqrt(
+            torch.mean(action_acceleration_per_s2.square())
         )
         log["realized_thruster_force_abs_mean_n"] = robot.realized_thruster_force_n.abs().mean()
         log["realized_thruster_force_abs_max_n"] = robot.realized_thruster_force_n.abs().max()
@@ -404,10 +374,9 @@ class AUVTrajEnv(
                 root_angular_velocity_b,
                 target_ang_vel_b,
                 target_lin_acc_b,
-                # Feed back the command after dropout, quantization, and
-                # saturation. The distinct realized-force state remains in
-                # the simulator-only Critic observation.
-                self.robot_runtime.thruster_command_processor.processed_commands,
+                # Feed back the bounded motor command. The distinct realized-
+                # force state remains in the simulator-only Critic observation.
+                self._actions,
             ],
             dim=-1,
         )
@@ -420,7 +389,7 @@ class AUVTrajEnv(
 
     def _get_rewards(self) -> torch.Tensor:
         self._update_tracking_targets()
-        self._log_action_transport_diagnostics()
+        self._log_action_diagnostics()
         target_lin_vel_b = quat_apply_wxyz(
             quat_conjugate_wxyz(self._robot.data.root_quat_w),
             self._target_lin_vel_w,
@@ -429,7 +398,6 @@ class AUVTrajEnv(
             quat_conjugate_wxyz(self._robot.data.root_quat_w),
             self._target_ang_vel_w,
         )
-        reward_commands = self.robot_runtime.thruster_command_processor.processed_commands
         reward_args = (
             self.cfg.rew_scale_pos,
             self.cfg.rew_scale_attitude_recovery,
@@ -456,8 +424,8 @@ class AUVTrajEnv(
             self._target_quat_w,
             target_lin_vel_b,
             target_ang_vel_b,
-            reward_commands,
-            self._previous_processed_commands,
+            self._actions,
+            self._previous_actions,
         )
         terms = self._tracking_reward_fn(*reward_args)
         reward = terms[0]
@@ -769,15 +737,16 @@ class AUVTrajEnv(
             env_ids = self._robot._ALL_INDICES
         super()._reset_idx(env_ids)
         env_ids_device = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
-        self.robot_runtime.reset_dynamic_buffers(env_ids_device)
+        self.robot_runtime.reset_dynamic_buffers(
+            env_ids_device,
+            physics_time_s=self._sim_step_counter * self.physics_dt,
+        )
         self.environment_runtime.reset_kinematic_history(env_ids_device)
         self.environment_runtime.effective_state = None
         self._reset_mlp_history(env_ids_device)
-        self._raw_actions[env_ids_device] = 0.0
         self._actions[env_ids_device] = 0.0
         self._previous_actions[env_ids_device] = 0.0
-        self._previous_processed_commands[env_ids_device] = 0.0
-        self._previous_previous_processed_commands[env_ids_device] = 0.0
+        self._previous_previous_actions[env_ids_device] = 0.0
 
         self._default_root_state[env_ids_device, :] = self._robot.data.default_root_state[
             env_ids_device

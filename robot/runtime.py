@@ -30,8 +30,6 @@ class RobotRuntimeProfile:
         "User-confirmed reliable fused-state sensor with a deterministic 50 ms delay "
         "and no injected measurement noise."
     )
-    thruster_command_resolution: float = 0.0
-    thruster_command_dropout_probability: float = 0.0
     thruster_inflow_loss_enabled: bool = False
     thruster_inflow_loss_coefficient: float = 0.25
     thruster_inflow_reference_speed: float = 1.0
@@ -62,8 +60,6 @@ class RobotRuntimeProfile:
         nonnegative = {
             "thruster_time_constant_s": self.thruster_time_constant_s,
             "pose_sensor_delay_s": self.pose_sensor_delay_s,
-            "thruster_command_resolution": self.thruster_command_resolution,
-            "thruster_command_dropout_probability": self.thruster_command_dropout_probability,
             "thruster_inflow_loss_coefficient": self.thruster_inflow_loss_coefficient,
             "thruster_wake_loss_coefficient": self.thruster_wake_loss_coefficient,
             "thruster_wake_expansion_rate": self.thruster_wake_expansion_rate,
@@ -89,7 +85,6 @@ class RobotRuntimeProfile:
             if float(value) <= 0.0:
                 raise ValueError(f"{name} must be positive.")
         for name, value in {
-            "thruster_command_dropout_probability": self.thruster_command_dropout_probability,
             "thruster_inflow_min_scale": self.thruster_inflow_min_scale,
             "thruster_wake_min_scale": self.thruster_wake_min_scale,
         }.items():
@@ -129,8 +124,6 @@ class RobotRuntimeProfile:
             "pose_sensor_delay_s": self.pose_sensor_delay_s,
             "pose_sensor_delay_steps": sensor_delay_steps,
             "pose_sensor_source": self.pose_sensor_source,
-            "thruster_command_resolution": self.thruster_command_resolution,
-            "thruster_command_dropout_probability": self.thruster_command_dropout_probability,
             "thruster_inflow_loss_enabled": self.thruster_inflow_loss_enabled,
             "thruster_inflow_loss_coefficient": self.thruster_inflow_loss_coefficient,
             "thruster_inflow_reference_speed": self.thruster_inflow_reference_speed,
