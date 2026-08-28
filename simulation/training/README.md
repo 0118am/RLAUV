@@ -5,7 +5,7 @@
 | 路径 | 职责 |
 | --- | --- |
 | `recipes/` | 版本化训练 recipe 与跨域 DR 输入 |
-| `ppo/` | 网络 profile、PPO 配置与 rollout 级 KL/学习率控制 |
+| `ppo/` | 网络 profile、PPO 配置、Actor 曲率 loss 与 runner |
 | `evaluation/` | 评估配置、执行、指标、调度和 ONNX 导出 |
 
 根目录中的单文件模块各自对应一个完整职责：
@@ -21,17 +21,23 @@
 | `trajectory.py` | 训练轨迹、课程和 reference runtime |
 | `visualization.py` | 环境调试显示 |
 
-默认奖励契约 `precision_v6` 和各分量的统一张量实现都在 `rewards.py`。姿态误差由完整四元数
-计算，所以目标 `roll=pitch=0` 与 yaw 都进入同一奖励；该项使用转折点
-`π/18 rad`、在 `π/3 rad` 过零并在更大误差时给出负值的 Huber 恢复项，以及 `π/180 rad` Cauchy 精度项；
-角速度也拆为宽范围与精度 Cauchy 项；处理后的推进器指令使用按真实 policy 周期计算的
-`du/dt` 和 `d²u/dt²` 惩罚，分别以 `25 action/s` 和 `625 action/s²` 归一化；二阶变化
-惩罚权重为 `1.200`。
-位置精度、T60 死区处理和明确上下界不会由 notebook 或 Hydra 参数另行覆盖。
-TensorBoard 中用 `reward/action_acceleration_penalty` 查看实际扣分，用
-`processed_command_acceleration_rms_per_s2` 查看处理后指令加速度。
+默认奖励契约 `precision_v9` 和各分量的统一张量实现都在 `rewards.py`。姿态 reward 以
+`roll=pitch=0` 和轨迹 yaw 分别计算三轴误差，三轴等权汇总；恢复项使用转折点
+`π/18 rad`、在 `π/3 rad` 过零的 Huber，精度 Cauchy 的每轴半宽为 `2.5°`；
+角速度也拆为宽范围与精度 Cauchy 项；reward 中处理后的推进器指令只使用幅值项和按真实
+policy 周期计算、以 `25 action/s` 归一化的 `du/dt` 平方项；幅值和变化率均不对 T60 死区豁免。
+位置精度和明确上下界不会由 notebook 或 Hydra 参数另行覆盖。
+二阶变化在 `ppo/smooth_ppo.py` 中直接约束确定性 Actor 均值：同一 episode 的三连帧先以
+`625 action/s²` 归一化，再对八台推进器取 RMS，loss 系数为 `2.5`。TensorBoard 中用
+`Loss/action_curvature` 查看已加权的优化项，用 `processed_command_acceleration_rms_per_s2`
+查看处理后指令的物理加速度诊断；后者不参与 reward。PPO 使用同一个 Adam 的两个参数组：
+Actor 固定学习率为 `3e-5`，Critic 为 `3e-4`。每个 minibatch 更新前计算新旧对角高斯策略的
+解析 KL；当 `KL(old || new) > 0.015` 时只停止本轮剩余 Actor 更新，Critic 仍完成全部更新。
+`Loss/kl_max`、`Loss/actor_update_fraction` 和 `Loss/critic_update_fraction` 分别显示最大 KL、
+Actor 实际更新比例和 Critic 实际更新比例。
 
-`t60_trajectory_precision_v11.json` 使用最近一次完整 6×6 CFD 响应矩阵。所有轨迹目标都严格
+`t60_trajectory_precision_v14.json` 使用最近一次完整 6×6 CFD 响应矩阵，并从头训练 500
+个迭代。所有轨迹目标都严格
 保持 `roll=pitch=0`；闭合/前进曲线只让 yaw 跟随水平速度方向，升沉由 heave 推进器完成。
 三轴纯正弦使用明确的
 峰值速度—幅值组合训练加减速、停止与反向，并在课程中覆盖 `0.1/0.2/0.3/0.4/0.5 m/s`；

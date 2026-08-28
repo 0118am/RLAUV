@@ -181,11 +181,10 @@ def test_tracking_metrics_report_axis_bias_and_steady_window() -> None:
 
 def test_actuator_and_boundary_metrics_separate_thruster_from_physx_wrench() -> None:
     cfg = SimpleNamespace(
-        rew_action_deadband=0.1,
         body_bounds_size_m=(0.5, 0.4, 0.2),
         pool_bounds=(-1.0, 2.0, -1.0, 1.0, -1.0, 1.0),
     )
-    actuator = _actuator_metrics(_log(), cfg)
+    actuator = _actuator_metrics(_log())
     boundary = _boundary_metrics(_log(), cfg)
     assert actuator["mean_thruster_wrench_force_norm_n"] == 5.0
     assert actuator["mean_physx_applied_wrench_force_norm_n"] == 110.0

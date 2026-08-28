@@ -1,1 +1,1 @@
-"""Training-owned RSL-RL configuration and network profiles."""
+"""Training-owned RSL-RL configuration, algorithm, and network profiles."""

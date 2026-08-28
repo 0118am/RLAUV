@@ -18,7 +18,7 @@ from isaaclab.utils import configclass
 
 from robot.control.trajectory import LISSAJOUS, TRAJECTORY_GENERATOR_VERSION
 from robot.control.trajectory.observation_contract import ACTION_DIM, BASE_OBSERVATION_DIM
-from simulation.training.rewards import PRECISION_V6 as DEFAULT_REWARD_POLICY
+from simulation.training.rewards import PRECISION_V9 as DEFAULT_REWARD_POLICY
 from simulation.training.evaluation.config import DEFAULT_EVALUATION_DURATION_S
 from simulation.assets import T60_ASSET_CFG
 from .visualization import AUVTrajEnvWindow
@@ -238,14 +238,7 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     )
     rew_scale_actions = DEFAULT_REWARD_POLICY.action_weight
     rew_scale_action_rate = DEFAULT_REWARD_POLICY.action_rate_weight
-    rew_scale_action_acceleration = (
-        DEFAULT_REWARD_POLICY.action_acceleration_weight
-    )
     rew_action_rate_scale_per_s = DEFAULT_REWARD_POLICY.action_rate_scale_per_s
-    rew_action_acceleration_scale_per_s2 = (
-        DEFAULT_REWARD_POLICY.action_acceleration_scale_per_s2
-    )
-    rew_action_deadband = DEFAULT_REWARD_POLICY.action_deadband
     rew_pos_sigma = DEFAULT_REWARD_POLICY.position_sigma
     rew_attitude_recovery_transition = (
         DEFAULT_REWARD_POLICY.attitude_recovery_transition

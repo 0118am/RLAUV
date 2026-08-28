@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -113,6 +114,21 @@ MLP_ARCHITECTURES = {
     architecture.name: architecture
     for architecture in (MLP_33D, MLP_HISTORY_8)
 }
+
+
+def initialize_ppo_mlp(mlp: MLP, *, output_gain: float) -> None:
+    """Apply the PPO orthogonal initialization and zero all linear biases."""
+
+    linear_layers = [
+        layer for layer in mlp if isinstance(layer, torch.nn.Linear)
+    ]
+    for layer in linear_layers[:-1]:
+        torch.nn.init.orthogonal_(layer.weight, gain=math.sqrt(2.0))
+        torch.nn.init.zeros_(layer.bias)
+
+    output_layer = linear_layers[-1]
+    torch.nn.init.orthogonal_(output_layer.weight, gain=output_gain)
+    torch.nn.init.zeros_(output_layer.bias)
 
 
 def get_mlp_architecture(name: str) -> MlpArchitecture:

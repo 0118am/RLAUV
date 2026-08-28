@@ -28,7 +28,7 @@ from simulation.training import (
 )
 from simulation.training.ppo.networks import get_mlp_architecture
 from simulation.training.recipe import expand_trajectory_stage_commands
-from simulation.training.rewards import PRECISION_V6
+from simulation.training.rewards import PRECISION_V9
 
 
 def test_recipe_materializes_run_local_inputs(tmp_path: Path) -> None:
@@ -126,7 +126,7 @@ def test_precision_recipe_covers_full_curve_and_actuator_transient() -> None:
         for command in expand_trajectory_stage_commands(stage)
     }
     assert training_types == {AXIS_SINE, LATERAL_WAVE, VERTICAL_WAVE}
-    assert recipe.reward_profile == PRECISION_V6.name
+    assert recipe.reward_profile == PRECISION_V9.name
     assert recipe.rollout_steps_per_env == 128
     assert recipe.use_boundaries
     assert recipe.trajectory_startup_duration_s == 4.0

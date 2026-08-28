@@ -41,7 +41,7 @@ def build_training_campaign(
     rlpolicy_root: str | Path = PROJECT_ROOT / "simulation/rlpolicy",
     seed: int = 42,
     num_envs: int = 1024,
-    run_name: str = "t60_precision_v11",
+    run_name: str = "t60_precision_v14",
     headless: bool = True,
 ) -> TrainingCampaign:
     """Build one campaign from a single versioned behavior recipe."""

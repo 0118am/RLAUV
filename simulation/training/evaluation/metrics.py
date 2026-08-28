@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from robot.dynamics.parameters import AUV
 from simulation.training.evaluation.config import sanitize_evaluation_label
 from simulation.training.evaluation.campaign import evaluation_paths
 from simulation.training.recipe import ExperimentSpec
@@ -195,7 +196,7 @@ def _tracking_metrics(
     return result
 
 
-def _actuator_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, Any]:
+def _actuator_metrics(log: pd.DataFrame) -> dict[str, Any]:
     thruster_force_columns = [
         "thruster_wrench_b_force_x_n",
         "thruster_wrench_b_force_y_n",
@@ -211,7 +212,7 @@ def _actuator_metrics(log: pd.DataFrame, cfg: Any) -> dict[str, Any]:
         key=lambda name: int(name.rsplit("_", 1)[1]),
     )
     processed = log[processed_columns].to_numpy(dtype=np.float64)
-    deadband = float(cfg.rew_action_deadband)
+    deadband = AUV.thruster_pwm_deadband_us / AUV.thruster_pwm_half_range_us
     return {
         "mean_action_rms": float(log["action_rms"].mean()),
         "mean_action_rate_rms_per_s": float(log["action_rate_rms_per_s"].mean()),
@@ -363,7 +364,7 @@ def build_evaluation_summary(
     summary.update(_domain_metrics(domain_samples))
     summary.update(_reference_metrics(log, cfg))
     summary.update(_tracking_metrics(log, cfg, domain_samples))
-    summary.update(_actuator_metrics(log, cfg))
+    summary.update(_actuator_metrics(log))
     summary.update(_boundary_metrics(log, cfg))
     summary.update(_disturbance_metrics(log, args))
     summary.update(_failure_metrics(log, termination_events, any_failure, first_failure_time_s))

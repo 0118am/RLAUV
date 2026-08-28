@@ -174,11 +174,11 @@ Recipe 直接列出可实现的命令，不再构造“类型 × 速度 × 统�
 | ---: | ---: | --- |
 | 0 | 3 | 三轴 `0.10 m/s` 纯正弦 |
 | 6,400 | 13 | 更短幅值、`0.20 m/s` 纯正弦及 `n=1` 前进正弦 |
-| 19,200 | 28 | `0.30 m/s` 三轴与 Surge/Sway `0.40 m/s` 纯正弦、较快 `n=1` 与中曲率 `n=2` |
-| 38,400 | 37 | Surge/Sway `0.50 m/s` 纯正弦及满足水平航向角速度上限的 `n=2/3` 高曲率命令 |
+| 19,200 | 27 | `0.30 m/s` Surge/Heave、Sway `0.25 m/s` 与 Surge `0.40 m/s` 纯正弦、较快 `n=1` 与中曲率 `n=2` |
+| 38,400 | 35 | Surge `0.50 m/s` 纯正弦及满足水平航向角速度上限的 `n=2/3` 高曲率命令 |
 
-纯轴正弦明确覆盖 `0.10/0.20/0.30/0.40/0.50 m/s` 五档；Heave 因较短垂向幅值只到
-`0.30 m/s`，`0.40/0.50 m/s` 由 Surge/Sway 覆盖。重定时器使用解析三阶导数、区间探测
+纯轴正弦在 Surge 覆盖 `0.10/0.20/0.30/0.40/0.50 m/s`；Sway 到 `0.25 m/s`，Heave 到
+`0.30 m/s`。重定时器使用解析三阶导数、区间探测
 和 Simpson 时间积分，逐项满足 `0.50 m/s`、
 `0.45 m/s²`、`0.36 m/s³` 和 `0.80 rad/s` yaw 上限；速度和曲率在 recipe 中预先配对，
 高曲率区间仍会由重定时器主动降速，基础幅值端点上的最低局部速度保持率约为 `68.4%`，
@@ -194,20 +194,24 @@ racetrack 和 random smooth，专门测试未作为训练课程主体的几何�
 
 ## 奖励与 PPO
 
-默认奖励 `precision_v6` 位于 `training/rewards.py`。位置项是权重 `0.35`、半奖励宽度
-`0.10 m` 的 Cauchy；姿态误差使用完整四元数，因此同时约束 roll、pitch 和 yaw，计算全程
-使用 rad，由权重 `0.25`、转折点 `π/18 rad`、在
-`π/3 rad` 过零的带符号 Huber 恢复项和权重 `0.25`、半奖励宽度 `π/180 rad` 的 Cauchy
-精度项组成。线速度权重为 `0.10`
+默认奖励 `precision_v9` 位于 `training/rewards.py`。位置项是权重 `0.35`、半奖励宽度
+`0.10 m` 的 Cauchy；姿态以目标 `roll=pitch=0` 和轨迹 yaw 计算三轴独立误差，并等权分配
+总权重 `0.25` 的带符号 Huber 恢复项与总权重 `0.25` 的 Cauchy 精度项。
+Huber 转折点为 `π/18 rad`、在 `π/3 rad` 过零；每轴精度半宽为 `2.5°`。线速度权重为 `0.10`
 （`0.08 m/s`），角速度
 同时使用权重 `0.03` 的 `0.30 rad/s` 宽项与权重 `0.02` 的 `0.15 rad/s` 精度项。垂向运动
-由 heave 推进器完成，不通过动态 pitch 指令倾斜艇体。控制代价只计算 T60
-死区之外的 processed command；变化率 `du/dt` 以 `25 action/s` 归一化，加速度
-`d²u/dt²` 以 `625 action/s²` 归一化，权重分别为 `0.010` 和 `1.200`。这两个尺度由
-`0.08 s` 推进器时间常数定义，不随 policy 步长改变。正常单步奖励位于约
-`[-2.18745, 1.0]`，安全终止另减 1；TensorBoard 中
-`tracking/*` 与 `reward/*` 分别显示误差、Huber/Cauchy 姿态分量、宽/精度角速度分量及两个
-动作平滑分量。
+由 heave 推进器完成，不通过动态 pitch 指令倾斜艇体。reward 中的控制代价对全部
+processed command 的平方均值收费（权重 `0.010`），并对以 `25 action/s` 归一化的
+`du/dt` 平方均值收费（权重 `0.010`），不对推力死区作奖励豁免。正常单步奖励位于约
+`[-0.59541, 1.0]`，安全终止另减 1。
+
+二阶平滑不再扣 reward，而是直接加入确定性 Actor 均值的优化目标：
+`2.5 · mean(||(μ_t - 2μ_{t-1} + μ_{t-2}) / (dt² · 625)||₂ / √8)`，其中
+`dt=0.04 s`，只使用 rollout 内同一 episode 的有效三连帧。当前尺度下
+`dt² · 625 = 1`。总 loss 仍为 clipped surrogate、系数 `1.0` 的 value loss、系数为零的
+entropy 项，再加上述 Actor 曲率项。TensorBoard 中 `reward/*` 显示实际 reward 分量，
+`Loss/action_curvature` 显示已乘 `2.5` 的曲率 loss；
+`processed_command_acceleration_rms_per_s2` 继续作为物理诊断量，不参与 reward。
 
 PPO 当前默认值：
 
@@ -215,17 +219,19 @@ PPO 当前默认值：
 | --- | ---: |
 | rollout | 128 steps/env = 5.12 s |
 | notebook 环境数 | 2048 |
-| 最大迭代 | 500 |
+| 最大迭代 | `500` |
 | 学习轮数 / mini-batches | 5 / 32 |
-| learning rate | `3e-4` 初值，由 RSL-RL 原生 adaptive KL 调整 |
+| Actor / Critic learning rate | 固定 `3e-5 / 3e-4` |
 | clip / value loss coef | `0.2 / 1.0` |
 | gamma / lambda | `0.994009 / 0.9604` |
-| desired KL | `0.01` |
+| learning-rate schedule | `fixed` |
 | entropy / max grad norm | `0.0 / 1.0` |
+| Actor action curvature coef | `2.5` |
 | 初始动作标准差 | `0.5` |
 
-PPO 使用 RSL-RL 原生 adaptive KL 调整共享 Adam 学习率，不保存 Actor 快照，不回滚参数，
-也不重试 minibatch。
+PPO 使用同一个 Adam 的两个参数组。Actor（含 `log_std`）固定为 `3e-5`，Critic 固定为
+`3e-4`，两组梯度分别裁剪；不再根据 minibatch KL 改变学习率。解析 KL 超过 `0.015` 后只停止
+本轮剩余 Actor 更新，Critic 仍完成全部 minibatch 更新。
 
 ## 训练与评估
 

@@ -1,9 +1,9 @@
 {
   "schema_version": 5,
-  "name": "t60-trajectory-precision-v11",
-  "description": "Precision tracking at a 25 Hz policy rate with an exact noise-free 50 ms fused-state delay, eight prior deployable history samples, a confirmed 1500 +/- 200 us thruster command range, a 1.200 second-difference command penalty, fixed measured rigid-body properties, the latest full-response 6x6 CFD hydrodynamics with staged coefficient DR, independent thruster mismatch plus a shared weak-only thruster scale, level roll/pitch commands with horizontal-yaw guidance, axis-sine speeds up to 0.5 m/s surge, 0.25 m/s sway, and 0.3 m/s heave, and speed-by-curvature tiers for bounded lateral and vertical traveling sine waves.",
+  "name": "t60-trajectory-precision-v14",
+  "description": "Precision tracking at a 25 Hz policy rate with an exact noise-free 50 ms fused-state delay, eight prior deployable history samples, equal roll/pitch/yaw rewards with zero roll/pitch targets and 2.5 degree attitude precision half-width, a 0.010 raw processed-command magnitude penalty, a 0.010 raw command-rate penalty, fixed 3e-5 Actor and 3e-4 Critic learning rates with Actor-only KL early stopping, a 2.5 normalized RMS second-difference regularizer on deterministic Actor means, fixed measured rigid-body properties, the latest full-response 6x6 CFD hydrodynamics with staged coefficient DR, independent thruster mismatch plus a shared weak-only thruster scale, axis-sine speeds up to 0.5 m/s surge, 0.25 m/s sway, and 0.3 m/s heave, and speed-by-curvature tiers for bounded lateral and vertical traveling sine waves.",
   "mlp_architecture": "mlp_history_8",
-  "reward_profile": "precision_v6",
+  "reward_profile": "precision_v9",
   "environment_base": "environment/hydrodynamics/coefficients/auv_open_water_openfoam_full_hydrodynamics_v2.json",
   "domain_randomization_base": "simulation/training/recipes/auv_open_water_openfoam_hydrodynamics_dr_v8.json",
   "max_iterations": 500,

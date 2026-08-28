@@ -2,7 +2,7 @@
 # Copyright (c) 2022-2026, The Isaac Lab Project Developers.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Train the AUV trajectory policy with native RSL-RL PPO.
+"""Train the AUV trajectory policy with the selected RSL-RL PPO extension.
 
 This is the Isaac Sim worker entry point.  It intentionally mirrors the
 supported IsaacLab RSL-RL launcher contract while keeping the AUV-specific
@@ -201,7 +201,6 @@ def execute_training(
     source_file: str,
 ) -> None:
     import gymnasium as gym
-    from rsl_rl.runners import OnPolicyRunner
     from isaaclab.utils.dict import print_dict
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
     from isaaclab_tasks.utils import get_checkpoint_path
@@ -212,6 +211,7 @@ def execute_training(
         materialize_run_inputs,
         run_input_paths,
     )
+    from simulation.training.ppo.runner import AUVOnPolicyRunner
 
     recipe = load_training_recipe(args_cli.training_recipe)
     env_cfg, agent_cfg = configure_training(
@@ -242,7 +242,7 @@ def execute_training(
         env = maybe_record_video(env, args_cli, log_dir, gym, print_dict)
         started = time.time()
         env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-        runner = OnPolicyRunner(
+        runner = AUVOnPolicyRunner(
             env,
             agent_cfg.to_dict(),
             log_dir=log_dir,

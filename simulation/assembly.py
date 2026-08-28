@@ -439,9 +439,7 @@ class AUVTrajEnv(
             self.cfg.rew_scale_angular_velocity_precision,
             self.cfg.rew_scale_actions,
             self.cfg.rew_scale_action_rate,
-            self.cfg.rew_scale_action_acceleration,
             self.cfg.rew_action_rate_scale_per_s,
-            self.cfg.rew_action_acceleration_scale_per_s2,
             self.physics_dt * self.cfg.decimation,
             self.cfg.rew_pos_sigma,
             self.cfg.rew_attitude_recovery_transition,
@@ -450,7 +448,6 @@ class AUVTrajEnv(
             self.cfg.rew_track_vel_sigma,
             self.cfg.rew_angular_velocity_broad_sigma,
             self.cfg.rew_angular_velocity_precision_sigma,
-            self.cfg.rew_action_deadband,
             self._robot.data.root_pos_w,
             self._robot.data.root_quat_w,
             self._robot.data.root_lin_vel_b,
@@ -461,7 +458,6 @@ class AUVTrajEnv(
             target_ang_vel_b,
             reward_commands,
             self._previous_processed_commands,
-            self._previous_previous_processed_commands,
         )
         terms = self._tracking_reward_fn(*reward_args)
         reward = terms[0]
@@ -527,16 +523,21 @@ class AUVTrajEnv(
         log["curriculum/amplitude_scale_y_mean"] = self._traj_amplitude_scales[:, 1].mean()
         log["curriculum/amplitude_scale_z_mean"] = self._traj_amplitude_scales[:, 2].mean()
         log["reward/position"] = terms[1].mean()
-        log["reward/attitude_recovery"] = terms[2].mean()
-        log["reward/attitude_precision"] = terms[3].mean()
-        log["reward/attitude"] = (terms[2] + terms[3]).mean()
+        attitude_recovery_rewards = terms[2]
+        attitude_precision_rewards = terms[3]
+        attitude_rewards = attitude_recovery_rewards + attitude_precision_rewards
+        log["reward/attitude_recovery"] = attitude_recovery_rewards.sum(dim=1).mean()
+        log["reward/attitude_precision"] = attitude_precision_rewards.sum(dim=1).mean()
+        log["reward/attitude"] = attitude_rewards.sum(dim=1).mean()
+        log["reward/roll"] = attitude_rewards[:, 0].mean()
+        log["reward/pitch"] = attitude_rewards[:, 1].mean()
+        log["reward/yaw"] = attitude_rewards[:, 2].mean()
         log["reward/velocity"] = terms[4].mean()
         log["reward/angular_velocity_broad"] = terms[5].mean()
         log["reward/angular_velocity_precision"] = terms[6].mean()
         log["reward/angular_velocity"] = (terms[5] + terms[6]).mean()
         log["reward/action_penalty"] = terms[7].mean()
         log["reward/action_rate_penalty"] = terms[8].mean()
-        log["reward/action_acceleration_penalty"] = terms[9].mean()
         log["reward/running_total"] = reward.mean()
         log["reward/termination_penalty"] = terminated_penalty.mean()
         log["reward/total"] = total_reward.mean()
