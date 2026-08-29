@@ -24,8 +24,8 @@
 默认奖励契约 `precision_v9` 和各分量的统一张量实现都在 `rewards.py`。姿态 reward 以
 `roll=pitch=0` 和轨迹 yaw 分别计算三轴误差，三轴等权汇总；恢复项使用转折点
 `π/18 rad`、在 `π/3 rad` 过零的 Huber，精度 Cauchy 的每轴半宽为 `2.5°`；
-角速度也拆为宽范围与精度 Cauchy 项；reward 中有界电机指令只使用幅值项和按真实
-policy 周期计算、以 `25 action/s` 归一化的 `du/dt` 平方项；幅值和变化率均不对 T60 死区豁免。
+角速度也拆为宽范围与精度 Cauchy 项；reward 对八路有界电机指令的平方和收费，并按真实
+policy 周期计算、以 `25 action/s` 归一化的 `du/dt` 平方均值收费；两项均不对 T60 死区豁免。
 位置精度和明确上下界不会由 notebook 或 Hydra 参数另行覆盖。
 Actor 使用 `z ~ Normal(μ, σ)`、`a = tanh(z)` 的有界动作分布，训练 rollout 保存执行动作和
 精确 pre-tanh 样本，并由 PyTorch `TransformedDistribution` 计算 Jacobian 修正后的 log-prob。

@@ -7,6 +7,7 @@ import math
 
 import torch
 
+from robot.control.trajectory.observation_contract import ACTION_DIM
 from robot.runtime import T60_RUNTIME
 
 
@@ -68,7 +69,7 @@ class TrackingRewardPolicy:
         return (
             minimum_recovery_reward
             + minimum_precision_reward
-            - self.action_weight
+            - ACTION_DIM * self.action_weight
             - self.action_rate_weight * maximum_normalized_rate**2
         )
 
@@ -86,7 +87,7 @@ PRECISION_V9 = TrackingRewardPolicy(
         "Equal roll/pitch/yaw attitude rewards for level roll/pitch targets and "
         "trajectory yaw, using signed Huber recovery plus 2.5 degree Cauchy "
         "precision, dual-scale angular velocity, and bounded motor-command "
-        "magnitude and squared-rate penalties."
+        "summed squared motor-command effort and mean squared-rate penalties."
     ),
     position_weight=0.35,
     attitude_recovery_weight=0.25,
@@ -255,7 +256,7 @@ def compute_tracking_reward_terms(
         )
     )
 
-    action_penalty = rew_scale_actions * torch.mean(commands.square(), dim=1)
+    action_penalty = rew_scale_actions * torch.sum(commands.square(), dim=1)
     action_rate_per_s = (commands - previous_commands) / policy_dt_s
     normalized_action_rate = action_rate_per_s / rew_action_rate_scale_per_s
     action_rate_penalty = rew_scale_action_rate * torch.mean(

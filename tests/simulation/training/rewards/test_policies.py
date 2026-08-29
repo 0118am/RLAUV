@@ -6,6 +6,7 @@ import math
 
 import torch
 
+from robot.control.trajectory.observation_contract import ACTION_DIM
 from simulation.training.rewards import (
     ACTION_RATE_SCALE_PER_S,
     ATTITUDE_PRECISION_SIGMA_RAD,
@@ -107,7 +108,7 @@ def test_precision_v9_has_declared_bounds_and_perfect_reward() -> None:
         * (1.0 - maximum_huber_loss / zero_huber_loss)
         + POLICY.attitude_precision_weight
         / (1.0 + (math.pi / POLICY.attitude_precision_sigma) ** 2)
-        - POLICY.action_weight
+        - ACTION_DIM * POLICY.action_weight
         - POLICY.action_rate_weight * maximum_normalized_rate**2
     )
     assert math.isclose(POLICY.minimum_running_reward, expected_minimum)
@@ -121,7 +122,7 @@ def test_precision_v9_has_declared_bounds_and_perfect_reward() -> None:
     torch.testing.assert_close(
         penalties_only,
         torch.tensor(
-            [-(POLICY.action_weight + POLICY.action_rate_weight * 2.0**2)]
+            [-(ACTION_DIM * POLICY.action_weight + POLICY.action_rate_weight * 2.0**2)]
         ),
     )
 
@@ -205,7 +206,7 @@ def test_level_heading_reward_separates_roll_pitch_and_yaw() -> None:
     torch.testing.assert_close(errors, torch.tensor([[0.0, 0.0, 1.8]]))
 
 
-def test_action_magnitude_charges_every_nonzero_command() -> None:
+def test_action_effort_sums_every_nonzero_command() -> None:
     reward = _reward_terms(
         tracking_weights=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         action_weight=1.0,
@@ -213,7 +214,7 @@ def test_action_magnitude_charges_every_nonzero_command() -> None:
         action=0.1,
         previous_action=0.1,
     )[0]
-    torch.testing.assert_close(reward, torch.tensor([-0.01]))
+    torch.testing.assert_close(reward, torch.tensor([-0.08]))
 
 
 def test_action_rate_penalty_is_invariant_to_policy_period() -> None:
