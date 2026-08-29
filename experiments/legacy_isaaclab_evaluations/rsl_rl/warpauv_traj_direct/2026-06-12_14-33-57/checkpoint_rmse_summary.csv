@@ -1,0 +1,6 @@
+trajectory,position_rmse,position_mae,max_position_error,velocity_rmse,checkpoint,checkpoint_name,summary_path
+chirp,0.0571153758555112,0.0537371130296378,0.1056771501898765,0.090130042062914,799,model_799.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-12_14-33-57/model_799_chirp_trajectory_eval/summary_metrics.csv
+helix,0.1776988680164307,0.0672329732299355,1.5,0.2558248487792933,799,model_799.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-12_14-33-57/model_799_helix_trajectory_eval/summary_metrics.csv
+lissajous,0.0387680264447332,0.0365667939045427,0.0774244293570518,0.0569598760370815,799,model_799.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-12_14-33-57/model_799_trajectory_eval/summary_metrics.csv
+racetrack,0.1222669456750042,0.0441626129783495,1.0606601238250732,0.1640325773917885,799,model_799.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-12_14-33-57/model_799_racetrack_trajectory_eval/summary_metrics.csv
+spiral,0.0465200827934794,0.0374113457815838,0.3000000119209289,0.0594120487050807,799,model_799.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-12_14-33-57/model_799_spiral_trajectory_eval/summary_metrics.csv

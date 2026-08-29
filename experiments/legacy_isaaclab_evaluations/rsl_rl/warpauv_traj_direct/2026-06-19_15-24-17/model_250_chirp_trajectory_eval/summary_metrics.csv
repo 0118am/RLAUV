@@ -1,0 +1,2 @@
+trajectory,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse
+chirp,1,0.32469140091831444,0.29115437452564946,0.6711012125015259,0.33071859663122394

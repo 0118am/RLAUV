@@ -1,0 +1,2 @@
+trajectory,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse
+lissajous,1,0.24246159220654978,0.23283852589762924,0.3249601721763611,0.1790022622855639

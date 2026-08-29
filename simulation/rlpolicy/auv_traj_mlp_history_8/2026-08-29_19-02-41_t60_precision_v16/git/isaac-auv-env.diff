@@ -1,0 +1,302 @@
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   README.md
+	modified:   eval.ipynb
+	modified:   simulation/training/README.md
+	modified:   simulation/training/recipes/t60_trajectory_precision_v16.json
+	modified:   simulation/training/rewards.py
+	modified:   tests/simulation/training/rewards/test_policies.py
+	modified:   train.ipynb
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/README.md b/README.md
+index 0b71ccb..54935f4 100644
+--- a/README.md
++++ b/README.md
+@@ -200,9 +200,9 @@ Huber 转折点为 `π/18 rad`、在 `π/3 rad` 过零；每轴精度半宽为 `
+ （`0.08 m/s`），角速度
+ 同时使用权重 `0.03` 的 `0.30 rad/s` 宽项与权重 `0.02` 的 `0.15 rad/s` 精度项。垂向运动
+ 由 heave 推进器完成，不通过动态 pitch 指令倾斜艇体。reward 中的控制代价对全部
+-有界电机指令的平方均值收费（权重 `0.010`），并对以 `25 action/s` 归一化的
++有界电机指令的平方和收费（权重 `0.010`），并对以 `25 action/s` 归一化的
+ `du/dt` 平方均值收费（权重 `0.010`），不对推力死区作奖励豁免。正常单步奖励位于约
+-`[-0.59541, 1.0]`，安全终止另减 1。
++`[-0.66541, 1.0]`，安全终止另减 1。
+ 
+ 策略使用 `z ~ Normal(μ, σ)`、`a = tanh(z)` 的有界动作分布；训练采样、PPO log-prob、
+ 确定性评估和新 checkpoint 导出都以 `a ∈ [-1,1]` 作为电机指令。二阶平滑不再扣 reward，
+diff --git a/eval.ipynb b/eval.ipynb
+index 67e6c72..080075b 100644
+--- a/eval.ipynb
++++ b/eval.ipynb
+@@ -5,11 +5,11 @@
+       "id": "overview",
+       "metadata": {},
+       "source": [
+-        "# T60 AUV 最新精度 Policy 可视化\n",
++        "# T60 AUV 平面 Lissajous Policy 评估\n",
+         "\n",
+-        "评估当前 `t60_trajectory_precision_v16.json` 对应的最新 `t60_precision_v16` 运行，并固定使用 `model_499.pt`。该 policy 以 25 Hz 更新，使用 `z ~ Normal(μ, σ)`、`action = tanh(z)` 的有界推进器动作分布、无注入噪声且确定性延迟 50 ms 的融合状态、roll/pitch/yaw 分轴且精度半宽 2.5° 的 `precision_v9` reward、201 维 `mlp_history_8` Actor、Actor `3e-5` 与 Critic `3e-4` 的固定学习率、`0.010` motor-command 幅值代价、`2.5` 全动作曲率项及 `0.5` 垂向动作曲率项、完整 6×6 CFD 水动力，以及固定准确刚体参数、分阶段水动力系数 DR、逐台推进器增益失配和全体推进器共同弱化 0–15%。目标姿态始终保持 `roll=pitch=0`，仅让 yaw 跟随水平速度方向；训练仅使用三轴纯正弦与横向/垂向前进正弦，空间 8 字在这里作为未参与训练的组合泛化评估。\n",
++        "评估当前 `t60_trajectory_precision_v16.json` 对应的最新 `t60_precision_v16` 运行，并固定使用 `model_499.pt`。该 policy 以 25 Hz 更新，使用 `z ~ Normal(μ, σ)`、`action = tanh(z)` 的有界推进器动作分布、无注入噪声且确定性延迟 50 ms 的融合状态、roll/pitch/yaw 分轴且精度半宽 2.5° 的 `precision_v9` reward、201 维 `mlp_history_8` Actor、Actor `3e-5` 与 Critic `3e-4` 的固定学习率、完整 6×6 CFD 水动力和当前 T1–T8 实测三轴推力曲线。目标姿态始终保持 `roll=pitch=0`，仅让 yaw 跟随水平速度方向。\n",
+         "\n",
+-        "Isaac Sim 中的本次评估轨迹为包络 **5 × 3 × 1 m**、目标线速度 **0.35 m/s** 的空间 8 字。评估始终启用安全边界，并分别报告全程与稳态误差。"
++        "本次轨迹为包络 **5 × 3 m**、固定深度（`z` 振幅严格为 `0`）、目标线速度 **0.35 m/s** 的平面 Lissajous；不施加水流，也不采样 Domain Randomization。运行结束后自动绘制并保存 T1–T8 的有界电机指令。"
+       ]
+     },
+     {
+@@ -63,13 +63,13 @@
+         "TRAJECTORY_MAX_SPEED_MPS = 0.35\n",
+         "TRAJECTORY_SIZE_X_M = 5.0\n",
+         "TRAJECTORY_SIZE_Y_M = 3.0\n",
+-        "TRAJECTORY_SIZE_Z_M = 1.0\n",
++        "TRAJECTORY_SIZE_Z_M = 0.0\n",
+         "TRAJECTORY_AMP_X_M = TRAJECTORY_SIZE_X_M / 2.0\n",
+         "TRAJECTORY_AMP_Y_M = TRAJECTORY_SIZE_Y_M / 2.0\n",
+         "TRAJECTORY_AMP_Z_M = TRAJECTORY_SIZE_Z_M / 2.0\n",
+         "DURATION_S = 60.0\n",
+         "EVALUATION_LABEL = (\n",
+-        "    f'{Path(CHECKPOINT).stem}_5x3x1_spatial_figure8_vmax_{TRAJECTORY_MAX_SPEED_MPS:.2f}'\n",
++        "    f'{Path(CHECKPOINT).stem}_5x3_planar_lissajous_vmax_{TRAJECTORY_MAX_SPEED_MPS:.2f}_nominal'\n",
+         "    .replace('.', 'p')\n",
+         ")\n",
+         "\n",
+@@ -78,7 +78,8 @@
+         "print(f'recipe: {RUN_RECIPE.name} / reward: {RUN_RECIPE.reward_profile}')\n",
+         "print(f'DR: {RUN_DR.name} / schema: {RUN_DR.schema_version}')\n",
+         "print(f'trajectory: {TRAJECTORY} with max speed {TRAJECTORY_MAX_SPEED_MPS:.2f} m/s')\n",
+-        "print(f'curve envelope: {TRAJECTORY_SIZE_X_M:.1f} × {TRAJECTORY_SIZE_Y_M:.1f} × {TRAJECTORY_SIZE_Z_M:.1f} m')\n"
++        "print(f'curve envelope: {TRAJECTORY_SIZE_X_M:.1f} × {TRAJECTORY_SIZE_Y_M:.1f} × {TRAJECTORY_SIZE_Z_M:.1f} m')\n",
++        "print('fixed world-frame current: none')\n"
+       ]
+     },
+     {
+@@ -86,9 +87,9 @@
+       "id": "run-heading",
+       "metadata": {},
+       "source": [
+-        "## 启动 Isaac Sim 实时可视化\n",
++        "## 运行平面 Lissajous 评估\n",
+         "\n",
+-        "蓝线为目标，橙线为真实轨迹。60 秒结束后窗口自动关闭。"
++        "蓝线为目标，橙线为真实轨迹。轨迹始终位于水平面内，无外加水流；60 秒结束后窗口自动关闭并写出 `logs.csv`。"
+       ]
+     },
+     {
+@@ -117,7 +118,7 @@
+         "    VISUALIZATION_COMMAND,\n",
+         "    cwd=ISAACLAB_ROOT,\n",
+         "    execute=True,\n",
+-        "    label=f'{Path(CHECKPOINT).stem.upper()} LIVE VISUALIZATION',\n",
++        "    label=f'{Path(CHECKPOINT).stem.upper()} PLANAR LISSAJOUS',\n",
+         ")\n"
+       ]
+     },
+@@ -148,6 +149,7 @@
+         "    'steady_position_z_rmse_m', 'steady_cross_track_position_error_rmse_m',\n",
+         "    'steady_attitude_error_rmse_deg', 'steady_mean_nose_to_target_heading_angle_deg',\n",
+         "    'mean_thruster_wrench_force_norm_n', 'minimum_vehicle_boundary_clearance_m',\n",
++        "    'mean_water_current_norm', 'max_water_current_norm',\n",
+         "    'mean_reward_per_step',\n",
+         "]])\n",
+         "display(quick_numeric_report(summary_df))\n",
+@@ -163,6 +165,64 @@
+         "display(detail_figure)\n",
+         "plt.close(detail_figure)\n"
+       ]
++    },
++    {
++      "cell_type": "markdown",
++      "id": "thruster-output-heading",
++      "metadata": {},
++      "source": [
++        "## T1–T8 有界电机指令\n",
++        "\n",
++        "绘制实际送入环境的 `action_0...action_7`，即 `tanh` 后的 `[-1, 1]` 指令；灰色区域是对应 PWM 1475–1525 μs 的零推力死区。"
++      ]
++    },
++    {
++      "cell_type": "code",
++      "execution_count": null,
++      "id": "plot-thruster-outputs",
++      "metadata": {},
++      "outputs": [],
++      "source": [
++        "THRUSTER_INSTALLATIONS = (\n",
++        "    'vertical/front-right', 'vertical/rear-right',\n",
++        "    'vertical/front-left', 'vertical/rear-left',\n",
++        "    'horizontal/rear-left', 'horizontal/rear-right',\n",
++        "    'horizontal/front-left', 'horizontal/front-right',\n",
++        ")\n",
++        "env0 = detail_df.loc[detail_df['env_id'] == 0].sort_values('time').copy()\n",
++        "deadband_command = 25.0 / 250.0\n",
++        "figure, axes = plt.subplots(4, 2, figsize=(15, 12), sharex=True, sharey=True)\n",
++        "for thruster_index, axis in enumerate(axes.flat):\n",
++        "    command = env0[f'action_{thruster_index}']\n",
++        "    saturation_fraction = 100.0 * (command.abs() >= 0.95).mean()\n",
++        "    axis.axhspan(\n",
++        "        -deadband_command, deadband_command, color='#cbd5e1', alpha=0.35, linewidth=0,\n",
++        "    )\n",
++        "    axis.axhline(0.0, color='#64748b', linewidth=0.8)\n",
++        "    axis.axhline(1.0, color='#dc2626', linewidth=0.8, linestyle='--')\n",
++        "    axis.axhline(-1.0, color='#dc2626', linewidth=0.8, linestyle='--')\n",
++        "    axis.plot(env0['time'], command, linewidth=1.8)\n",
++        "    axis.set_title(\n",
++        "        f'T{thruster_index + 1} — {THRUSTER_INSTALLATIONS[thruster_index]}'\n",
++        "        f'  (|u| ≥ 0.95: {saturation_fraction:.1f}%)'\n",
++        "    )\n",
++        "    axis.set_ylim(-1.05, 1.05)\n",
++        "    axis.grid(True, alpha=0.25)\n",
++        "    if thruster_index % 2 == 0:\n",
++        "        axis.set_ylabel('Bounded command [-1, 1]')\n",
++        "    if thruster_index >= 6:\n",
++        "        axis.set_xlabel('Time [s]')\n",
++        "figure.suptitle(\n",
++        "    f'V16 {Path(CHECKPOINT).stem} — planar Lissajous — 8 thruster commands',\n",
++        "    fontsize=15,\n",
++        ")\n",
++        "figure.tight_layout(rect=(0.0, 0.0, 1.0, 0.97))\n",
++        "thruster_plot_path = Path(detail_path).parent / 'thruster_actions_env0.png'\n",
++        "figure.savefig(thruster_plot_path, dpi=180, bbox_inches='tight')\n",
++        "print(f'Saved: {thruster_plot_path}')\n",
++        "display(figure)\n",
++        "plt.close(figure)\n"
++      ]
+     }
+   ],
+   "metadata": {
+diff --git a/simulation/training/README.md b/simulation/training/README.md
+index 17d8bcc..73f4f30 100644
+--- a/simulation/training/README.md
++++ b/simulation/training/README.md
+@@ -24,8 +24,8 @@
+ 默认奖励契约 `precision_v9` 和各分量的统一张量实现都在 `rewards.py`。姿态 reward 以
+ `roll=pitch=0` 和轨迹 yaw 分别计算三轴误差，三轴等权汇总；恢复项使用转折点
+ `π/18 rad`、在 `π/3 rad` 过零的 Huber，精度 Cauchy 的每轴半宽为 `2.5°`；
+-角速度也拆为宽范围与精度 Cauchy 项；reward 中有界电机指令只使用幅值项和按真实
+-policy 周期计算、以 `25 action/s` 归一化的 `du/dt` 平方项；幅值和变化率均不对 T60 死区豁免。
++角速度也拆为宽范围与精度 Cauchy 项；reward 对八路有界电机指令的平方和收费，并按真实
++policy 周期计算、以 `25 action/s` 归一化的 `du/dt` 平方均值收费；两项均不对 T60 死区豁免。
+ 位置精度和明确上下界不会由 notebook 或 Hydra 参数另行覆盖。
+ Actor 使用 `z ~ Normal(μ, σ)`、`a = tanh(z)` 的有界动作分布，训练 rollout 保存执行动作和
+ 精确 pre-tanh 样本，并由 PyTorch `TransformedDistribution` 计算 Jacobian 修正后的 log-prob。
+diff --git a/simulation/training/recipes/t60_trajectory_precision_v16.json b/simulation/training/recipes/t60_trajectory_precision_v16.json
+index e6598a8..373a18a 100644
+--- a/simulation/training/recipes/t60_trajectory_precision_v16.json
++++ b/simulation/training/recipes/t60_trajectory_precision_v16.json
+@@ -1,7 +1,7 @@
+ {
+   "schema_version": 6,
+   "name": "t60-trajectory-precision-v16",
+-  "description": "Precision tracking at a 25 Hz policy rate with a tanh-squashed Gaussian motor-command distribution, an exact noise-free 50 ms fused-state delay, eight prior deployable history samples, equal roll/pitch/yaw rewards with zero roll/pitch targets and 2.5 degree attitude precision half-width, a 0.010 motor-command magnitude penalty, a 0.010 command-rate penalty, fixed 3e-5 Actor and 3e-4 Critic learning rates with Actor-only KL early stopping, a 2.5 normalized RMS second-difference regularizer on deterministic bounded motor commands plus a 0.5 RMS second-difference term on the individual T1--T4 vertical-thruster commands, fixed measured rigid-body properties, the latest full-response 6x6 CFD hydrodynamics with staged coefficient DR, independent thruster mismatch plus a shared weak-only thruster scale, axis-sine speeds up to 0.5 m/s surge, 0.25 m/s sway, and 0.3 m/s heave, and speed-by-curvature tiers for bounded lateral and vertical traveling sine waves.",
++  "description": "Precision tracking at a 25 Hz policy rate with a tanh-squashed Gaussian motor-command distribution, an exact noise-free 50 ms fused-state delay, eight prior deployable history samples, equal roll/pitch/yaw rewards with zero roll/pitch targets and 2.5 degree attitude precision half-width, a 0.010 summed squared motor-command effort penalty, a 0.010 mean squared command-rate penalty, fixed 3e-5 Actor and 3e-4 Critic learning rates with Actor-only KL early stopping, a 2.5 normalized RMS second-difference regularizer on deterministic bounded motor commands plus a 0.5 RMS second-difference term on the individual T1--T4 vertical-thruster commands, fixed measured rigid-body properties, the latest full-response 6x6 CFD hydrodynamics with staged coefficient DR, independent thruster mismatch plus a shared weak-only thruster scale, axis-sine speeds up to 0.5 m/s surge, 0.25 m/s sway, and 0.3 m/s heave, and speed-by-curvature tiers for bounded lateral and vertical traveling sine waves.",
+   "mlp_architecture": "mlp_history_8",
+   "action_distribution": "tanh_gaussian_v1",
+   "reward_profile": "precision_v9",
+diff --git a/simulation/training/rewards.py b/simulation/training/rewards.py
+index c0cc9d8..7b8b026 100644
+--- a/simulation/training/rewards.py
++++ b/simulation/training/rewards.py
+@@ -7,6 +7,7 @@ import math
+ 
+ import torch
+ 
++from robot.control.trajectory.observation_contract import ACTION_DIM
+ from robot.runtime import T60_RUNTIME
+ 
+ 
+@@ -68,7 +69,7 @@ class TrackingRewardPolicy:
+         return (
+             minimum_recovery_reward
+             + minimum_precision_reward
+-            - self.action_weight
++            - ACTION_DIM * self.action_weight
+             - self.action_rate_weight * maximum_normalized_rate**2
+         )
+ 
+@@ -86,7 +87,7 @@ PRECISION_V9 = TrackingRewardPolicy(
+         "Equal roll/pitch/yaw attitude rewards for level roll/pitch targets and "
+         "trajectory yaw, using signed Huber recovery plus 2.5 degree Cauchy "
+         "precision, dual-scale angular velocity, and bounded motor-command "
+-        "magnitude and squared-rate penalties."
++        "summed squared motor-command effort and mean squared-rate penalties."
+     ),
+     position_weight=0.35,
+     attitude_recovery_weight=0.25,
+@@ -255,7 +256,7 @@ def compute_tracking_reward_terms(
+         )
+     )
+ 
+-    action_penalty = rew_scale_actions * torch.mean(commands.square(), dim=1)
++    action_penalty = rew_scale_actions * torch.sum(commands.square(), dim=1)
+     action_rate_per_s = (commands - previous_commands) / policy_dt_s
+     normalized_action_rate = action_rate_per_s / rew_action_rate_scale_per_s
+     action_rate_penalty = rew_scale_action_rate * torch.mean(
+diff --git a/tests/simulation/training/rewards/test_policies.py b/tests/simulation/training/rewards/test_policies.py
+index 12716b3..925b44e 100644
+--- a/tests/simulation/training/rewards/test_policies.py
++++ b/tests/simulation/training/rewards/test_policies.py
+@@ -6,6 +6,7 @@ import math
+ 
+ import torch
+ 
++from robot.control.trajectory.observation_contract import ACTION_DIM
+ from simulation.training.rewards import (
+     ACTION_RATE_SCALE_PER_S,
+     ATTITUDE_PRECISION_SIGMA_RAD,
+@@ -107,7 +108,7 @@ def test_precision_v9_has_declared_bounds_and_perfect_reward() -> None:
+         * (1.0 - maximum_huber_loss / zero_huber_loss)
+         + POLICY.attitude_precision_weight
+         / (1.0 + (math.pi / POLICY.attitude_precision_sigma) ** 2)
+-        - POLICY.action_weight
++        - ACTION_DIM * POLICY.action_weight
+         - POLICY.action_rate_weight * maximum_normalized_rate**2
+     )
+     assert math.isclose(POLICY.minimum_running_reward, expected_minimum)
+@@ -121,7 +122,7 @@ def test_precision_v9_has_declared_bounds_and_perfect_reward() -> None:
+     torch.testing.assert_close(
+         penalties_only,
+         torch.tensor(
+-            [-(POLICY.action_weight + POLICY.action_rate_weight * 2.0**2)]
++            [-(ACTION_DIM * POLICY.action_weight + POLICY.action_rate_weight * 2.0**2)]
+         ),
+     )
+ 
+@@ -205,7 +206,7 @@ def test_level_heading_reward_separates_roll_pitch_and_yaw() -> None:
+     torch.testing.assert_close(errors, torch.tensor([[0.0, 0.0, 1.8]]))
+ 
+ 
+-def test_action_magnitude_charges_every_nonzero_command() -> None:
++def test_action_effort_sums_every_nonzero_command() -> None:
+     reward = _reward_terms(
+         tracking_weights=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+         action_weight=1.0,
+@@ -213,7 +214,7 @@ def test_action_magnitude_charges_every_nonzero_command() -> None:
+         action=0.1,
+         previous_action=0.1,
+     )[0]
+-    torch.testing.assert_close(reward, torch.tensor([-0.01]))
++    torch.testing.assert_close(reward, torch.tensor([-0.08]))
+ 
+ 
+ def test_action_rate_penalty_is_invariant_to_policy_period() -> None:
+diff --git a/train.ipynb b/train.ipynb
+index 7d381ea..83bf6e7 100644
+--- a/train.ipynb
++++ b/train.ipynb
+@@ -7,7 +7,7 @@
+    "source": [
+     "# T60 AUV 精度训练\n",
+     "\n",
+-    "训练行为全部来自 `t60_trajectory_precision_v16.json`。物理仿真保持 100 Hz，policy、观测和 8 路动作更新为 25 Hz；融合状态仅保留确定性 50 ms 延迟，不注入传感器噪声；Actor 使用 8 个先前样本形成 320 ms 历史。所有目标姿态严格保持 `roll=pitch=0`，仅让 yaw 跟随水平速度方向；姿态 reward 对 roll、pitch 和 yaw 独立计算并等权汇总，精度半宽为 `2.5°`。Actor 以 `z ~ Normal(μ, σ)` 采样并直接输出 `tanh(z)` 形式的 8 路 `[-1,1]` 推进器命令，训练、评估和 ONNX 使用同一动作语义，再按 `PWM_model = 1500 + 250·command` 映射到 `1250–1750 µs`；纯轴正弦覆盖 `0.1–0.5 m/s` 五档。`precision_v9` reward 以 `0.010` 对全部有界电机指令收取幅值代价，并以 `0.010` 对任何一阶变化收费；二阶变化以系数 `2.5` 约束全部确定性有界命令，并以系数 `0.5` 对 T1–T4 四个垂向推进器通道的二阶变化 RMS 额外收费，不做带符号聚合。PPO 使用 Actor `3e-5`、Critic `3e-4` 的固定学习率；解析 KL 超限后只停止本轮 Actor 更新，Critic 继续完成全部 minibatch。当前从头训练 500 个迭代。水动力使用最近一次 CFD 的完整 6×6 响应矩阵（保留物理允许的非对角项），并分别随机化线性阻尼、二次阻尼和附加质量；推进器同时保留逐台增益失配与每个环境唯一的全体弱化系数。三轴纯正弦训练加减速与反向，横向和垂向前进正弦使用显式速度—曲率配对。Notebook 只管理一个前台 worker，最后一个单元格结束、停止或被中断时，训练进程组也会终止。"
++    "训练行为全部来自 `t60_trajectory_precision_v16.json`。物理仿真保持 100 Hz，policy、观测和 8 路动作更新为 25 Hz；融合状态仅保留确定性 50 ms 延迟，不注入传感器噪声；Actor 使用 8 个先前样本形成 320 ms 历史。所有目标姿态严格保持 `roll=pitch=0`，仅让 yaw 跟随水平速度方向；姿态 reward 对 roll、pitch 和 yaw 独立计算并等权汇总，精度半宽为 `2.5°`。Actor 以 `z ~ Normal(μ, σ)` 采样并直接输出 `tanh(z)` 形式的 8 路 `[-1,1]` 推进器命令，训练、评估和 ONNX 使用同一动作语义，再按 `PWM_model = 1500 + 250·command` 映射到 `1250–1750 µs`；纯轴正弦覆盖 `0.1–0.5 m/s` 五档。`precision_v9` reward 以 `0.010` 对八路有界电机指令的平方和收费，并以 `0.010` 对归一化一阶变化的平方均值收费；二阶变化以系数 `2.5` 约束全部确定性有界命令，并以系数 `0.5` 对 T1–T4 四个垂向推进器通道的二阶变化 RMS 额外收费，不做带符号聚合。PPO 使用 Actor `3e-5`、Critic `3e-4` 的固定学习率；解析 KL 超限后只停止本轮 Actor 更新，Critic 继续完成全部 minibatch。当前从头训练 500 个迭代。水动力使用最近一次 CFD 的完整 6×6 响应矩阵（保留物理允许的非对角项），并分别随机化线性阻尼、二次阻尼和附加质量；推进器同时保留逐台增益失配与每个环境唯一的全体弱化系数。三轴纯正弦训练加减速与反向，横向和垂向前进正弦使用显式速度—曲率配对。Notebook 只管理一个前台 worker，最后一个单元格结束、停止或被中断时，训练进程组也会终止。"
+    ]
+   },
+   {

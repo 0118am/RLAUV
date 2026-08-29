@@ -1,0 +1,2 @@
+trajectory,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse
+spiral,1,0.19185776822011769,0.18309658910341872,0.30000200867652893,0.10189115069042645

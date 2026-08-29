@@ -1,0 +1,2 @@
+trajectory,disturbance,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse,mean_water_current_norm,max_water_current_norm,eval_damping_scale,eval_thruster_scale,eval_thruster_tau_scale,eval_deadband_scale
+lissajous,nominal,1,2.054099783452105,1.828861331451917,3.2785043716430664,0.23582435577554406,0.0,0.0,1.0,1.0,1.0,1.0

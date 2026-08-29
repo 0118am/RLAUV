@@ -1,0 +1,279 @@
+{
+  "name": "t60-trajectory-precision-v16",
+  "mlp_architecture": "mlp_history_8",
+  "action_distribution": "tanh_gaussian_v1",
+  "reward_profile": "precision_v9",
+  "environment_base": "environment/hydrodynamics/coefficients/auv_open_water_openfoam_full_hydrodynamics_v2.json",
+  "domain_randomization_base": "simulation/training/recipes/auv_open_water_openfoam_hydrodynamics_dr_v9.json",
+  "max_iterations": 500,
+  "rollout_steps_per_env": 128,
+  "episode_length_s": 30.0,
+  "trajectory_startup_duration_s": 4.0,
+  "use_boundaries": true,
+  "initial_state": {
+    "position_radius_m": 0.2,
+    "attitude_error_max_rad": 0.17453292519943295,
+    "linear_velocity_error_max_mps": 0.1,
+    "angular_velocity_error_max_radps": 0.2
+  },
+  "trajectory_curriculum": {
+    "enabled": true,
+    "amplitude_x_range": [
+      2.25,
+      2.5
+    ],
+    "amplitude_y_range": [
+      1.35,
+      1.5
+    ],
+    "amplitude_z_range": [
+      0.4,
+      0.5
+    ],
+    "stages": [
+      {
+        "start_step": 0,
+        "add_axis_sine_levels": [
+          {
+            "axes": [
+              "surge",
+              "sway",
+              "heave"
+            ],
+            "peak_speed_mps": 0.1,
+            "amplitude_scale": 1.0
+          }
+        ],
+        "add_traveling_sine_levels": []
+      },
+      {
+        "start_step": 6400,
+        "add_axis_sine_levels": [
+          {
+            "axes": [
+              "surge",
+              "sway",
+              "heave"
+            ],
+            "peak_speed_mps": 0.1,
+            "amplitude_scale": 0.5
+          },
+          {
+            "axes": [
+              "surge",
+              "sway",
+              "heave"
+            ],
+            "peak_speed_mps": 0.2,
+            "amplitude_scale": 1.0
+          }
+        ],
+        "add_traveling_sine_levels": [
+          {
+            "trajectory": "lateral_wave",
+            "wave_count": 1,
+            "path_speed_mps": 0.1,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5,
+              1.0
+            ]
+          },
+          {
+            "trajectory": "vertical_wave",
+            "wave_count": 1,
+            "path_speed_mps": 0.05,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5
+            ]
+          },
+          {
+            "trajectory": "vertical_wave",
+            "wave_count": 1,
+            "path_speed_mps": 0.1,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              1.0
+            ]
+          }
+        ]
+      },
+      {
+        "start_step": 19200,
+        "add_axis_sine_levels": [
+          {
+            "axes": [
+              "surge",
+              "sway",
+              "heave"
+            ],
+            "peak_speed_mps": 0.2,
+            "amplitude_scale": 0.5
+          },
+          {
+            "axes": [
+              "surge"
+            ],
+            "peak_speed_mps": 0.3,
+            "amplitude_scale": 1.0
+          },
+          {
+            "axes": [
+              "sway"
+            ],
+            "peak_speed_mps": 0.25,
+            "amplitude_scale": 1.0
+          },
+          {
+            "axes": [
+              "heave"
+            ],
+            "peak_speed_mps": 0.3,
+            "amplitude_scale": 1.0
+          },
+          {
+            "axes": [
+              "surge"
+            ],
+            "peak_speed_mps": 0.4,
+            "amplitude_scale": 1.0
+          }
+        ],
+        "add_traveling_sine_levels": [
+          {
+            "trajectory": "lateral_wave",
+            "wave_count": 1,
+            "path_speed_mps": 0.2,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5
+            ]
+          },
+          {
+            "trajectory": "lateral_wave",
+            "wave_count": 1,
+            "path_speed_mps": 0.3,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              1.0
+            ]
+          },
+          {
+            "trajectory": "vertical_wave",
+            "wave_count": 1,
+            "path_speed_mps": 0.06,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5
+            ]
+          },
+          {
+            "trajectory": "lateral_wave",
+            "wave_count": 2,
+            "path_speed_mps": 0.04,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5,
+              1.0
+            ]
+          },
+          {
+            "trajectory": "vertical_wave",
+            "wave_count": 2,
+            "path_speed_mps": 0.08,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5,
+              1.0
+            ]
+          }
+        ]
+      },
+      {
+        "start_step": 38400,
+        "add_axis_sine_levels": [
+          {
+            "axes": [
+              "surge"
+            ],
+            "peak_speed_mps": 0.3,
+            "amplitude_scale": 0.8
+          },
+          {
+            "axes": [
+              "sway"
+            ],
+            "peak_speed_mps": 0.25,
+            "amplitude_scale": 0.8
+          },
+          {
+            "axes": [
+              "surge"
+            ],
+            "peak_speed_mps": 0.5,
+            "amplitude_scale": 1.0
+          }
+        ],
+        "add_traveling_sine_levels": [
+          {
+            "trajectory": "lateral_wave",
+            "wave_count": 2,
+            "path_speed_mps": 0.06,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5
+            ]
+          },
+          {
+            "trajectory": "vertical_wave",
+            "wave_count": 2,
+            "path_speed_mps": 0.1,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5
+            ]
+          },
+          {
+            "trajectory": "lateral_wave",
+            "wave_count": 3,
+            "path_speed_mps": 0.015,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5
+            ]
+          },
+          {
+            "trajectory": "vertical_wave",
+            "wave_count": 3,
+            "path_speed_mps": 0.04,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              0.5
+            ]
+          },
+          {
+            "trajectory": "vertical_wave",
+            "wave_count": 3,
+            "path_speed_mps": 0.025,
+            "longitudinal_scale": 1.0,
+            "transverse_scales": [
+              1.0
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "kinematic_limits": {
+    "max_speed_mps": 0.5,
+    "max_acceleration_mps2": 0.45,
+    "max_yaw_rate_radps": 0.8,
+    "max_jerk_mps3": 0.36,
+    "retime_samples": 256
+  },
+  "environment_overrides": {},
+  "randomization_overrides": {},
+  "schema_version": 6,
+  "description": "Precision tracking at a 25 Hz policy rate with a tanh-squashed Gaussian motor-command distribution, an exact noise-free 50 ms fused-state delay, eight prior deployable history samples, equal roll/pitch/yaw rewards with zero roll/pitch targets and 2.5 degree attitude precision half-width, a 0.010 summed squared motor-command effort penalty, a 0.010 mean squared command-rate penalty, fixed 3e-5 Actor and 3e-4 Critic learning rates with Actor-only KL early stopping, a 2.5 normalized RMS second-difference regularizer on deterministic bounded motor commands plus a 0.5 RMS second-difference term on the individual T1--T4 vertical-thruster commands, fixed measured rigid-body properties, the latest full-response 6x6 CFD hydrodynamics with staged coefficient DR, independent thruster mismatch plus a shared weak-only thruster scale, axis-sine speeds up to 0.5 m/s surge, 0.25 m/s sway, and 0.3 m/s heave, and speed-by-curvature tiers for bounded lateral and vertical traveling sine waves."
+}

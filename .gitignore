@@ -13,6 +13,10 @@ archives/
 *.pt
 *.onnx
 
+# Let the OpenFOAM-local whitelist expose only the selected final fit while
+# every other generated results directory remains ignored.
+!environment/openfoam/results/
+
 # OpenFOAM user-library build products (source and Make recipes remain tracked)
 environment/openfoam/boundary_conditions/*/Make/linux*/
 environment/openfoam/boundary_conditions/*/lnInclude/

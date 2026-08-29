@@ -1,0 +1,2 @@
+trajectory,position_rmse,position_mae,max_position_error,velocity_rmse,checkpoint,checkpoint_name,summary_path
+spiral,0.1449929704195777,0.1374231512318753,0.3000009953975677,0.0598356054363517,799,model_799.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-17_19-22-36/model_799_spiral_trajectory_eval/summary_metrics.csv

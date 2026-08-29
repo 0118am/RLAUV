@@ -20,5 +20,9 @@ rlpolicy/
 训练标准输出由 `train.ipynb` 最后一个单元格直接显示，不在这里创建 launcher PID/日志文件。
 `eval.ipynb` 只在仓库内 `auv_traj_mlp_history_8` 目录自动选择最新完成训练的 run/checkpoint。
 评估、续训和 ONNX 导出均从 checkpoint 同目录的 training recipe 恢复网络、奖励和输入文件，不使用独立 `_configs`
-目录。checkpoint、快照、日志、评估和 ONNX 文件由 `.gitignore` 排除。导出工具位于
+目录。普通 checkpoint、快照、日志、评估和 ONNX 文件由 `.gitignore` 排除；唯一例外是
+`auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/` 中经过筛选的最终生产归档。
+该归档只版本化 `model_499.pt`、对应 ONNX、不可变输入、TensorBoard 事件、最终评估和训练
+启动时留下的源代码差异快照，不保存 `model_0.pt` 至 `model_450.pt`。差异快照本身在第 302
+行截断，归档只为保留原始证据，不能当作可应用补丁。导出工具位于
 `simulation/training/evaluation/export.py`。

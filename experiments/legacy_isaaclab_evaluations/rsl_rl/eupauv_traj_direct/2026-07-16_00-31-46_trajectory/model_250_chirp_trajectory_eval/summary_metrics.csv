@@ -1,0 +1,2 @@
+trajectory,reward_profile,disturbance,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse,mean_reward_per_step,mean_water_current_norm,max_water_current_norm,eval_damping_scale,eval_thruster_scale,eval_thruster_tau_scale,eval_deadband_scale
+chirp,baseline,nominal,1,0.21836927927173874,0.21243899291497656,0.27994295954704285,0.10113417616670665,4.286256298720836,0.0,0.0,1.0,1.0,1.0,1.0

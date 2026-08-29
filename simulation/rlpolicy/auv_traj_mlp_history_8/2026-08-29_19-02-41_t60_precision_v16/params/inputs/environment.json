@@ -1,0 +1,252 @@
+{
+  "name": "auv-openfoam-open-water-full-hydrodynamics-v2--t60-trajectory-precision-v16",
+  "description": "Full-response 6x6 matrices from the latest completed locked-rotor open-water CFD campaign ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a. Each single-axis excitation contributes all six measured wrench responses; reflection-forbidden couplings are zero, allowed off-diagonal coefficients are retained, and added mass is reciprocity-symmetrized. Coefficients use body FLU axes at the moving COM, wrench rows [X,Y,Z,K,M,N], velocity columns [u,v,w,p,q,r], and tau_h=-M_A*nu_dot-C_A(nu,M_A)*nu-D_L*nu-D_Q*(abs(nu)*nu). Training recipe: t60-trajectory-precision-v16.",
+  "hydrodynamics": {
+    "fluid_density_kg_m3": 1000.0,
+    "linear_damping": [
+      [
+        0.03553000206295201,
+        0.0,
+        0.010364354440223579,
+        0.0,
+        -0.30755672559467867,
+        0.0
+      ],
+      [
+        0.0,
+        0.18717109457664613,
+        0.0,
+        0.5326786283765327,
+        0.0,
+        -0.037982769191195795
+      ],
+      [
+        0.00012922990208127051,
+        0.0,
+        0.24496648245129496,
+        0.0,
+        0.8486552825554415,
+        0.0
+      ],
+      [
+        0.0,
+        0.0021485664988390926,
+        0.0,
+        0.10038527381685472,
+        0.0,
+        -0.0014308824296696923
+      ],
+      [
+        -0.00022449468623937264,
+        0.0,
+        -0.002618371654734715,
+        0.0,
+        0.3276767825738178,
+        0.0
+      ],
+      [
+        0.0,
+        -0.0009434087539959798,
+        0.0,
+        -0.004002263023700146,
+        0.0,
+        0.1228280649328466
+      ]
+    ],
+    "quadratic_damping": [
+      [
+        1.3723506170367676,
+        0.0,
+        -0.17095255104448612,
+        0.0,
+        0.20750672827061875,
+        0.0
+      ],
+      [
+        0.0,
+        8.332495888239572,
+        0.0,
+        -0.17898175347447337,
+        0.0,
+        0.0058105868888697915
+      ],
+      [
+        0.003240297589244673,
+        0.0,
+        20.385343945488604,
+        0.0,
+        0.6909659642958056,
+        0.0
+      ],
+      [
+        0.0,
+        0.118091513284408,
+        0.0,
+        0.08935421426642794,
+        0.0,
+        -0.00048405641825259035
+      ],
+      [
+        -0.0037828059143367124,
+        0.0,
+        0.7910968730164222,
+        0.0,
+        0.27004561093721446,
+        0.0
+      ],
+      [
+        0.0,
+        -0.027579701542913563,
+        0.0,
+        -0.0022280819930357173,
+        0.0,
+        0.13135997076980596
+      ]
+    ],
+    "speed_dependent_damping_enabled": false,
+    "damping_speed_points": [
+      0.0,
+      1.0
+    ],
+    "linear_damping_speed_scales": [],
+    "quadratic_damping_speed_scales": [],
+    "added_mass": [
+      [
+        13.11091777633331,
+        0.0,
+        0.04094084380667985,
+        0.0,
+        -0.1902895845768257,
+        0.0
+      ],
+      [
+        0.0,
+        19.421432340568415,
+        0.0,
+        0.1018336947283784,
+        0.0,
+        -0.020128072008992928
+      ],
+      [
+        0.04094084380667985,
+        0.0,
+        34.86857533156505,
+        0.0,
+        0.18475186655260162,
+        0.0
+      ],
+      [
+        0.0,
+        0.1018336947283784,
+        0.0,
+        0.13046760132371743,
+        0.0,
+        -0.002415546127588874
+      ],
+      [
+        -0.1902895845768257,
+        0.0,
+        0.18475186655260162,
+        0.0,
+        0.41330553660405245,
+        0.0
+      ],
+      [
+        0.0,
+        -0.020128072008992928,
+        0.0,
+        -0.002415546127588874,
+        0.0,
+        0.16679851568378365
+      ]
+    ],
+    "water_current_w": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "water_current_periodic_enabled": false,
+    "water_current_periodic_amplitude_w": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "water_current_periodic_period_s": [
+      18.0,
+      27.0,
+      11.0
+    ],
+    "water_current_periodic_phase_rad": [
+      0.0,
+      1.5707963267948966,
+      3.141592653589793
+    ],
+    "water_current_field_enabled": false,
+    "water_current_field_bounds": [
+      -0.75,
+      5.75,
+      -0.75,
+      3.75,
+      -0.6,
+      1.6
+    ],
+    "water_current_field_shape": [
+      1,
+      1,
+      1
+    ],
+    "water_current_field_values": []
+  },
+  "pool_boundary": {
+    "enabled": false,
+    "bounds": [
+      -0.75,
+      5.75,
+      -0.75,
+      3.75,
+      -0.6,
+      1.6
+    ],
+    "effect_distance": 0.9,
+    "damping_scale_at_boundary": 1.0,
+    "added_mass_scale_at_boundary": 1.0,
+    "thrust_scale_at_boundary": 1.0
+  },
+  "free_surface": {
+    "enabled": false,
+    "surface_z": 1.6,
+    "effect_distance": 0.65,
+    "heave_damping_scale": 1.0,
+    "roll_pitch_damping_scale": 1.0,
+    "added_mass_scale": 1.0,
+    "buoyancy_scale": 1.0,
+    "thrust_scale": 1.0,
+    "sloshing_enabled": false,
+    "sloshing_pool_bounds": [
+      -0.75,
+      5.75,
+      -0.75,
+      3.75
+    ],
+    "sloshing_water_depth": 2.2,
+    "sloshing_mode_numbers": [
+      [
+        1,
+        0
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    "sloshing_amplitudes_m": [
+      0.0,
+      0.0
+    ],
+    "sloshing_phases_rad": [
+      0.0,
+      1.5707963267948966
+    ],
+    "sloshing_depth_axis_sign": -1.0
+  }
+}

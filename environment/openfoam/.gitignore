@@ -2,6 +2,14 @@
 geometry/processed/
 geometry/validated_*/
 
+# Small, immutable provenance for the geometry used by the published CFD fit.
+# The 61 MB selected STL and 586 MB repaired OBJ stay out of Git; these JSON
+# records contain their hashes, dimensions, repair parameters, and audits.
+!geometry/validated_locked_rotor_v1/
+geometry/validated_locked_rotor_v1/*
+!geometry/validated_locked_rotor_v1/selection_report.json
+!geometry/validated_locked_rotor_v1/wetted_body_m.json
+
 # Local OpenFOAM binary deployment (about 594 MiB)
 .runtime/
 
@@ -19,6 +27,17 @@ mesh_case/processor*/
 # Identification outputs
 results/*
 !results/.gitkeep
+
+# Curated final identification result.  Raw cases and time histories stay local.
+!results/fit_20260825_005547_340708/
+results/fit_20260825_005547_340708/*
+!results/fit_20260825_005547_340708/README.md
+!results/fit_20260825_005547_340708/SHA256SUMS
+!results/fit_20260825_005547_340708/added_mass.csv
+!results/fit_20260825_005547_340708/linear_damping.csv
+!results/fit_20260825_005547_340708/quadratic_damping.csv
+!results/fit_20260825_005547_340708/config_updates.json
+!results/fit_20260825_005547_340708/hydrodynamic_fit.json
 
 # Python caches
 __pycache__/

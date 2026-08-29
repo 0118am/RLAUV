@@ -1,0 +1,74 @@
+# Training environment inventory captured before the server was reclaimed.
+# This is a version manifest, not a byte-identical solver lock: Isaac Sim and
+# CUDA wheels must be installed from the indexes supported by pinned Isaac Lab.
+name: env_isaaclab
+captured_at: 2026-08-29
+platform:
+  kernel: "Linux 5.15.0-164-generic x86_64"
+  glibc: "2.35-0ubuntu3.14"
+  gpu: unknown
+  nvidia_driver: unknown
+  note: "NVIDIA-SMI and CUDA device discovery were unavailable at capture time."
+toolchain:
+  conda: "26.3.2"
+  python: "3.11.15"
+  pip: "26.1.2"
+source_checkouts:
+  isaaclab:
+    tag: "v2.3.2"
+    commit: "37ddf626871758333d6ed89cf64ad702aef127d0"
+simulation:
+  isaacsim: "5.1.0.0"
+  isaaclab: "0.54.2"
+  isaaclab_assets: "0.2.4"
+  isaaclab_contrib: "0.0.2"
+  isaaclab_mimic: "1.0.16"
+  isaaclab_rl: "0.4.7"
+  isaaclab_tasks: "0.11.12"
+learning:
+  torch: "2.7.0+cu128"
+  torchvision: "0.22.0+cu128"
+  torchaudio: "2.7.0"
+  rsl_rl_lib: "3.1.2"
+  skrl: "2.1.0"
+  stable_baselines3: "2.8.0"
+  tensordict: "0.13.0"
+cuda_runtime:
+  torch_cuda: "12.8"
+  cudnn_runtime: "9.7.1.26"
+  nvidia_cublas_cu12: "12.8.3.14"
+  nvidia_cuda_cupti_cu12: "12.8.57"
+  nvidia_cuda_nvrtc_cu12: "12.8.61"
+  nvidia_cuda_runtime_cu12: "12.8.57"
+  nvidia_cufft_cu12: "11.3.3.41"
+  nvidia_cufile_cu12: "1.13.0.11"
+  nvidia_curand_cu12: "10.3.9.55"
+  nvidia_cusolver_cu12: "11.7.2.55"
+  nvidia_cusparse_cu12: "12.5.7.53"
+  nvidia_cusparselt_cu12: "0.6.3"
+  nvidia_nccl_cu12: "2.26.2"
+  nvidia_nvjitlink_cu12: "12.8.61"
+  nvidia_nvtx_cu12: "12.8.55"
+  triton: "3.3.0"
+scientific:
+  numpy: "1.26.0"
+  scipy: "1.15.3"
+  pandas: "3.0.3"
+  matplotlib: "3.10.3"
+  pydantic: "2.11.10"
+  onnx: "1.21.0"
+  onnx_ir: "0.2.1"
+  onnxscript: "0.7.0"
+  warp_lang: "1.14.0"
+interfaces:
+  gym: "0.23.1"
+  gymnasium: "1.2.1"
+  hydra_core: "1.3.2"
+  tensorboard: "2.20.0"
+  tensorboardX: "2.6.5"
+  ipykernel: "7.2.0"
+  psutil: "5.9.8"
+development:
+  pytest: "9.0.3"
+  pytest_mock: "3.15.1"
+  gitpython: "3.1.50"

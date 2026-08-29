@@ -1,0 +1,1362 @@
+{
+  "cases": [
+    {
+      "amplitude_si": 0.012732395447351628,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_p_rate0p080radps_f1p000hz",
+      "case_family": "added_mass",
+      "case_name": "added_mass_p_rate0p080radps_f1p000hz",
+      "dof": "p",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_p_rate0p080radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_p_rate0p080radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.012732395447351628,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_q_rate0p080radps_f1p000hz",
+      "case_family": "added_mass",
+      "case_name": "added_mass_q_rate0p080radps_f1p000hz",
+      "dof": "q",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_q_rate0p080radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_q_rate0p080radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.012732395447351628,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_r_rate0p080radps_f1p000hz",
+      "case_family": "added_mass",
+      "case_name": "added_mass_r_rate0p080radps_f1p000hz",
+      "dof": "r",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_r_rate0p080radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_r_rate0p080radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.006366197723675814,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_u_vel0p040mps_f1p000hz",
+      "case_family": "added_mass",
+      "case_name": "added_mass_u_vel0p040mps_f1p000hz",
+      "dof": "u",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_u_vel0p040mps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_u_vel0p040mps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.006366197723675814,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_v_vel0p040mps_f1p000hz",
+      "case_family": "added_mass",
+      "case_name": "added_mass_v_vel0p040mps_f1p000hz",
+      "dof": "v",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_v_vel0p040mps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_v_vel0p040mps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.006366197723675814,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_w_vel0p040mps_f1p000hz",
+      "case_family": "added_mass",
+      "case_name": "added_mass_w_vel0p040mps_f1p000hz",
+      "dof": "w",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_w_vel0p040mps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/added_mass_w_vel0p040mps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.03183098861837907,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_p_rate0p200radps_f1p000hz",
+      "case_family": "oscillatory_damping",
+      "case_name": "oscillatory_damping_p_rate0p200radps_f1p000hz",
+      "dof": "p",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_p_rate0p200radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_p_rate0p200radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.12732395447351627,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_p_rate0p800radps_f1p000hz",
+      "case_family": "oscillatory_damping",
+      "case_name": "oscillatory_damping_p_rate0p800radps_f1p000hz",
+      "dof": "p",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_p_rate0p800radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_p_rate0p800radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.03183098861837907,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_q_rate0p200radps_f1p000hz",
+      "case_family": "oscillatory_damping",
+      "case_name": "oscillatory_damping_q_rate0p200radps_f1p000hz",
+      "dof": "q",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_q_rate0p200radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_q_rate0p200radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.12732395447351627,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_q_rate0p800radps_f1p000hz",
+      "case_family": "oscillatory_damping",
+      "case_name": "oscillatory_damping_q_rate0p800radps_f1p000hz",
+      "dof": "q",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_q_rate0p800radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_q_rate0p800radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.03183098861837907,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_r_rate0p200radps_f1p000hz",
+      "case_family": "oscillatory_damping",
+      "case_name": "oscillatory_damping_r_rate0p200radps_f1p000hz",
+      "dof": "r",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_r_rate0p200radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_r_rate0p200radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "amplitude_si": 0.12732395447351627,
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_r_rate0p800radps_f1p000hz",
+      "case_family": "oscillatory_damping",
+      "case_name": "oscillatory_damping_r_rate0p800radps_f1p000hz",
+      "dof": "r",
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_r_rate0p800radps_f1p000hz/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/oscillatory_damping_r_rate0p800radps_f1p000hz/postProcessing/forces/0/moment.dat"
+      ],
+      "omega_rad_s": 6.283185307179586,
+      "ramp_duration_s": 1.0,
+      "sample_cycles": 2.0,
+      "settle_cycles": 1.5
+    },
+    {
+      "body_velocity_b_m_s": [
+        -0.08,
+        -0.0,
+        -0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_neg_0p080mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_u_neg_0p080mps",
+      "dof": "u",
+      "end_time_s": 7.025,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_neg_0p080mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_neg_0p080mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 3.5125
+    },
+    {
+      "body_velocity_b_m_s": [
+        -0.4,
+        -0.0,
+        -0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_neg_0p400mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_u_neg_0p400mps",
+      "dof": "u",
+      "end_time_s": 1.405,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_neg_0p400mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_neg_0p400mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 0.7025
+    },
+    {
+      "body_velocity_b_m_s": [
+        0.08,
+        0.0,
+        0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_pos_0p080mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_u_pos_0p080mps",
+      "dof": "u",
+      "end_time_s": 7.025,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_pos_0p080mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_pos_0p080mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 3.5125
+    },
+    {
+      "body_velocity_b_m_s": [
+        0.4,
+        0.0,
+        0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_pos_0p400mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_u_pos_0p400mps",
+      "dof": "u",
+      "end_time_s": 1.405,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_pos_0p400mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_u_pos_0p400mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 0.7025
+    },
+    {
+      "body_velocity_b_m_s": [
+        -0.0,
+        -0.08,
+        -0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_neg_0p080mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_v_neg_0p080mps",
+      "dof": "v",
+      "end_time_s": 7.025,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_neg_0p080mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_neg_0p080mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 3.5125
+    },
+    {
+      "body_velocity_b_m_s": [
+        -0.0,
+        -0.4,
+        -0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_neg_0p400mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_v_neg_0p400mps",
+      "dof": "v",
+      "end_time_s": 1.405,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_neg_0p400mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_neg_0p400mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 0.7025
+    },
+    {
+      "body_velocity_b_m_s": [
+        0.0,
+        0.08,
+        0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_pos_0p080mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_v_pos_0p080mps",
+      "dof": "v",
+      "end_time_s": 7.025,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_pos_0p080mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_pos_0p080mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 3.5125
+    },
+    {
+      "body_velocity_b_m_s": [
+        0.0,
+        0.4,
+        0.0
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_pos_0p400mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_v_pos_0p400mps",
+      "dof": "v",
+      "end_time_s": 1.405,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_pos_0p400mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_v_pos_0p400mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 0.7025
+    },
+    {
+      "body_velocity_b_m_s": [
+        -0.0,
+        -0.0,
+        -0.08
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_neg_0p080mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_w_neg_0p080mps",
+      "dof": "w",
+      "end_time_s": 7.025,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_neg_0p080mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_neg_0p080mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 3.5125
+    },
+    {
+      "body_velocity_b_m_s": [
+        -0.0,
+        -0.0,
+        -0.4
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_neg_0p400mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_w_neg_0p400mps",
+      "dof": "w",
+      "end_time_s": 1.405,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_neg_0p400mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_neg_0p400mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 0.7025
+    },
+    {
+      "body_velocity_b_m_s": [
+        0.0,
+        0.0,
+        0.08
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_pos_0p080mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_w_pos_0p080mps",
+      "dof": "w",
+      "end_time_s": 7.025,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_pos_0p080mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_pos_0p080mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 3.5125
+    },
+    {
+      "body_velocity_b_m_s": [
+        0.0,
+        0.0,
+        0.4
+      ],
+      "case_dir": "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_pos_0p400mps",
+      "case_family": "steady_damping",
+      "case_name": "steady_damping_w_pos_0p400mps",
+      "dof": "w",
+      "end_time_s": 1.405,
+      "force_files": [
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_pos_0p400mps/postProcessing/forces/0/force.dat",
+        "/home/jining_yang/isaac-auv-env/environment/openfoam/cases/ffa066cfd002cdbb8c57b674f07edf25da6c603c499ab0992625df24df32162a/steady_damping_w_pos_0p400mps/postProcessing/forces/0/moment.dat"
+      ],
+      "settle_end_s": 0.7025
+    }
+  ],
+  "config_updates": {
+    "added_mass": [
+      [
+        13.11091777633331,
+        0.0,
+        0.04094084380667985,
+        0.0,
+        -0.1902895845768257,
+        0.0
+      ],
+      [
+        0.0,
+        19.421432340568415,
+        0.0,
+        0.1018336947283784,
+        0.0,
+        -0.020128072008992928
+      ],
+      [
+        0.04094084380667985,
+        0.0,
+        34.86857533156505,
+        0.0,
+        0.18475186655260162,
+        0.0
+      ],
+      [
+        0.0,
+        0.1018336947283784,
+        0.0,
+        0.13046760132371743,
+        0.0,
+        -0.002415546127588874
+      ],
+      [
+        -0.1902895845768257,
+        0.0,
+        0.18475186655260162,
+        0.0,
+        0.41330553660405245,
+        0.0
+      ],
+      [
+        0.0,
+        -0.020128072008992928,
+        0.0,
+        -0.002415546127588874,
+        0.0,
+        0.16679851568378365
+      ]
+    ],
+    "linear_damping": [
+      [
+        0.03553000206295201,
+        0.0,
+        0.010364354440223579,
+        0.0,
+        -0.30755672559467867,
+        0.0
+      ],
+      [
+        0.0,
+        0.18717109457664613,
+        0.0,
+        0.5326786283765327,
+        0.0,
+        -0.037982769191195795
+      ],
+      [
+        0.00012922990208127051,
+        0.0,
+        0.24496648245129496,
+        0.0,
+        0.8486552825554415,
+        0.0
+      ],
+      [
+        0.0,
+        0.0021485664988390926,
+        0.0,
+        0.10038527381685472,
+        0.0,
+        -0.0014308824296696923
+      ],
+      [
+        -0.00022449468623937264,
+        0.0,
+        -0.002618371654734715,
+        0.0,
+        0.3276767825738178,
+        0.0
+      ],
+      [
+        0.0,
+        -0.0009434087539959798,
+        0.0,
+        -0.004002263023700146,
+        0.0,
+        0.1228280649328466
+      ]
+    ],
+    "quadratic_damping": [
+      [
+        1.3723506170367676,
+        0.0,
+        -0.17095255104448612,
+        0.0,
+        0.20750672827061875,
+        0.0
+      ],
+      [
+        0.0,
+        8.332495888239572,
+        0.0,
+        -0.17898175347447337,
+        0.0,
+        0.0058105868888697915
+      ],
+      [
+        0.003240297589244673,
+        0.0,
+        20.385343945488604,
+        0.0,
+        0.6909659642958056,
+        0.0
+      ],
+      [
+        0.0,
+        0.118091513284408,
+        0.0,
+        0.08935421426642794,
+        0.0,
+        -0.00048405641825259035
+      ],
+      [
+        -0.0037828059143367124,
+        0.0,
+        0.7910968730164222,
+        0.0,
+        0.27004561093721446,
+        0.0
+      ],
+      [
+        0.0,
+        -0.027579701542913563,
+        0.0,
+        -0.0022280819930357173,
+        0.0,
+        0.13135997076980596
+      ]
+    ],
+    "schema_version": 3
+  },
+  "coordinate_convention": {
+    "dof_order": [
+      "u",
+      "v",
+      "w",
+      "p",
+      "q",
+      "r"
+    ],
+    "force_sign": "fluid-on-body",
+    "frame": "body FLU at moving COM",
+    "model": "tau_h=-M_A*nudot-C_A(nu,M_A)*nu-D_L*nu-D_Q*(abs(nu)*nu)",
+    "wrench_order": [
+      "X",
+      "Y",
+      "Z",
+      "K",
+      "M",
+      "N"
+    ]
+  },
+  "diagnostics": {
+    "added_mass_reciprocity": {
+      "method": "symmetric_average_of_independent_full_response_columns",
+      "published_eigenvalues": [
+        0.12978589387855458,
+        0.16692160889574303,
+        0.4094575381447851,
+        13.113701905975468,
+        19.421990954801622,
+        34.86963920038217
+      ],
+      "raw_asymmetry_frobenius": 0.05882753874769392
+    },
+    "joint_oscillatory_rotational_coefficients": {
+      "p": {
+        "added_mass": 0.13046760132371743,
+        "case_added_mass": {
+          "oscillatory_damping_p_rate0p200radps_f1p000hz": 0.1240284988103876,
+          "oscillatory_damping_p_rate0p800radps_f1p000hz": 0.13087004523080056
+        },
+        "case_names": [
+          "oscillatory_damping_p_rate0p200radps_f1p000hz",
+          "oscillatory_damping_p_rate0p800radps_f1p000hz"
+        ],
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": 0.13046760132371743,
+            "linear": 0.10038527381685472,
+            "quadratic": 0.08935421426642794
+          },
+          "M": {
+            "added_mass": -5.6573775754206886e-05,
+            "linear": -0.0007539257878888012,
+            "quadratic": 0.0008591257849127892
+          },
+          "N": {
+            "added_mass": -0.0025937102031644054,
+            "linear": -0.004002263023700146,
+            "quadratic": -0.0022280819930357173
+          },
+          "X": {
+            "added_mass": -0.0014608081975720725,
+            "linear": 0.02106771979889131,
+            "quadratic": -0.04336717441651175
+          },
+          "Y": {
+            "added_mass": 0.10868297965631939,
+            "linear": 0.5326786283765327,
+            "quadratic": -0.17898175347447337
+          },
+          "Z": {
+            "added_mass": -0.0007731611635829495,
+            "linear": 0.0029120609328672654,
+            "quadratic": -0.006056364745976848
+          }
+        },
+        "condition_number_scaled": 7.370814998156746,
+        "linear": 0.10038527381685472,
+        "maximum_cross_axis_load_fraction": 0.5503739682879258,
+        "maximum_last_cycle_load_change": 0.004859110678162561,
+        "nrmse": 0.11482123117252474,
+        "nrmse_normalization": "RMS load after subtracting jointly fitted added mass",
+        "quadratic": 0.08935421426642794,
+        "total_load_nrmse": 0.02202957821533912
+      },
+      "q": {
+        "added_mass": 0.41330553660405245,
+        "case_added_mass": {
+          "oscillatory_damping_q_rate0p200radps_f1p000hz": 0.39761915653473495,
+          "oscillatory_damping_q_rate0p800radps_f1p000hz": 0.4142859353583848
+        },
+        "case_names": [
+          "oscillatory_damping_q_rate0p200radps_f1p000hz",
+          "oscillatory_damping_q_rate0p800radps_f1p000hz"
+        ],
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": -0.00030631003727415616,
+            "linear": -0.0025758038980920567,
+            "quadratic": -7.50356356691632e-05
+          },
+          "M": {
+            "added_mass": 0.41330553660405245,
+            "linear": 0.3276767825738178,
+            "quadratic": 0.27004561093721446
+          },
+          "N": {
+            "added_mass": -0.00034335227242966265,
+            "linear": -0.0026006337499025036,
+            "quadratic": 0.0010662548959355976
+          },
+          "X": {
+            "added_mass": -0.19496341618507484,
+            "linear": -0.30755672559467867,
+            "quadratic": 0.20750672827061875
+          },
+          "Y": {
+            "added_mass": -0.00259809629350142,
+            "linear": -0.025780463959847667,
+            "quadratic": 0.005172895456763264
+          },
+          "Z": {
+            "added_mass": 0.20311804614161738,
+            "linear": 0.8486552825554415,
+            "quadratic": 0.6909659642958056
+          }
+        },
+        "condition_number_scaled": 7.370814998156746,
+        "linear": 0.3276767825738178,
+        "maximum_cross_axis_load_fraction": 0.39762875396062936,
+        "maximum_last_cycle_load_change": 0.0032004426942467187,
+        "nrmse": 0.14779284509272864,
+        "nrmse_normalization": "RMS load after subtracting jointly fitted added mass",
+        "quadratic": 0.27004561093721446,
+        "total_load_nrmse": 0.028529536801776823
+      },
+      "r": {
+        "added_mass": 0.16679851568378365,
+        "case_added_mass": {
+          "oscillatory_damping_r_rate0p200radps_f1p000hz": 0.1614849728913831,
+          "oscillatory_damping_r_rate0p800radps_f1p000hz": 0.16713061210830873
+        },
+        "case_names": [
+          "oscillatory_damping_r_rate0p200radps_f1p000hz",
+          "oscillatory_damping_r_rate0p800radps_f1p000hz"
+        ],
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": -0.002237382052013343,
+            "linear": -0.0014308824296696923,
+            "quadratic": -0.00048405641825259035
+          },
+          "M": {
+            "added_mass": -0.0002776567533832661,
+            "linear": -0.000999974813123975,
+            "quadratic": -0.0007977736122981183
+          },
+          "N": {
+            "added_mass": 0.16679851568378365,
+            "linear": 0.1228280649328466,
+            "quadratic": 0.13135997076980596
+          },
+          "X": {
+            "added_mass": 0.001255034114471625,
+            "linear": 0.003755780949395471,
+            "quadratic": 0.0022869003655055452
+          },
+          "Y": {
+            "added_mass": -0.019771140074848682,
+            "linear": -0.037982769191195795,
+            "quadratic": 0.0058105868888697915
+          },
+          "Z": {
+            "added_mass": 0.0015987993229561969,
+            "linear": 0.012863159450239565,
+            "quadratic": 0.02308669263114978
+          }
+        },
+        "condition_number_scaled": 7.370814998156746,
+        "linear": 0.1228280649328466,
+        "maximum_cross_axis_load_fraction": 0.06821583941130177,
+        "maximum_last_cycle_load_change": 0.0017209842694393355,
+        "nrmse": 0.11803436979730207,
+        "nrmse_normalization": "RMS load after subtracting jointly fitted added mass",
+        "quadratic": 0.13135997076980596,
+        "total_load_nrmse": 0.02328578838391935
+      }
+    },
+    "low_amplitude_added_mass": {
+      "p": {
+        "added_mass": 0.12179631616956196,
+        "case_name": "added_mass_p_rate0p080radps_f1p000hz",
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": 0.12179631616956196,
+            "linear_nuisance": 0.027404433008622275,
+            "quadratic_nuisance": 0.34906202308001083
+          },
+          "M": {
+            "added_mass": -9.408242689492373e-05,
+            "linear_nuisance": -5.501965827424686e-05,
+            "quadratic_nuisance": -0.0004153474827226365
+          },
+          "N": {
+            "added_mass": -0.0022243234845679334,
+            "linear_nuisance": -0.00035171414562563323,
+            "quadratic_nuisance": -0.0038236848379881597
+          },
+          "X": {
+            "added_mass": 0.0005745971100380907,
+            "linear_nuisance": -0.0010016380429761552,
+            "quadratic_nuisance": 0.005637288220893838
+          },
+          "Y": {
+            "added_mass": 0.046324345690004716,
+            "linear_nuisance": 0.18809869713058344,
+            "quadratic_nuisance": -0.2410923871879015
+          },
+          "Z": {
+            "added_mass": -0.0013781661946597253,
+            "linear_nuisance": -0.0005219660430811428,
+            "quadratic_nuisance": 0.01165968170037879
+          }
+        },
+        "condition_number_scaled": 9.985319544518847,
+        "linear_nuisance": 0.027404433008622275,
+        "maximum_cross_axis_load_fraction": 0.24917748006609194,
+        "nrmse": 0.014612070849853411,
+        "quadratic_nuisance": 0.34906202308001083
+      },
+      "q": {
+        "added_mass": 0.39266334375916573,
+        "case_name": "added_mass_q_rate0p080radps_f1p000hz",
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": -9.164609080911765e-05,
+            "linear_nuisance": -0.00019493172775083607,
+            "quadratic_nuisance": -0.00014964651300243976
+          },
+          "M": {
+            "added_mass": 0.39266334375916573,
+            "linear_nuisance": 0.0648203564724377,
+            "quadratic_nuisance": 0.8500187197319966
+          },
+          "N": {
+            "added_mass": -0.0002760151830731202,
+            "linear_nuisance": -0.0002280236196135552,
+            "quadratic_nuisance": -0.0008064600969425473
+          },
+          "X": {
+            "added_mass": -0.1656424639965074,
+            "linear_nuisance": -0.20004201677800984,
+            "quadratic_nuisance": 1.0012411838718112
+          },
+          "Y": {
+            "added_mass": -0.0005297472088839846,
+            "linear_nuisance": -0.002820783624160113,
+            "quadratic_nuisance": 0.0077488752308320745
+          },
+          "Z": {
+            "added_mass": 0.1616532368472947,
+            "linear_nuisance": 0.012752213329270482,
+            "quadratic_nuisance": 1.5839466176606003
+          }
+        },
+        "condition_number_scaled": 9.985319544518847,
+        "linear_nuisance": 0.0648203564724377,
+        "maximum_cross_axis_load_fraction": 0.2387315654690259,
+        "nrmse": 0.010624813626771654,
+        "quadratic_nuisance": 0.8500187197319966
+      },
+      "r": {
+        "added_mass": 0.16047961266067223,
+        "case_name": "added_mass_r_rate0p080radps_f1p000hz",
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": -0.0022641687880256283,
+            "linear_nuisance": -0.0004097427364270952,
+            "quadratic_nuisance": 0.0020618211342768814
+          },
+          "M": {
+            "added_mass": -0.0002624347235687014,
+            "linear_nuisance": -0.00017286027048200417,
+            "quadratic_nuisance": -0.0002288038588134048
+          },
+          "N": {
+            "added_mass": 0.16047961266067223,
+            "linear_nuisance": 0.037144743267042715,
+            "quadratic_nuisance": 0.43418722013176586
+          },
+          "X": {
+            "added_mass": 0.0005144241079428177,
+            "linear_nuisance": 0.0010286759105279475,
+            "quadratic_nuisance": 0.005876331786246994
+          },
+          "Y": {
+            "added_mass": -0.01703631907394686,
+            "linear_nuisance": -0.005011343209193915,
+            "quadratic_nuisance": -0.0848233904573785
+          },
+          "Z": {
+            "added_mass": 0.0012182527550551683,
+            "linear_nuisance": 0.0015348360425202292,
+            "quadratic_nuisance": -0.011535053167825243
+          }
+        },
+        "condition_number_scaled": 9.985319544518847,
+        "linear_nuisance": 0.037144743267042715,
+        "maximum_cross_axis_load_fraction": 0.0598372246831504,
+        "nrmse": 0.013501472315803899,
+        "quadratic_nuisance": 0.43418722013176586
+      },
+      "u": {
+        "added_mass": 13.11091777633331,
+        "case_name": "added_mass_u_vel0p040mps_f1p000hz",
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": 0.0008065105476448475,
+            "linear_nuisance": 0.004515228987055475,
+            "quadratic_nuisance": 0.007741278031427159
+          },
+          "M": {
+            "added_mass": -0.18561575296857658,
+            "linear_nuisance": -0.3389349914100335,
+            "quadratic_nuisance": 3.0276869772913177
+          },
+          "N": {
+            "added_mass": 0.0007140055887616323,
+            "linear_nuisance": 0.0023553903081713896,
+            "quadratic_nuisance": -0.015503231984085496
+          },
+          "X": {
+            "added_mass": 13.11091777633331,
+            "linear_nuisance": 4.488000594913515,
+            "quadratic_nuisance": 4.886343464049405
+          },
+          "Y": {
+            "added_mass": 0.005931026109787656,
+            "linear_nuisance": 0.013985711869846033,
+            "quadratic_nuisance": -0.11879558072764347
+          },
+          "Z": {
+            "added_mass": 0.0460742454978709,
+            "linear_nuisance": 0.40039074458266316,
+            "quadratic_nuisance": -6.2199742504224425
+          }
+        },
+        "condition_number_scaled": 9.985319544518847,
+        "linear_nuisance": 4.488000594913515,
+        "maximum_cross_axis_load_fraction": 0.025666617739156662,
+        "nrmse": 0.0054866719171246005,
+        "quadratic_nuisance": 4.886343464049405
+      },
+      "v": {
+        "added_mass": 19.421432340568415,
+        "case_name": "added_mass_v_vel0p040mps_f1p000hz",
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": 0.09498440980043742,
+            "linear_nuisance": 0.6815467355640278,
+            "quadratic_nuisance": -9.830935050548565
+          },
+          "M": {
+            "added_mass": -0.0002705183274312258,
+            "linear_nuisance": -0.0010391543112046114,
+            "quadratic_nuisance": -0.03920454434035786
+          },
+          "N": {
+            "added_mass": -0.020485003943137174,
+            "linear_nuisance": -0.06495086824235041,
+            "quadratic_nuisance": 1.0449929218180887
+          },
+          "X": {
+            "added_mass": 0.004768358269537016,
+            "linear_nuisance": 0.009877765231796827,
+            "quadratic_nuisance": 0.45531902916728384
+          },
+          "Y": {
+            "added_mass": 19.421432340568415,
+            "linear_nuisance": 10.022975418628066,
+            "quadratic_nuisance": -72.23330861477784
+          },
+          "Z": {
+            "added_mass": -0.0014627164589590912,
+            "linear_nuisance": 0.003689347505192158,
+            "quadratic_nuisance": -0.06883416621152424
+          }
+        },
+        "condition_number_scaled": 9.985319544518847,
+        "linear_nuisance": 10.022975418628066,
+        "maximum_cross_axis_load_fraction": 0.010103142173632253,
+        "nrmse": 0.005061072638781638,
+        "quadratic_nuisance": -72.23330861477784
+      },
+      "w": {
+        "added_mass": 34.86857533156505,
+        "case_name": "added_mass_w_vel0p040mps_f1p000hz",
+        "coefficients_by_wrench": {
+          "K": {
+            "added_mass": -0.0013453082216850455,
+            "linear_nuisance": 0.0014854918932429525,
+            "quadratic_nuisance": -0.013765633307361563
+          },
+          "M": {
+            "added_mass": 0.16638568696358583,
+            "linear_nuisance": 0.1625699224230157,
+            "quadratic_nuisance": 4.819904831228107
+          },
+          "N": {
+            "added_mass": 0.0016096828418558024,
+            "linear_nuisance": -0.002435563531104186,
+            "quadratic_nuisance": 0.5303857514423985
+          },
+          "X": {
+            "added_mass": 0.03580744211548881,
+            "linear_nuisance": 0.5483581317912704,
+            "quadratic_nuisance": -7.475829263997007
+          },
+          "Y": {
+            "added_mass": -0.0005023583620306017,
+            "linear_nuisance": 0.012656522932372068,
+            "quadratic_nuisance": -0.2709730492056851
+          },
+          "Z": {
+            "added_mass": 34.86857533156505,
+            "linear_nuisance": 4.4181896837197625,
+            "quadratic_nuisance": 130.5046880741189
+          }
+        },
+        "condition_number_scaled": 9.985319544518847,
+        "linear_nuisance": 4.4181896837197625,
+        "maximum_cross_axis_load_fraction": 0.008894033879231532,
+        "nrmse": 0.005420341480082572,
+        "quadratic_nuisance": 130.5046880741189
+      }
+    },
+    "matrix_structure": {
+      "allowed_mask": [
+        [
+          true,
+          false,
+          true,
+          false,
+          true,
+          false
+        ],
+        [
+          false,
+          true,
+          false,
+          true,
+          false,
+          true
+        ],
+        [
+          true,
+          false,
+          true,
+          false,
+          true,
+          false
+        ],
+        [
+          false,
+          true,
+          false,
+          true,
+          false,
+          true
+        ],
+        [
+          true,
+          false,
+          true,
+          false,
+          true,
+          false
+        ],
+        [
+          false,
+          true,
+          false,
+          true,
+          false,
+          true
+        ]
+      ],
+      "cross_axis_load_normalization": "moments are divided by reference_length_m before RMS ratios",
+      "generalized_reflection_parity": [
+        1,
+        -1,
+        1,
+        -1,
+        1,
+        -1
+      ],
+      "name": "port_starboard_reflection_symmetric_full_response",
+      "reason": "each single-axis case contributes all six measured wrench responses; reflection-forbidden couplings are zero and allowed off-diagonal coefficients retain the CFD fit",
+      "reference_length_m": 0.562
+    },
+    "passivity": {
+      "linear_minimum_symmetric_eigenvalue": -0.19238448145838147,
+      "linear_symmetric_eigenvalues": [
+        -0.19238448145838147,
+        -0.12757801230094523,
+        0.07126989714464955,
+        0.12233290694752116,
+        0.4156295386797716,
+        0.7292878514017965
+      ],
+      "minimum_linear_diagonal": 0.03553000206295201,
+      "minimum_quadratic_diagonal": 0.08935421426642794
+    },
+    "steady_translational_damping": {
+      "u": {
+        "case_pairs": [
+          {
+            "negative": "steady_damping_u_neg_0p080mps",
+            "positive": "steady_damping_u_pos_0p080mps",
+            "speed_m_s": 0.08
+          },
+          {
+            "negative": "steady_damping_u_neg_0p400mps",
+            "positive": "steady_damping_u_pos_0p400mps",
+            "speed_m_s": 0.4
+          }
+        ],
+        "coefficients_by_wrench": {
+          "K": {
+            "linear": -3.4044686334884786e-06,
+            "quadratic": 0.0001645898174227328
+          },
+          "M": {
+            "linear": -0.00022449468623937264,
+            "quadratic": -0.0037828059143367124
+          },
+          "N": {
+            "linear": 2.0613185317932053e-06,
+            "quadratic": 9.414397614554415e-05
+          },
+          "X": {
+            "linear": 0.03553000206295201,
+            "quadratic": 1.3723506170367676
+          },
+          "Y": {
+            "linear": 4.2938678107620314e-07,
+            "quadratic": 0.00018425433459132794
+          },
+          "Z": {
+            "linear": 0.00012922990208127051,
+            "quadratic": 0.003240297589244673
+          }
+        },
+        "condition_number_scaled": 12.678871373526817,
+        "linear": 0.03553000206295201,
+        "maximum_cross_axis_load_fraction": 0.0052931831622672395,
+        "maximum_steady_window_load_change": 0.06639045123417908,
+        "nrmse": 7.145670560834377e-16,
+        "quadratic": 1.3723506170367676
+      },
+      "v": {
+        "case_pairs": [
+          {
+            "negative": "steady_damping_v_neg_0p080mps",
+            "positive": "steady_damping_v_pos_0p080mps",
+            "speed_m_s": 0.08
+          },
+          {
+            "negative": "steady_damping_v_neg_0p400mps",
+            "positive": "steady_damping_v_pos_0p400mps",
+            "speed_m_s": 0.4
+          }
+        ],
+        "coefficients_by_wrench": {
+          "K": {
+            "linear": 0.0021485664988390926,
+            "quadratic": 0.118091513284408
+          },
+          "M": {
+            "linear": 0.00024807547234839146,
+            "quadratic": -0.002578287780685682
+          },
+          "N": {
+            "linear": -0.0009434087539959798,
+            "quadratic": -0.027579701542913563
+          },
+          "X": {
+            "linear": -0.002310719322933313,
+            "quadratic": 0.07316564983872496
+          },
+          "Y": {
+            "linear": 0.18717109457664613,
+            "quadratic": 8.332495888239572
+          },
+          "Z": {
+            "linear": -0.0002250246995585508,
+            "quadratic": 0.016729024676005053
+          }
+        },
+        "condition_number_scaled": 12.678871373526817,
+        "linear": 0.18717109457664613,
+        "maximum_cross_axis_load_fraction": 0.024961156300360676,
+        "maximum_steady_window_load_change": 0.010758148174607353,
+        "nrmse": 6.32800041163465e-16,
+        "quadratic": 8.332495888239572
+      },
+      "w": {
+        "case_pairs": [
+          {
+            "negative": "steady_damping_w_neg_0p080mps",
+            "positive": "steady_damping_w_pos_0p080mps",
+            "speed_m_s": 0.08
+          },
+          {
+            "negative": "steady_damping_w_neg_0p400mps",
+            "positive": "steady_damping_w_pos_0p400mps",
+            "speed_m_s": 0.4
+          }
+        ],
+        "coefficients_by_wrench": {
+          "K": {
+            "linear": -0.00015048222571081884,
+            "quadratic": 0.003559045454745189
+          },
+          "M": {
+            "linear": -0.002618371654734715,
+            "quadratic": 0.7910968730164222
+          },
+          "N": {
+            "linear": -9.860854394854311e-05,
+            "quadratic": 0.016039361777090585
+          },
+          "X": {
+            "linear": 0.010364354440223579,
+            "quadratic": -0.17095255104448612
+          },
+          "Y": {
+            "linear": -0.0017472868495613982,
+            "quadratic": 0.0369020674760928
+          },
+          "Z": {
+            "linear": 0.24496648245129496,
+            "quadratic": 20.385343945488604
+          }
+        },
+        "condition_number_scaled": 12.678871373526817,
+        "linear": 0.24496648245129496,
+        "maximum_cross_axis_load_fraction": 0.0664665985043457,
+        "maximum_steady_window_load_change": 0.10023394212641115,
+        "nrmse": 5.406974772377891e-16,
+        "quadratic": 20.385343945488604
+      }
+    }
+  },
+  "identification_design": {
+    "added_mass": "translation from one low-amplitude oscillatory case per DOF; rotation jointly identified with damping from two rate amplitudes",
+    "case_count": 24,
+    "coefficient_projection": "reflection mask for all matrices; symmetric reciprocity average for added mass",
+    "matrix_structure": "full response under exact port-starboard reflection symmetry; allowed cross-axis coefficients are retained",
+    "rotation_damping": "added mass, linear damping, and quadratic damping jointly fitted from two rate amplitudes at one fixed frequency per rotational DOF",
+    "rotation_low_amplitude_cases": "retained as an amplitude-dependence cross-check, not used to fix the published rotational added mass",
+    "translation_damping": "two positive/negative steady speeds per translational DOF"
+  },
+  "matrices": {
+    "added_mass": [
+      [
+        13.11091777633331,
+        0.0,
+        0.04094084380667985,
+        0.0,
+        -0.1902895845768257,
+        0.0
+      ],
+      [
+        0.0,
+        19.421432340568415,
+        0.0,
+        0.1018336947283784,
+        0.0,
+        -0.020128072008992928
+      ],
+      [
+        0.04094084380667985,
+        0.0,
+        34.86857533156505,
+        0.0,
+        0.18475186655260162,
+        0.0
+      ],
+      [
+        0.0,
+        0.1018336947283784,
+        0.0,
+        0.13046760132371743,
+        0.0,
+        -0.002415546127588874
+      ],
+      [
+        -0.1902895845768257,
+        0.0,
+        0.18475186655260162,
+        0.0,
+        0.41330553660405245,
+        0.0
+      ],
+      [
+        0.0,
+        -0.020128072008992928,
+        0.0,
+        -0.002415546127588874,
+        0.0,
+        0.16679851568378365
+      ]
+    ],
+    "linear_damping": [
+      [
+        0.03553000206295201,
+        0.0,
+        0.010364354440223579,
+        0.0,
+        -0.30755672559467867,
+        0.0
+      ],
+      [
+        0.0,
+        0.18717109457664613,
+        0.0,
+        0.5326786283765327,
+        0.0,
+        -0.037982769191195795
+      ],
+      [
+        0.00012922990208127051,
+        0.0,
+        0.24496648245129496,
+        0.0,
+        0.8486552825554415,
+        0.0
+      ],
+      [
+        0.0,
+        0.0021485664988390926,
+        0.0,
+        0.10038527381685472,
+        0.0,
+        -0.0014308824296696923
+      ],
+      [
+        -0.00022449468623937264,
+        0.0,
+        -0.002618371654734715,
+        0.0,
+        0.3276767825738178,
+        0.0
+      ],
+      [
+        0.0,
+        -0.0009434087539959798,
+        0.0,
+        -0.004002263023700146,
+        0.0,
+        0.1228280649328466
+      ]
+    ],
+    "quadratic_damping": [
+      [
+        1.3723506170367676,
+        0.0,
+        -0.17095255104448612,
+        0.0,
+        0.20750672827061875,
+        0.0
+      ],
+      [
+        0.0,
+        8.332495888239572,
+        0.0,
+        -0.17898175347447337,
+        0.0,
+        0.0058105868888697915
+      ],
+      [
+        0.003240297589244673,
+        0.0,
+        20.385343945488604,
+        0.0,
+        0.6909659642958056,
+        0.0
+      ],
+      [
+        0.0,
+        0.118091513284408,
+        0.0,
+        0.08935421426642794,
+        0.0,
+        -0.00048405641825259035
+      ],
+      [
+        -0.0037828059143367124,
+        0.0,
+        0.7910968730164222,
+        0.0,
+        0.27004561093721446,
+        0.0
+      ],
+      [
+        0.0,
+        -0.027579701542913563,
+        0.0,
+        -0.0022280819930357173,
+        0.0,
+        0.13135997076980596
+      ]
+    ]
+  },
+  "options": {
+    "phase_samples_per_cycle": 128
+  },
+  "schema_version": 3,
+  "status": "preliminary_full_response_open_water_cfd"
+}

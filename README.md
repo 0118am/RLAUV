@@ -70,7 +70,7 @@ simulation/
 │   ├── trajectory.py          训练轨迹、课程和 reference runtime
 │   ├── visualization.py       环境调试显示
 │   └── train.py               Isaac Sim 训练入口与 worker
-└── rlpolicy/                  仅本地 checkpoint、日志、评估和导出产物
+└── rlpolicy/                  默认本地产物；白名单内版本化最终 V16 归档
 ```
 
 ## 物理基准
@@ -272,6 +272,10 @@ python simulation/training/evaluation/export.py \
 ```
 
 本次迁移和文档整理不会自动启动训练。
+
+服务器回收归档的总索引见 `docs/archive-manifest.md`，训练环境版本见
+`docs/training-environment.md`。最终 V16 的训练过程、数学目标、曲线和评估结果记录在最终
+run 的 `PROVENANCE.md`；OpenFOAM 最终工况、辨识推导和限制记录在选定 fit 的 `README.md`。
 
 ## 测试
 

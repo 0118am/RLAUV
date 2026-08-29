@@ -1,0 +1,2 @@
+trajectory,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse
+helix,1,0.7445019602362223,0.6806683835806325,1.5,0.26251390138419856

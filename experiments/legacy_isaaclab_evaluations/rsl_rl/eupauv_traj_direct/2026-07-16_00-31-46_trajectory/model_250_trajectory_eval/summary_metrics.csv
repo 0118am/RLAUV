@@ -1,0 +1,2 @@
+trajectory,reward_profile,disturbance,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse,mean_reward_per_step,mean_water_current_norm,max_water_current_norm,eval_damping_scale,eval_thruster_scale,eval_thruster_tau_scale,eval_deadband_scale
+lissajous,baseline,nominal,1,0.2107584752797687,0.20552745386085008,0.2593717873096466,0.07076672264281987,4.345887419879436,0.0,0.0,1.0,1.0,1.0,1.0

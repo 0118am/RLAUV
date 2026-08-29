@@ -1,0 +1,275 @@
+{
+  "backend": {
+    "numpy_version": "1.26.4",
+    "ready": true,
+    "scikit_image_version": "0.25.2",
+    "scipy_version": "1.15.0",
+    "vtk_version": "9.5.2"
+  },
+  "component_cleanup_history": [
+    {
+      "criterion": "aggregate discarded volume <= one voxel and aggregate discarded area <= eight voxel-face areas",
+      "maximum_discarded_area_source_units_squared": 2.0,
+      "maximum_discarded_volume_source_units_cubed": 0.125,
+      "reason": "surface already has one connected region",
+      "regions_after": 1,
+      "regions_before": 1,
+      "removed": false
+    }
+  ],
+  "distance": {
+    "input_points_to_output_surface": {
+      "count": 302495,
+      "max": 64.37773507023547,
+      "mean": 6.3197239482816245,
+      "p50": 0.45843857898626095,
+      "p95": 46.40986530008466,
+      "p99": 60.47293283135399,
+      "rms": 15.256792186577163,
+      "sampling": {
+        "method": "deterministic VTK point-index stride from offset zero",
+        "sample_point_count": 302495,
+        "source_point_count": 604989,
+        "stride": 2
+      }
+    },
+    "output_points_to_input_surface": {
+      "count": 7768140,
+      "max": 1.1578651403026525,
+      "mean": 0.2891882604194783,
+      "p50": 0.2977911771000233,
+      "p95": 0.48677825927734375,
+      "p99": 0.5204129222715396,
+      "rms": 0.31657181647554455,
+      "sampling": {
+        "method": "all output points (hard acceptance gate)",
+        "sample_point_count": 7768140,
+        "source_point_count": 7768140,
+        "stride": 1
+      }
+    },
+    "purpose": "input-to-output is a sampled diagnostic because the selected STEP surface contains discarded internal detail; output-to-input uses every output point and is a hard local-shape gate",
+    "unit": "source_coordinate_unit"
+  },
+  "elapsed_seconds": 1204.1132013490424,
+  "input": {
+    "geometry": {
+      "bounds": {
+        "max": [
+          255.80599975585938,
+          200.9325408935547,
+          103.23677825927734
+        ],
+        "min": [
+          -305.6940002441406,
+          -201.05453491210938,
+          -87.38500213623047
+        ],
+        "size": [
+          561.5,
+          401.98707580566406,
+          190.6217803955078
+        ]
+      },
+      "enclosed_volume_source_units_cubed": 7869948.746568597,
+      "surface_area_source_units_squared": 2367625.600866427
+    },
+    "path": "/home/jining_yang/isaac-auv-env/environment/openfoam/geometry/validated_locked_rotor_v1/selected_body_mm.stl",
+    "points": 604989,
+    "sha256": "65c131e5f14b14366b2f765cf93ab2c376e63d94e7cbd8f796d6b36f97282f9d",
+    "size_bytes": 61010134,
+    "topology": {
+      "boundary_edges": 10,
+      "connected_regions": 170,
+      "edges": 1825494,
+      "euler_characteristic": -543,
+      "faces": 1219962,
+      "genus": null,
+      "non_manifold_edges": 4454,
+      "single_component": false,
+      "vertices": 604989,
+      "watertight_manifold": false
+    },
+    "triangles": 1219962
+  },
+  "output": {
+    "geometry": {
+      "bounds": {
+        "max": [
+          0.25625,
+          0.20125,
+          0.10325
+        ],
+        "min": [
+          -0.30575,
+          -0.20125,
+          -0.08775
+        ],
+        "size": [
+          0.562,
+          0.4025,
+          0.191
+        ]
+      },
+      "enclosed_volume_source_units_cubed": 0.011463290775994808,
+      "surface_area_source_units_squared": 1.591019002919774
+    },
+    "normals": {
+      "consistent_and_auto_oriented": true
+    },
+    "path": "/home/jining_yang/isaac-auv-env/environment/openfoam/geometry/validated_locked_rotor_v1/wetted_body_m.obj",
+    "points": 7768140,
+    "self_intersection": {
+      "audited": true,
+      "final_log_sha256": "cfe8f25b3891566846d417101732f2756a04a119a112c5c7eef357b1be0263bc",
+      "method": "read exact shared-vertex metre OBJ with OpenFOAM, uniformly normalize to source-unit scale, then surfaceCheck -checkSelfIntersection",
+      "value": false
+    },
+    "sha256": "51cc600c37216dc2a2032b3bfd0d3dfc8e630ce30b7bf58d99710d1d6f5fc224",
+    "size_bytes": 586262341,
+    "topology": {
+      "boundary_edges": 0,
+      "connected_regions": 1,
+      "edges": 23306328,
+      "euler_characteristic": -636,
+      "faces": 15537552,
+      "genus": 319,
+      "non_manifold_edges": 0,
+      "single_component": true,
+      "vertices": 7768140,
+      "watertight_manifold": true
+    },
+    "triangles": 15537552
+  },
+  "parameters": {
+    "closing_iterations": 1,
+    "closing_kernel": [
+      3,
+      3,
+      3
+    ],
+    "expected_volume_source_units_cubed": 11541000.0,
+    "grid_anchor_source_units": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "max_voxels": 450000000,
+    "maximum_output_to_input_distance_voxels": 4.0,
+    "maximum_output_to_input_p99_distance_voxels": 2.0,
+    "openfoam_launcher": "/home/jining_yang/isaac-auv-env/environment/openfoam/launch_openfoam.sh",
+    "output_surface_format": "OpenFOAM shared-vertex OBJ",
+    "outside_connectivity": 6,
+    "pad_voxels": 4,
+    "require_single_component": true,
+    "source_to_output_coordinate_scale": 0.001,
+    "surface_extraction": {
+      "method": "scikit-image Lewiner/Chernyaev Marching Cubes 33 at binary level 0.5",
+      "reason": "the Lewiner case table resolves trilinear-interpolant ambiguities with topological guarantees; the result is not smoothed or changed to repair a failed topology audit",
+      "vertex_smoothing": false
+    },
+    "symmetry_plane_y_source_units": 0.0,
+    "volume_relative_tolerance": 0.02,
+    "voxel_size_source_units": 0.5
+  },
+  "port_starboard_symmetry": {
+    "output_points_to_reflected_surface": {
+      "count": 485509,
+      "max": 12.36931687685298,
+      "mean": 0.1405317847621487,
+      "p50": 0.0,
+      "p95": 0.3535533905932738,
+      "p99": 3.7914377220257753,
+      "rms": 0.7147329536105204,
+      "sampling": {
+        "method": "deterministic VTK point-index stride from offset zero",
+        "sample_point_count": 485509,
+        "source_point_count": 7768140,
+        "stride": 16
+      }
+    },
+    "reflected_points_to_output_surface": {
+      "count": 485509,
+      "max": 12.36931687685298,
+      "mean": 0.1405317847621487,
+      "p50": 0.0,
+      "p95": 0.3535533905932738,
+      "p99": 3.7914377220257753,
+      "rms": 0.7147329536105204,
+      "sampling": {
+        "method": "deterministic VTK point-index stride from offset zero",
+        "sample_point_count": 485509,
+        "source_point_count": 7768140,
+        "stride": 16
+      }
+    },
+    "reflection_plane_y_source_units": 0.0,
+    "sampling_note": "deterministic point subsampling is a diagnostic; forbidden CFD load fractions remain the coefficient-identification acceptance gate",
+    "unit": "source_coordinate_unit"
+  },
+  "schema_version": 6,
+  "self_intersection_audit": {
+    "audited_output_scale": 1000.0,
+    "intersection_count": 0,
+    "method": "read exact shared-vertex metre OBJ with OpenFOAM, uniformly normalize to source-unit scale, then surfaceCheck -checkSelfIntersection",
+    "points_source_units": [],
+    "reason_for_normalization": "surfaceCheck intersection tolerances are not scale invariant; uniform scaling preserves geometric intersection topology",
+    "serialization_log_sha256": "94372a96e19094c9c00069c0e719a25067879735e98d4f70fa17279bd112cc7d",
+    "serialized_metre_file_sha256": "51cc600c37216dc2a2032b3bfd0d3dfc8e630ce30b7bf58d99710d1d6f5fc224",
+    "surface_check_log_sha256": "cfe8f25b3891566846d417101732f2756a04a119a112c5c7eef357b1be0263bc",
+    "surface_transform_log_sha256": "cbac54414e6d3dad9e8a62f3aa67c84ee245cbb828c1ece24a32fef3bf8ada97"
+  },
+  "shape_deviation_validation": {
+    "maximum_distance_limit_source_units": 2.0,
+    "maximum_distance_limit_voxels": 4.0,
+    "maximum_distance_source_units": 1.1578651403026525,
+    "method": "unsigned distance from every output vertex to the selected STEP-derived surface",
+    "p99_distance_limit_source_units": 1.0,
+    "p99_distance_limit_voxels": 2.0,
+    "p99_distance_source_units": 0.5204129222715396,
+    "passed": true
+  },
+  "source_scale_self_intersection_audit": {
+    "audited_output_scale": 1.0,
+    "intersection_count": 0,
+    "points_source_units": [],
+    "surface_check_log_sha256": "726152f8b8c7a43b7f5bedffc5ad45d9cdd7b427316f676eb7e6b041fb7f6296"
+  },
+  "volume_validation": {
+    "actual_volume_source_units_cubed": 11463290.776040537,
+    "enabled": true,
+    "expected_volume_source_units_cubed": 11541000.0,
+    "passed": true,
+    "relative_error": 0.0067333180798425365,
+    "relative_tolerance": 0.02
+  },
+  "voxel_grid": {
+    "bounds": [
+      -308.0,
+      258.0,
+      -203.5,
+      203.0,
+      -89.5,
+      105.5
+    ],
+    "dimensions_xyz": [
+      1133,
+      814,
+      391
+    ],
+    "grid_anchor_source_units": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "origin": [
+      -308.0,
+      -203.5,
+      -89.5
+    ],
+    "solid_components": 1,
+    "solid_voxels": 91704660,
+    "surface_barrier_voxels": 9771342,
+    "voxel_count": 360604442
+  }
+}

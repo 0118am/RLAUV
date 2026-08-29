@@ -81,6 +81,11 @@ python3 environment/openfoam/publish_results.py \
 发布器只要求三个矩阵是有限的 `6×6` 数组，不根据拟合误差、横轴响应、工况哈希或
 源码版本拒绝写入。当前仓库 JSON 已经是 PhysX 直接使用的矩阵输入。
 
+服务器回收前选定的最终拟合是
+[`fit_20260825_005547_340708`](results/fit_20260825_005547_340708/README.md)。该目录版本化完整
+诊断和最终 CSV；大型 case、时序受力文件及网格不进入 Git。对应的几何选择与修复审计位于
+`geometry/validated_locked_rotor_v1/{selection_report,wetted_body_m}.json`。
+
 ## 可信范围
 
 此方案适合先跑通低速 RL，并不验证：

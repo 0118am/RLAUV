@@ -1,0 +1,7 @@
+# Preserve archived experimental bytes exactly.  These source artifacts use
+# CRLF or contain an intentionally truncated patch, so whitespace diagnostics
+# would be noise and line-ending normalization would invalidate SHA256SUMS.
+environment/openfoam/results/fit_20260825_005547_340708/*.csv -text -whitespace
+experiments/legacy_isaaclab_evaluations/**/*.csv -text -whitespace
+simulation/rlpolicy/auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/evaluation/**/*.csv -text -whitespace
+simulation/rlpolicy/auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/git/*.diff -text -whitespace

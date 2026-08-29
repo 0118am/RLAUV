@@ -1,0 +1,2 @@
+trajectory,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse
+racetrack,1,0.2482083215697097,0.20238535970759888,1.0606601238250732,0.1502996670003214

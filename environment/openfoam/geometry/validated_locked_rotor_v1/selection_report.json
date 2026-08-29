@@ -1,0 +1,3240 @@
+{
+  "schema_version": 2,
+  "source": "/home/jining_yang/isaac-auv-env/environment/openfoam/\u9a8c\u8bc1\u673a\u88c5\u914d\u4f53.STEP",
+  "source_sha256": "9777be1c028d8ebb18f61118466d17671aee1f5860ea8144717c50bc65d6ba07",
+  "cad_backend": {
+    "name": "cadquery-ocp-novtk",
+    "ocp_version": "7.9.3.1",
+    "module_path": "/home/jining_yang/isaac-auv-env/environment/openfoam/.runtime/cadquery-ocp/site-packages"
+  },
+  "selection_config": "/home/jining_yang/isaac-auv-env/environment/openfoam/geometry/verification_assembly_repair.json",
+  "selection_config_sha256": "2c5d4b9ff988e03b29494731a3b28007038a80386bedf86260b80471febb9697",
+  "source_units": "mm",
+  "output_units": "mm",
+  "output_frame": "body_flu_com",
+  "axis_mapping": [
+    "x_body=z_step",
+    "y_body=x_step",
+    "z_body=y_step"
+  ],
+  "source_com_body_mm": [
+    -1.306,
+    0.061,
+    2.385
+  ],
+  "translation_body_mm": [
+    1.306,
+    -0.061,
+    -2.385
+  ],
+  "reference_assumption": "The SolidWorks mass report's Coordinate System1 origin is assumed to coincide with the exported STEP top-level global origin. The STEP contains an identity top-level placement but does not retain a named Coordinate System1 relationship, so this origin equivalence is high-confidence rather than directly provable from the STEP file alone.",
+  "body_frame_validation": {
+    "method": "fixed labelled propeller-centre landmarks",
+    "translation_body_mm": [
+      1.306,
+      -0.061,
+      -2.385
+    ],
+    "tolerance_mm": 3.0,
+    "maximum_error_mm": 2.612455144144218,
+    "matches": [
+      {
+        "source_shell_index": 28,
+        "measured_body_mm": [
+          144.60277837085138,
+          -159.61543975004926,
+          -66.885
+        ],
+        "expected_label": "T1",
+        "expected_body_mm": [
+          143.306,
+          -160.061,
+          -66.885
+        ],
+        "error_mm": 1.3711885645104052
+      },
+      {
+        "source_shell_index": 32,
+        "measured_body_mm": [
+          -139.39722162915746,
+          -160.50656024995075,
+          -66.885
+        ],
+        "expected_label": "T2",
+        "expected_body_mm": [
+          -140.694,
+          -160.061,
+          -66.885
+        ],
+        "error_mm": 1.3711885645020456
+      },
+      {
+        "source_shell_index": 35,
+        "measured_body_mm": [
+          142.00922162915748,
+          160.38456024995074,
+          -66.885
+        ],
+        "expected_label": "T3",
+        "expected_body_mm": [
+          143.306,
+          159.939,
+          -66.885
+        ],
+        "error_mm": 1.3711885645020456
+      },
+      {
+        "source_shell_index": 38,
+        "measured_body_mm": [
+          -141.99077837085144,
+          159.49343975004925,
+          -66.885
+        ],
+        "expected_label": "T4",
+        "expected_body_mm": [
+          -140.694,
+          159.939,
+          -66.885
+        ],
+        "error_mm": 1.3711885645104858
+      },
+      {
+        "source_shell_index": 147,
+        "measured_body_mm": [
+          -141.57269333301647,
+          105.17582366284358,
+          40.11500000000002
+        ],
+        "expected_label": "T5",
+        "expected_body_mm": [
+          -139.574,
+          104.089,
+          40.115
+        ],
+        "error_mm": 2.275073782003828
+      },
+      {
+        "source_shell_index": 131,
+        "measured_body_mm": [
+          -140.85685770680746,
+          -101.93521486421714,
+          40.11500000000002
+        ],
+        "expected_label": "T6",
+        "expected_body_mm": [
+          -139.574,
+          -104.211,
+          40.115
+        ],
+        "error_mm": 2.6124551441441914
+      },
+      {
+        "source_shell_index": 139,
+        "measured_body_mm": [
+          143.46885770680748,
+          101.81321486421713,
+          40.11500000000002
+        ],
+        "expected_label": "T7",
+        "expected_body_mm": [
+          142.186,
+          104.089,
+          40.115
+        ],
+        "error_mm": 2.612455144144218
+      },
+      {
+        "source_shell_index": 123,
+        "measured_body_mm": [
+          144.1846933330165,
+          -105.29782366284357,
+          40.11500000000002
+        ],
+        "expected_label": "T8",
+        "expected_body_mm": [
+          142.186,
+          -104.211,
+          40.115
+        ],
+        "error_mm": 2.275073782003846
+      }
+    ]
+  },
+  "volume_validation": {
+    "target_displaced_volume_mm3": 11541000.0,
+    "wrapped_surface_relative_tolerance": 0.02,
+    "snappy_excluded_volume_relative_tolerance": 0.03,
+    "source": "Pool measurement: at rho=1000 kg/m^3 the 11.301 kg vehicle has 0.24 kg-equivalent positive buoyancy, so displaced volume is (11.301+0.24)/1000 = 0.011541 m^3. The SolidWorks material volume is not displaced volume."
+  },
+  "reviewed_entity_crosscheck": {
+    "main_outer_fairing": [
+      259870,
+      538790
+    ],
+    "thruster_support_complex": [
+      5382,
+      35380,
+      400023,
+      542379
+    ],
+    "propellers": [
+      86564,
+      420102,
+      450810,
+      535358,
+      265912,
+      335315,
+      543613,
+      593571
+    ],
+    "motors": [
+      56154,
+      126836,
+      127306,
+      197925,
+      460810,
+      476706,
+      512024,
+      623040
+    ]
+  },
+  "shell_count": 275,
+  "closed_shells_kept": 233,
+  "explicit_shells_removed": [
+    29,
+    33,
+    36,
+    39,
+    45,
+    53,
+    54,
+    56,
+    57,
+    58,
+    59,
+    119,
+    120,
+    121,
+    122,
+    125,
+    127,
+    128,
+    129,
+    130,
+    133,
+    135,
+    136,
+    137,
+    138,
+    141,
+    143,
+    144,
+    145,
+    146,
+    149,
+    155,
+    156,
+    157,
+    158,
+    239,
+    240
+  ],
+  "open_shells_removed": [
+    269,
+    270,
+    271,
+    272,
+    273
+  ],
+  "smooth_motor_replacements": [
+    {
+      "radius_mm": 16.50000000000001,
+      "measured_main_casing_height_mm": 29.60253686479283,
+      "height_mm": 35.10253686479283,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        -160.00000000000003,
+        -37.10253686479283,
+        142.0
+      ],
+      "direction_step": [
+        -4.3164147086489085e-33,
+        1.0,
+        -1.2023722692184682e-33
+      ],
+      "source_shell_index": 29,
+      "validated_mount_shell_indices": [
+        238
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          -160.00000000000003,
+          -79.99999999999983,
+          142.0
+        ],
+        "connector_axis_end_step_mm": [
+          -160.00000000000003,
+          -37.10253686479283,
+          142.0
+        ],
+        "connector_axis_start_body_mm": [
+          143.306,
+          -160.06100000000004,
+          -82.38499999999983
+        ],
+        "connector_axis_end_body_mm": [
+          143.306,
+          -160.06100000000004,
+          -39.48753686479283
+        ],
+        "motor_profile_axis_end_step_mm": [
+          -160.00000000000003,
+          -1.9999999997928342,
+          142.0
+        ],
+        "motor_profile_axis_end_body_mm": [
+          143.306,
+          -160.06100000000004,
+          -4.384999999792834
+        ],
+        "axis_direction_step": [
+          -4.3164147086489085e-33,
+          1.0,
+          -1.2023722692184682e-33
+        ],
+        "axis_direction_body": [
+          -1.2023722692184682e-33,
+          -4.3164147086489085e-33,
+          1.0
+        ],
+        "propeller_centre_step_mm": [
+          -160.00000000000003,
+          -64.5,
+          142.0
+        ],
+        "propeller_centre_body_mm": [
+          143.306,
+          -160.06100000000004,
+          -66.885
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.02742649435544,
+          -17.397463135207193
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.397463135207154,
+          -17.397463135207197
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.397463135207154,
+          -37.397463135207154
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.8787683885,
+        "smooth_envelope_volume_mm3": 36861.963120621986,
+        "source_volume_relative_error": 0.002811123425946533,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 376.21532098722645,
+          "hub": 41.469023027385745,
+          "propeller": 234.92096188493161
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T1",
+        "source_motor_shell_index": 29,
+        "source_propeller_shell_index": 28,
+        "source_hub_shell_index": 27
+      }
+    },
+    {
+      "radius_mm": 16.499999999999996,
+      "measured_main_casing_height_mm": 29.60253686479283,
+      "height_mm": 35.10253686479283,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        -159.99999999999997,
+        -37.10253686479283,
+        -142.0
+      ],
+      "direction_step": [
+        2.5336955048732123e-33,
+        1.0,
+        3.695608488383407e-33
+      ],
+      "source_shell_index": 33,
+      "validated_mount_shell_indices": [
+        238
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          -159.99999999999997,
+          -79.99999999999983,
+          -142.0
+        ],
+        "connector_axis_end_step_mm": [
+          -159.99999999999997,
+          -37.10253686479283,
+          -142.0
+        ],
+        "connector_axis_start_body_mm": [
+          -140.694,
+          -160.06099999999998,
+          -82.38499999999983
+        ],
+        "connector_axis_end_body_mm": [
+          -140.694,
+          -160.06099999999998,
+          -39.48753686479283
+        ],
+        "motor_profile_axis_end_step_mm": [
+          -159.99999999999997,
+          -1.9999999997928342,
+          -142.0
+        ],
+        "motor_profile_axis_end_body_mm": [
+          -140.694,
+          -160.06099999999998,
+          -4.384999999792834
+        ],
+        "axis_direction_step": [
+          2.5336955048732123e-33,
+          1.0,
+          3.695608488383407e-33
+        ],
+        "axis_direction_body": [
+          3.695608488383407e-33,
+          2.5336955048732123e-33,
+          1.0
+        ],
+        "propeller_centre_step_mm": [
+          -159.99999999999997,
+          -64.5,
+          -142.0
+        ],
+        "propeller_centre_body_mm": [
+          -140.694,
+          -160.06099999999998,
+          -66.885
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.02742649435544,
+          -17.397463135207193
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.397463135207154,
+          -17.397463135207197
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.397463135207154,
+          -37.397463135207154
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.87876838844,
+        "smooth_envelope_volume_mm3": 36861.963120621986,
+        "source_volume_relative_error": 0.0028111234259447664,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 376.21532098723657,
+          "hub": 41.46902302738508,
+          "propeller": 234.92096188493176
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T2",
+        "source_motor_shell_index": 33,
+        "source_propeller_shell_index": 32,
+        "source_hub_shell_index": 31
+      }
+    },
+    {
+      "radius_mm": 16.499999999999996,
+      "measured_main_casing_height_mm": 29.60253686479283,
+      "height_mm": 35.10253686479283,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        159.99999999999997,
+        -37.10253686479283,
+        142.0
+      ],
+      "direction_step": [
+        -2.5336955048732123e-33,
+        1.0,
+        -3.695608488383407e-33
+      ],
+      "source_shell_index": 36,
+      "validated_mount_shell_indices": [
+        237
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          159.99999999999997,
+          -79.99999999999983,
+          142.0
+        ],
+        "connector_axis_end_step_mm": [
+          159.99999999999997,
+          -37.10253686479283,
+          142.0
+        ],
+        "connector_axis_start_body_mm": [
+          143.306,
+          159.93899999999996,
+          -82.38499999999983
+        ],
+        "connector_axis_end_body_mm": [
+          143.306,
+          159.93899999999996,
+          -39.48753686479283
+        ],
+        "motor_profile_axis_end_step_mm": [
+          159.99999999999997,
+          -1.9999999997928342,
+          142.0
+        ],
+        "motor_profile_axis_end_body_mm": [
+          143.306,
+          159.93899999999996,
+          -4.384999999792834
+        ],
+        "axis_direction_step": [
+          -2.5336955048732123e-33,
+          1.0,
+          -3.695608488383407e-33
+        ],
+        "axis_direction_body": [
+          -3.695608488383407e-33,
+          -2.5336955048732123e-33,
+          1.0
+        ],
+        "propeller_centre_step_mm": [
+          159.99999999999997,
+          -64.5,
+          142.0
+        ],
+        "propeller_centre_body_mm": [
+          143.306,
+          159.93899999999996,
+          -66.885
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.02742649435544,
+          -17.397463135207193
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.397463135207154,
+          -17.397463135207197
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.397463135207154,
+          -37.397463135207154
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.87876838844,
+        "smooth_envelope_volume_mm3": 36861.963120621986,
+        "source_volume_relative_error": 0.0028111234259447664,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 376.2153209872365,
+          "hub": 41.46902302738508,
+          "propeller": 234.92096188493173
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T3",
+        "source_motor_shell_index": 36,
+        "source_propeller_shell_index": 35,
+        "source_hub_shell_index": 34
+      }
+    },
+    {
+      "radius_mm": 16.50000000000001,
+      "measured_main_casing_height_mm": 29.60253686479283,
+      "height_mm": 35.10253686479283,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        160.00000000000003,
+        -37.10253686479283,
+        -142.00000000000003
+      ],
+      "direction_step": [
+        4.3164147086489085e-33,
+        1.0,
+        1.2023722692184682e-33
+      ],
+      "source_shell_index": 39,
+      "validated_mount_shell_indices": [
+        237
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          160.00000000000003,
+          -79.99999999999983,
+          -142.00000000000003
+        ],
+        "connector_axis_end_step_mm": [
+          160.00000000000003,
+          -37.10253686479283,
+          -142.00000000000003
+        ],
+        "connector_axis_start_body_mm": [
+          -140.69400000000002,
+          159.93900000000002,
+          -82.38499999999983
+        ],
+        "connector_axis_end_body_mm": [
+          -140.69400000000002,
+          159.93900000000002,
+          -39.48753686479283
+        ],
+        "motor_profile_axis_end_step_mm": [
+          160.00000000000003,
+          -1.9999999997928342,
+          -142.00000000000003
+        ],
+        "motor_profile_axis_end_body_mm": [
+          -140.69400000000002,
+          159.93900000000002,
+          -4.384999999792834
+        ],
+        "axis_direction_step": [
+          4.3164147086489085e-33,
+          1.0,
+          1.2023722692184682e-33
+        ],
+        "axis_direction_body": [
+          1.2023722692184682e-33,
+          4.3164147086489085e-33,
+          1.0
+        ],
+        "propeller_centre_step_mm": [
+          160.00000000000003,
+          -64.5,
+          -142.00000000000003
+        ],
+        "propeller_centre_body_mm": [
+          -140.69400000000002,
+          159.93900000000002,
+          -66.885
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.02742649435544,
+          -17.397463135207193
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.397463135207154,
+          -17.397463135207197
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.397463135207154,
+          -37.397463135207154
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.8787683885,
+        "smooth_envelope_volume_mm3": 36861.963120621986,
+        "source_volume_relative_error": 0.002811123425946533,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 376.21532098723725,
+          "hub": 41.469023027385745,
+          "propeller": 234.92096188493153
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T4",
+        "source_motor_shell_index": 39,
+        "source_propeller_shell_index": 38,
+        "source_hub_shell_index": 37
+      }
+    },
+    {
+      "radius_mm": 16.499999999999996,
+      "measured_main_casing_height_mm": 29.60253686479284,
+      "height_mm": 35.10253686479284,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        -113.268023675119,
+        42.49999999999999,
+        115.83588896271786
+      ],
+      "direction_step": [
+        -0.3420201433256648,
+        -1.1527200668757257e-17,
+        -0.9396926207859099
+      ],
+      "source_shell_index": 120,
+      "validated_mount_shell_indices": [
+        126
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          -98.59622718530808,
+          42.49999999999999,
+          156.14631852130748
+        ],
+        "connector_axis_end_step_mm": [
+          -113.268023675119,
+          42.49999999999999,
+          115.83588896271786
+        ],
+        "connector_axis_start_body_mm": [
+          157.4523185213075,
+          -98.65722718530809,
+          40.114999999999995
+        ],
+        "connector_axis_end_body_mm": [
+          117.14188896271786,
+          -113.329023675119,
+          40.114999999999995
+        ],
+        "motor_profile_axis_end_step_mm": [
+          -125.27379836478073,
+          42.49999999999999,
+          82.850294099812
+        ],
+        "motor_profile_axis_end_body_mm": [
+          84.156294099812,
+          -125.33479836478074,
+          40.114999999999995
+        ],
+        "axis_direction_step": [
+          -0.3420201433256648,
+          -1.1527200668757257e-17,
+          -0.9396926207859099
+        ],
+        "axis_direction_body": [
+          -0.9396926207859099,
+          -0.3420201433256648,
+          -1.1527200668757257e-17
+        ],
+        "propeller_centre_step_mm": [
+          -103.89753940685583,
+          42.49999999999999,
+          141.58108289912605
+        ],
+        "propeller_centre_body_mm": [
+          142.88708289912606,
+          -103.95853940685583,
+          40.114999999999995
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.027426494355474,
+          -17.397463135207197
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.39746313520715,
+          -17.39746313520719
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.39746313520718,
+          -37.397463135207126
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.88559511932,
+        "smooth_envelope_volume_mm3": 36861.96312062198,
+        "source_volume_relative_error": 0.0028113075833102984,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 434.92466730253767,
+          "hub": 41.469023027386875,
+          "propeller": 234.92096188493795
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T8",
+        "source_motor_shell_index": 120,
+        "source_propeller_shell_index": 123,
+        "source_hub_shell_index": 124
+      }
+    },
+    {
+      "radius_mm": 16.499999999999996,
+      "measured_main_casing_height_mm": 29.602536864792846,
+      "height_mm": 35.102536864792846,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        -113.26802367511908,
+        42.49999999999999,
+        -115.8358889627179
+      ],
+      "direction_step": [
+        -0.3420201433256648,
+        -1.1527200668757254e-17,
+        0.9396926207859099
+      ],
+      "source_shell_index": 128,
+      "validated_mount_shell_indices": [
+        134
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          -98.59622718530817,
+          42.49999999999999,
+          -156.14631852130753
+        ],
+        "connector_axis_end_step_mm": [
+          -113.26802367511908,
+          42.49999999999999,
+          -115.8358889627179
+        ],
+        "connector_axis_start_body_mm": [
+          -154.84031852130752,
+          -98.65722718530817,
+          40.114999999999995
+        ],
+        "connector_axis_end_body_mm": [
+          -114.5298889627179,
+          -113.32902367511909,
+          40.114999999999995
+        ],
+        "motor_profile_axis_end_step_mm": [
+          -125.27379836478082,
+          42.49999999999999,
+          -82.85029409981203
+        ],
+        "motor_profile_axis_end_body_mm": [
+          -81.54429409981203,
+          -125.33479836478082,
+          40.114999999999995
+        ],
+        "axis_direction_step": [
+          -0.3420201433256648,
+          -1.1527200668757254e-17,
+          0.9396926207859099
+        ],
+        "axis_direction_body": [
+          0.9396926207859099,
+          -0.3420201433256648,
+          -1.1527200668757254e-17
+        ],
+        "propeller_centre_step_mm": [
+          -103.89753940685591,
+          42.49999999999999,
+          -141.58108289912607
+        ],
+        "propeller_centre_body_mm": [
+          -140.27508289912606,
+          -103.95853940685592,
+          40.114999999999995
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.027426494355495,
+          -17.397463135207186
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.39746313520713,
+          -17.397463135207172
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.39746313520716,
+          -37.39746313520711
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.878768421215,
+        "smooth_envelope_volume_mm3": 36861.96312062199,
+        "source_volume_relative_error": 0.0028111234268287915,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 434.92388433528976,
+          "hub": 41.46902302738472,
+          "propeller": 234.92096188493406
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T6",
+        "source_motor_shell_index": 128,
+        "source_propeller_shell_index": 131,
+        "source_hub_shell_index": 132
+      }
+    },
+    {
+      "radius_mm": 16.499999999999996,
+      "measured_main_casing_height_mm": 29.602536864792846,
+      "height_mm": 35.102536864792846,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        113.26802367511908,
+        42.49999999999999,
+        115.8358889627179
+      ],
+      "direction_step": [
+        0.3420201433256648,
+        -1.1527200668757254e-17,
+        -0.9396926207859099
+      ],
+      "source_shell_index": 136,
+      "validated_mount_shell_indices": [
+        142
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          98.59622718530817,
+          42.49999999999999,
+          156.14631852130753
+        ],
+        "connector_axis_end_step_mm": [
+          113.26802367511908,
+          42.49999999999999,
+          115.8358889627179
+        ],
+        "connector_axis_start_body_mm": [
+          157.45231852130755,
+          98.53522718530816,
+          40.114999999999995
+        ],
+        "connector_axis_end_body_mm": [
+          117.1418889627179,
+          113.20702367511907,
+          40.114999999999995
+        ],
+        "motor_profile_axis_end_step_mm": [
+          125.27379836478082,
+          42.49999999999999,
+          82.85029409981203
+        ],
+        "motor_profile_axis_end_body_mm": [
+          84.15629409981203,
+          125.21279836478081,
+          40.114999999999995
+        ],
+        "axis_direction_step": [
+          0.3420201433256648,
+          -1.1527200668757254e-17,
+          -0.9396926207859099
+        ],
+        "axis_direction_body": [
+          -0.9396926207859099,
+          0.3420201433256648,
+          -1.1527200668757254e-17
+        ],
+        "propeller_centre_step_mm": [
+          103.89753940685591,
+          42.49999999999999,
+          141.58108289912607
+        ],
+        "propeller_centre_body_mm": [
+          142.88708289912609,
+          103.8365394068559,
+          40.114999999999995
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.027426494355495,
+          -17.397463135207186
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.39746313520713,
+          -17.397463135207172
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.39746313520716,
+          -37.39746313520711
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.878768421215,
+        "smooth_envelope_volume_mm3": 36861.96312062199,
+        "source_volume_relative_error": 0.0028111234268287915,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 434.92388433236266,
+          "hub": 41.46902302738472,
+          "propeller": 234.92096188493406
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T7",
+        "source_motor_shell_index": 136,
+        "source_propeller_shell_index": 139,
+        "source_hub_shell_index": 140
+      }
+    },
+    {
+      "radius_mm": 16.499999999999996,
+      "measured_main_casing_height_mm": 29.60253686479283,
+      "height_mm": 35.10253686479283,
+      "mount_extension_mm": 5.5,
+      "reviewed_mount_side": "vmax",
+      "start_step_mm": [
+        113.26802367511901,
+        42.49999999999999,
+        -115.83588896271787
+      ],
+      "direction_step": [
+        0.3420201433256648,
+        -1.1527200668757251e-17,
+        0.9396926207859099
+      ],
+      "source_shell_index": 144,
+      "validated_mount_shell_indices": [
+        150
+      ],
+      "locked_rotor_envelope": {
+        "condition": "static_locked",
+        "representation": "single_axisymmetric_smooth_motor_envelope",
+        "nominal_motor_shaft_radius_mm": 2.0,
+        "connector_radius_mm": 2.05,
+        "connector_length_mm": 42.897463135207,
+        "connector_axis_start_step_mm": [
+          98.5962271853081,
+          42.49999999999999,
+          -156.14631852130748
+        ],
+        "connector_axis_end_step_mm": [
+          113.26802367511901,
+          42.49999999999999,
+          -115.83588896271787
+        ],
+        "connector_axis_start_body_mm": [
+          -154.84031852130747,
+          98.53522718530809,
+          40.114999999999995
+        ],
+        "connector_axis_end_body_mm": [
+          -114.52988896271788,
+          113.207023675119,
+          40.114999999999995
+        ],
+        "motor_profile_axis_end_step_mm": [
+          125.27379836478075,
+          42.49999999999999,
+          -82.850294099812
+        ],
+        "motor_profile_axis_end_body_mm": [
+          -81.544294099812,
+          125.21279836478074,
+          40.114999999999995
+        ],
+        "axis_direction_step": [
+          0.3420201433256648,
+          -1.1527200668757251e-17,
+          0.9396926207859099
+        ],
+        "axis_direction_body": [
+          0.9396926207859099,
+          0.3420201433256648,
+          -1.1527200668757251e-17
+        ],
+        "propeller_centre_step_mm": [
+          103.89753940685584,
+          42.49999999999999,
+          -141.58108289912605
+        ],
+        "propeller_centre_body_mm": [
+          -140.27508289912603,
+          103.83653940685583,
+          40.114999999999995
+        ],
+        "measured_motor_shaft_interval_from_casing_start_mm": [
+          -42.02742649435545,
+          -17.397463135207193
+        ],
+        "measured_propeller_bore_interval_from_casing_start_mm": [
+          -37.39746313520713,
+          -17.397463135207172
+        ],
+        "measured_hub_interval_from_casing_start_mm": [
+          -42.397463135207154,
+          -37.3974631352071
+        ],
+        "axisymmetric_profile_mm": [
+          [
+            -42.897463135207,
+            0.0
+          ],
+          [
+            -42.897463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            2.05
+          ],
+          [
+            -20.397463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            6.0
+          ],
+          [
+            -15.897463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            2.05
+          ],
+          [
+            -14.397463135207,
+            7.4
+          ],
+          [
+            -12.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            8.4
+          ],
+          [
+            -9.897463135207,
+            9.0
+          ],
+          [
+            -6.647463135207,
+            9.0
+          ],
+          [
+            -5.397463135207,
+            10.25
+          ],
+          [
+            -5.397463135207,
+            12.7
+          ],
+          [
+            -2.410623117,
+            15.537498018
+          ],
+          [
+            -1.370861642017,
+            16.292991320832
+          ],
+          [
+            0.0,
+            16.5
+          ],
+          [
+            35.102536865,
+            16.5
+          ],
+          [
+            35.102536865,
+            0.0
+          ]
+        ],
+        "source_detailed_motor_volume_mm3": 36965.88559511905,
+        "smooth_envelope_volume_mm3": 36861.96312062204,
+        "source_volume_relative_error": 0.0028113075833014617,
+        "maximum_source_volume_relative_error": 0.01,
+        "common_volume_mm3": {
+          "mount": 434.9242421421873,
+          "hub": 41.46902302738609,
+          "propeller": 234.92096188493412
+        },
+        "minimum_common_volume_mm3": {
+          "mount": 1.0,
+          "hub": 1.0,
+          "propeller": 1.0
+        },
+        "label": "T5",
+        "source_motor_shell_index": 144,
+        "source_propeller_shell_index": 147,
+        "source_hub_shell_index": 148
+      }
+    }
+  ],
+  "locked_rotor_condition": "fully_assembled_static_locked",
+  "locked_rotor_assemblies": [
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        -160.00000000000003,
+        -79.99999999999983,
+        142.0
+      ],
+      "connector_axis_end_step_mm": [
+        -160.00000000000003,
+        -37.10253686479283,
+        142.0
+      ],
+      "connector_axis_start_body_mm": [
+        143.306,
+        -160.06100000000004,
+        -82.38499999999983
+      ],
+      "connector_axis_end_body_mm": [
+        143.306,
+        -160.06100000000004,
+        -39.48753686479283
+      ],
+      "motor_profile_axis_end_step_mm": [
+        -160.00000000000003,
+        -1.9999999997928342,
+        142.0
+      ],
+      "motor_profile_axis_end_body_mm": [
+        143.306,
+        -160.06100000000004,
+        -4.384999999792834
+      ],
+      "axis_direction_step": [
+        -4.3164147086489085e-33,
+        1.0,
+        -1.2023722692184682e-33
+      ],
+      "axis_direction_body": [
+        -1.2023722692184682e-33,
+        -4.3164147086489085e-33,
+        1.0
+      ],
+      "propeller_centre_step_mm": [
+        -160.00000000000003,
+        -64.5,
+        142.0
+      ],
+      "propeller_centre_body_mm": [
+        143.306,
+        -160.06100000000004,
+        -66.885
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.02742649435544,
+        -17.397463135207193
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.397463135207154,
+        -17.397463135207197
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.397463135207154,
+        -37.397463135207154
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.8787683885,
+      "smooth_envelope_volume_mm3": 36861.963120621986,
+      "source_volume_relative_error": 0.002811123425946533,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 376.21532098722645,
+        "hub": 41.469023027385745,
+        "propeller": 234.92096188493161
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T1",
+      "source_motor_shell_index": 29,
+      "source_propeller_shell_index": 28,
+      "source_hub_shell_index": 27
+    },
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        -159.99999999999997,
+        -79.99999999999983,
+        -142.0
+      ],
+      "connector_axis_end_step_mm": [
+        -159.99999999999997,
+        -37.10253686479283,
+        -142.0
+      ],
+      "connector_axis_start_body_mm": [
+        -140.694,
+        -160.06099999999998,
+        -82.38499999999983
+      ],
+      "connector_axis_end_body_mm": [
+        -140.694,
+        -160.06099999999998,
+        -39.48753686479283
+      ],
+      "motor_profile_axis_end_step_mm": [
+        -159.99999999999997,
+        -1.9999999997928342,
+        -142.0
+      ],
+      "motor_profile_axis_end_body_mm": [
+        -140.694,
+        -160.06099999999998,
+        -4.384999999792834
+      ],
+      "axis_direction_step": [
+        2.5336955048732123e-33,
+        1.0,
+        3.695608488383407e-33
+      ],
+      "axis_direction_body": [
+        3.695608488383407e-33,
+        2.5336955048732123e-33,
+        1.0
+      ],
+      "propeller_centre_step_mm": [
+        -159.99999999999997,
+        -64.5,
+        -142.0
+      ],
+      "propeller_centre_body_mm": [
+        -140.694,
+        -160.06099999999998,
+        -66.885
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.02742649435544,
+        -17.397463135207193
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.397463135207154,
+        -17.397463135207197
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.397463135207154,
+        -37.397463135207154
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.87876838844,
+      "smooth_envelope_volume_mm3": 36861.963120621986,
+      "source_volume_relative_error": 0.0028111234259447664,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 376.21532098723657,
+        "hub": 41.46902302738508,
+        "propeller": 234.92096188493176
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T2",
+      "source_motor_shell_index": 33,
+      "source_propeller_shell_index": 32,
+      "source_hub_shell_index": 31
+    },
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        159.99999999999997,
+        -79.99999999999983,
+        142.0
+      ],
+      "connector_axis_end_step_mm": [
+        159.99999999999997,
+        -37.10253686479283,
+        142.0
+      ],
+      "connector_axis_start_body_mm": [
+        143.306,
+        159.93899999999996,
+        -82.38499999999983
+      ],
+      "connector_axis_end_body_mm": [
+        143.306,
+        159.93899999999996,
+        -39.48753686479283
+      ],
+      "motor_profile_axis_end_step_mm": [
+        159.99999999999997,
+        -1.9999999997928342,
+        142.0
+      ],
+      "motor_profile_axis_end_body_mm": [
+        143.306,
+        159.93899999999996,
+        -4.384999999792834
+      ],
+      "axis_direction_step": [
+        -2.5336955048732123e-33,
+        1.0,
+        -3.695608488383407e-33
+      ],
+      "axis_direction_body": [
+        -3.695608488383407e-33,
+        -2.5336955048732123e-33,
+        1.0
+      ],
+      "propeller_centre_step_mm": [
+        159.99999999999997,
+        -64.5,
+        142.0
+      ],
+      "propeller_centre_body_mm": [
+        143.306,
+        159.93899999999996,
+        -66.885
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.02742649435544,
+        -17.397463135207193
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.397463135207154,
+        -17.397463135207197
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.397463135207154,
+        -37.397463135207154
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.87876838844,
+      "smooth_envelope_volume_mm3": 36861.963120621986,
+      "source_volume_relative_error": 0.0028111234259447664,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 376.2153209872365,
+        "hub": 41.46902302738508,
+        "propeller": 234.92096188493173
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T3",
+      "source_motor_shell_index": 36,
+      "source_propeller_shell_index": 35,
+      "source_hub_shell_index": 34
+    },
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        160.00000000000003,
+        -79.99999999999983,
+        -142.00000000000003
+      ],
+      "connector_axis_end_step_mm": [
+        160.00000000000003,
+        -37.10253686479283,
+        -142.00000000000003
+      ],
+      "connector_axis_start_body_mm": [
+        -140.69400000000002,
+        159.93900000000002,
+        -82.38499999999983
+      ],
+      "connector_axis_end_body_mm": [
+        -140.69400000000002,
+        159.93900000000002,
+        -39.48753686479283
+      ],
+      "motor_profile_axis_end_step_mm": [
+        160.00000000000003,
+        -1.9999999997928342,
+        -142.00000000000003
+      ],
+      "motor_profile_axis_end_body_mm": [
+        -140.69400000000002,
+        159.93900000000002,
+        -4.384999999792834
+      ],
+      "axis_direction_step": [
+        4.3164147086489085e-33,
+        1.0,
+        1.2023722692184682e-33
+      ],
+      "axis_direction_body": [
+        1.2023722692184682e-33,
+        4.3164147086489085e-33,
+        1.0
+      ],
+      "propeller_centre_step_mm": [
+        160.00000000000003,
+        -64.5,
+        -142.00000000000003
+      ],
+      "propeller_centre_body_mm": [
+        -140.69400000000002,
+        159.93900000000002,
+        -66.885
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.02742649435544,
+        -17.397463135207193
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.397463135207154,
+        -17.397463135207197
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.397463135207154,
+        -37.397463135207154
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.8787683885,
+      "smooth_envelope_volume_mm3": 36861.963120621986,
+      "source_volume_relative_error": 0.002811123425946533,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 376.21532098723725,
+        "hub": 41.469023027385745,
+        "propeller": 234.92096188493153
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T4",
+      "source_motor_shell_index": 39,
+      "source_propeller_shell_index": 38,
+      "source_hub_shell_index": 37
+    },
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        98.5962271853081,
+        42.49999999999999,
+        -156.14631852130748
+      ],
+      "connector_axis_end_step_mm": [
+        113.26802367511901,
+        42.49999999999999,
+        -115.83588896271787
+      ],
+      "connector_axis_start_body_mm": [
+        -154.84031852130747,
+        98.53522718530809,
+        40.114999999999995
+      ],
+      "connector_axis_end_body_mm": [
+        -114.52988896271788,
+        113.207023675119,
+        40.114999999999995
+      ],
+      "motor_profile_axis_end_step_mm": [
+        125.27379836478075,
+        42.49999999999999,
+        -82.850294099812
+      ],
+      "motor_profile_axis_end_body_mm": [
+        -81.544294099812,
+        125.21279836478074,
+        40.114999999999995
+      ],
+      "axis_direction_step": [
+        0.3420201433256648,
+        -1.1527200668757251e-17,
+        0.9396926207859099
+      ],
+      "axis_direction_body": [
+        0.9396926207859099,
+        0.3420201433256648,
+        -1.1527200668757251e-17
+      ],
+      "propeller_centre_step_mm": [
+        103.89753940685584,
+        42.49999999999999,
+        -141.58108289912605
+      ],
+      "propeller_centre_body_mm": [
+        -140.27508289912603,
+        103.83653940685583,
+        40.114999999999995
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.02742649435545,
+        -17.397463135207193
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.39746313520713,
+        -17.397463135207172
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.397463135207154,
+        -37.3974631352071
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.88559511905,
+      "smooth_envelope_volume_mm3": 36861.96312062204,
+      "source_volume_relative_error": 0.0028113075833014617,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 434.9242421421873,
+        "hub": 41.46902302738609,
+        "propeller": 234.92096188493412
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T5",
+      "source_motor_shell_index": 144,
+      "source_propeller_shell_index": 147,
+      "source_hub_shell_index": 148
+    },
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        -98.59622718530817,
+        42.49999999999999,
+        -156.14631852130753
+      ],
+      "connector_axis_end_step_mm": [
+        -113.26802367511908,
+        42.49999999999999,
+        -115.8358889627179
+      ],
+      "connector_axis_start_body_mm": [
+        -154.84031852130752,
+        -98.65722718530817,
+        40.114999999999995
+      ],
+      "connector_axis_end_body_mm": [
+        -114.5298889627179,
+        -113.32902367511909,
+        40.114999999999995
+      ],
+      "motor_profile_axis_end_step_mm": [
+        -125.27379836478082,
+        42.49999999999999,
+        -82.85029409981203
+      ],
+      "motor_profile_axis_end_body_mm": [
+        -81.54429409981203,
+        -125.33479836478082,
+        40.114999999999995
+      ],
+      "axis_direction_step": [
+        -0.3420201433256648,
+        -1.1527200668757254e-17,
+        0.9396926207859099
+      ],
+      "axis_direction_body": [
+        0.9396926207859099,
+        -0.3420201433256648,
+        -1.1527200668757254e-17
+      ],
+      "propeller_centre_step_mm": [
+        -103.89753940685591,
+        42.49999999999999,
+        -141.58108289912607
+      ],
+      "propeller_centre_body_mm": [
+        -140.27508289912606,
+        -103.95853940685592,
+        40.114999999999995
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.027426494355495,
+        -17.397463135207186
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.39746313520713,
+        -17.397463135207172
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.39746313520716,
+        -37.39746313520711
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.878768421215,
+      "smooth_envelope_volume_mm3": 36861.96312062199,
+      "source_volume_relative_error": 0.0028111234268287915,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 434.92388433528976,
+        "hub": 41.46902302738472,
+        "propeller": 234.92096188493406
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T6",
+      "source_motor_shell_index": 128,
+      "source_propeller_shell_index": 131,
+      "source_hub_shell_index": 132
+    },
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        98.59622718530817,
+        42.49999999999999,
+        156.14631852130753
+      ],
+      "connector_axis_end_step_mm": [
+        113.26802367511908,
+        42.49999999999999,
+        115.8358889627179
+      ],
+      "connector_axis_start_body_mm": [
+        157.45231852130755,
+        98.53522718530816,
+        40.114999999999995
+      ],
+      "connector_axis_end_body_mm": [
+        117.1418889627179,
+        113.20702367511907,
+        40.114999999999995
+      ],
+      "motor_profile_axis_end_step_mm": [
+        125.27379836478082,
+        42.49999999999999,
+        82.85029409981203
+      ],
+      "motor_profile_axis_end_body_mm": [
+        84.15629409981203,
+        125.21279836478081,
+        40.114999999999995
+      ],
+      "axis_direction_step": [
+        0.3420201433256648,
+        -1.1527200668757254e-17,
+        -0.9396926207859099
+      ],
+      "axis_direction_body": [
+        -0.9396926207859099,
+        0.3420201433256648,
+        -1.1527200668757254e-17
+      ],
+      "propeller_centre_step_mm": [
+        103.89753940685591,
+        42.49999999999999,
+        141.58108289912607
+      ],
+      "propeller_centre_body_mm": [
+        142.88708289912609,
+        103.8365394068559,
+        40.114999999999995
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.027426494355495,
+        -17.397463135207186
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.39746313520713,
+        -17.397463135207172
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.39746313520716,
+        -37.39746313520711
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.878768421215,
+      "smooth_envelope_volume_mm3": 36861.96312062199,
+      "source_volume_relative_error": 0.0028111234268287915,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 434.92388433236266,
+        "hub": 41.46902302738472,
+        "propeller": 234.92096188493406
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T7",
+      "source_motor_shell_index": 136,
+      "source_propeller_shell_index": 139,
+      "source_hub_shell_index": 140
+    },
+    {
+      "condition": "static_locked",
+      "representation": "single_axisymmetric_smooth_motor_envelope",
+      "nominal_motor_shaft_radius_mm": 2.0,
+      "connector_radius_mm": 2.05,
+      "connector_length_mm": 42.897463135207,
+      "connector_axis_start_step_mm": [
+        -98.59622718530808,
+        42.49999999999999,
+        156.14631852130748
+      ],
+      "connector_axis_end_step_mm": [
+        -113.268023675119,
+        42.49999999999999,
+        115.83588896271786
+      ],
+      "connector_axis_start_body_mm": [
+        157.4523185213075,
+        -98.65722718530809,
+        40.114999999999995
+      ],
+      "connector_axis_end_body_mm": [
+        117.14188896271786,
+        -113.329023675119,
+        40.114999999999995
+      ],
+      "motor_profile_axis_end_step_mm": [
+        -125.27379836478073,
+        42.49999999999999,
+        82.850294099812
+      ],
+      "motor_profile_axis_end_body_mm": [
+        84.156294099812,
+        -125.33479836478074,
+        40.114999999999995
+      ],
+      "axis_direction_step": [
+        -0.3420201433256648,
+        -1.1527200668757257e-17,
+        -0.9396926207859099
+      ],
+      "axis_direction_body": [
+        -0.9396926207859099,
+        -0.3420201433256648,
+        -1.1527200668757257e-17
+      ],
+      "propeller_centre_step_mm": [
+        -103.89753940685583,
+        42.49999999999999,
+        141.58108289912605
+      ],
+      "propeller_centre_body_mm": [
+        142.88708289912606,
+        -103.95853940685583,
+        40.114999999999995
+      ],
+      "measured_motor_shaft_interval_from_casing_start_mm": [
+        -42.027426494355474,
+        -17.397463135207197
+      ],
+      "measured_propeller_bore_interval_from_casing_start_mm": [
+        -37.39746313520715,
+        -17.39746313520719
+      ],
+      "measured_hub_interval_from_casing_start_mm": [
+        -42.39746313520718,
+        -37.397463135207126
+      ],
+      "axisymmetric_profile_mm": [
+        [
+          -42.897463135207,
+          0.0
+        ],
+        [
+          -42.897463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          2.05
+        ],
+        [
+          -20.397463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          6.0
+        ],
+        [
+          -15.897463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          2.05
+        ],
+        [
+          -14.397463135207,
+          7.4
+        ],
+        [
+          -12.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          8.4
+        ],
+        [
+          -9.897463135207,
+          9.0
+        ],
+        [
+          -6.647463135207,
+          9.0
+        ],
+        [
+          -5.397463135207,
+          10.25
+        ],
+        [
+          -5.397463135207,
+          12.7
+        ],
+        [
+          -2.410623117,
+          15.537498018
+        ],
+        [
+          -1.370861642017,
+          16.292991320832
+        ],
+        [
+          0.0,
+          16.5
+        ],
+        [
+          35.102536865,
+          16.5
+        ],
+        [
+          35.102536865,
+          0.0
+        ]
+      ],
+      "source_detailed_motor_volume_mm3": 36965.88559511932,
+      "smooth_envelope_volume_mm3": 36861.96312062198,
+      "source_volume_relative_error": 0.0028113075833102984,
+      "maximum_source_volume_relative_error": 0.01,
+      "common_volume_mm3": {
+        "mount": 434.92466730253767,
+        "hub": 41.469023027386875,
+        "propeller": 234.92096188493795
+      },
+      "minimum_common_volume_mm3": {
+        "mount": 1.0,
+        "hub": 1.0,
+        "propeller": 1.0
+      },
+      "label": "T8",
+      "source_motor_shell_index": 120,
+      "source_propeller_shell_index": 123,
+      "source_hub_shell_index": 124
+    }
+  ],
+  "main_buoyancy_material": {
+    "source_shell_index": 257,
+    "role": "waterproof closed-cell main buoyancy material",
+    "condition": "waterproof_closed_cell",
+    "identification_status": "high-confidence geometry/placement inference",
+    "preserved": true,
+    "actual_closed_solid_volume_mm3": 2674187.521821612,
+    "expected_closed_solid_volume_mm3": 2674187.521821612,
+    "volume_relative_error": 0.0,
+    "volume_relative_tolerance": 0.001,
+    "actual_bbox_step_mm": [
+      -110.00000010000011,
+      2.4999998999999495,
+      -160.00000010000008,
+      110.00000010000011,
+      100.6372066900246,
+      140.00000015479807
+    ],
+    "expected_bbox_step_mm": [
+      -110.0000001,
+      2.4999999,
+      -160.0000001,
+      110.0000001,
+      100.63720669,
+      140.000000155
+    ],
+    "bbox_max_absolute_error_mm": 2.0193624550302047e-10,
+    "bbox_absolute_tolerance_mm": 0.0001,
+    "hydrodynamic_accounting": "included once by geometry union; never add this volume numerically to the 11.541 L displacement target",
+    "double_count_prevention": "This preserved solid is already part of the output geometry union; its measured volume is not added numerically to the displacement target."
+  },
+  "sealed_pressure_boundary": {
+    "condition": "waterproof_assembled_vehicle",
+    "representation": "two_tube_opening_sealing_disks",
+    "source_hull_shell": 30,
+    "source_endcap_shells": [
+      42,
+      43
+    ],
+    "measured_inner_radius_mm": 59.99999999999999,
+    "measured_outer_radius_mm": 65.0,
+    "measured_hull_length_mm": 300.0,
+    "measured_hull_interval_from_axis_origin_mm": [
+      0.0,
+      300.0
+    ],
+    "radial_wall_overlap_mm": 0.5,
+    "disk_half_thickness_mm": 0.5,
+    "derived_disk_radius_mm": 60.49999999999999,
+    "derived_disk_thickness_mm": 1.0,
+    "derived_disks": [
+      {
+        "hull_end": "start",
+        "reviewed_endcap_shell": 43,
+        "centre_parameter_from_axis_origin_mm": 0.0,
+        "centre_step_mm": [
+          0.0,
+          0.0,
+          -150.0
+        ],
+        "centre_body_mm": [
+          -148.694,
+          -0.061,
+          -2.385
+        ],
+        "axis_start_step_mm": [
+          0.0,
+          0.0,
+          -150.5
+        ],
+        "axis_end_step_mm": [
+          0.0,
+          0.0,
+          -149.5
+        ],
+        "radius_mm": 60.49999999999999,
+        "thickness_mm": 1.0,
+        "solid_volume_mm3": 11499.014510302037,
+        "common_with_hull_mm3": 94.6404786893936,
+        "common_with_reviewed_endcap_mm3": 3072.084916129623
+      },
+      {
+        "hull_end": "end",
+        "reviewed_endcap_shell": 42,
+        "centre_parameter_from_axis_origin_mm": 300.0,
+        "centre_step_mm": [
+          0.0,
+          0.0,
+          150.0
+        ],
+        "centre_body_mm": [
+          151.306,
+          -0.061,
+          -2.385
+        ],
+        "axis_start_step_mm": [
+          0.0,
+          0.0,
+          149.5
+        ],
+        "axis_end_step_mm": [
+          0.0,
+          0.0,
+          150.5
+        ],
+        "radius_mm": 60.49999999999999,
+        "thickness_mm": 1.0,
+        "solid_volume_mm3": 11499.014510302037,
+        "common_with_hull_mm3": 94.6404786893936,
+        "common_with_reviewed_endcap_mm3": 3072.0849161284095
+      }
+    ],
+    "axis_direction_step": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "axis_direction_body": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "nominal_cavity_volume_mm3": 3392920.065876976,
+    "derived_boundary_patch_solid_volume_mm3": 22998.029020604074,
+    "common_volume_mm3": {
+      "start_disk_hull": 94.6404786893936,
+      "start_disk_endcap": 3072.084916129623,
+      "end_disk_hull": 94.6404786893936,
+      "end_disk_endcap": 3072.0849161284095
+    },
+    "minimum_common_volume_mm3": {
+      "start_disk_hull": 1.0,
+      "start_disk_endcap": 1.0,
+      "end_disk_hull": 1.0,
+      "end_disk_endcap": 1.0
+    },
+    "hull_endcap_original_contact": {
+      "42": {
+        "distance_to_hull_mm": 2.9426594301588e-14,
+        "common_with_hull_mm3": 0.0,
+        "common_with_start_disk_mm3": 0.0,
+        "common_with_end_disk_mm3": 3072.0849161284095
+      },
+      "43": {
+        "distance_to_hull_mm": 8.45531060398914e-15,
+        "common_with_hull_mm3": 0.0,
+        "common_with_start_disk_mm3": 3072.084916129623,
+        "common_with_end_disk_mm3": 0.0
+      }
+    },
+    "hydrodynamic_accounting": "The disks close the waterproof boundary only; external annular-fitting recesses remain floodable and no cavity volume is numerically added."
+  },
+  "output": "/home/jining_yang/isaac-auv-env/environment/openfoam/geometry/validated_locked_rotor_v1/selected_body_mm.stl",
+  "output_sha256": "65c131e5f14b14366b2f765cf93ab2c376e63d94e7cbd8f796d6b36f97282f9d",
+  "output_size_bytes": 61010134,
+  "output_bbox_body_mm": [
+    -305.694,
+    -201.0609575135148,
+    -87.38500010000001,
+    255.80600000000032,
+    200.9389575135148,
+    103.23677826490811
+  ],
+  "triangulation": {
+    "linear_deflection_mm": 0.15,
+    "angular_deflection_rad": 0.2,
+    "open_cascade_face_count": 11561,
+    "null_triangulation_face_indices": [
+      10856
+    ],
+    "open_cascade_face_triangle_count": 1220201,
+    "binary_layout_valid": true,
+    "binary_triangle_count": 1220201,
+    "all_values_finite": true,
+    "repeated_vertex_triangle_count": 239,
+    "zero_area_triangle_count": 246
+  },
+  "warning": "This STL contains intersecting retained solids and is an intermediate input to voxel_wrap.py, not the final CFD wetted surface."
+}

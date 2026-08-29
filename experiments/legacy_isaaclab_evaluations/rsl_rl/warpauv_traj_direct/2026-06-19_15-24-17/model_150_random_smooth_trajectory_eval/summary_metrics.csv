@@ -1,0 +1,2 @@
+trajectory,num_curves,position_rmse,position_mae,max_position_error,velocity_rmse
+random_smooth,8,0.28005780535347585,0.24542014113321783,1.370240330696106,0.13458600013147004

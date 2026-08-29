@@ -1,0 +1,3 @@
+trajectory,position_rmse,position_mae,max_position_error,velocity_rmse,checkpoint,checkpoint_name,summary_path
+spiral,0.173706898118153,0.1657742904576783,0.3000000119209289,0.0758952423898155,500,model_500.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-17_20-23-22/model_500_spiral_trajectory_eval/summary_metrics.csv
+spiral,0.3549940604822646,0.3392365610304599,0.5171566605567932,0.0928919298549935,799,model_799.pt,/home/jining_yang/IsaacLab/source/results/rsl_rl/warpauv_traj_direct/2026-06-17_20-23-22/model_799_spiral_trajectory_eval/summary_metrics.csv

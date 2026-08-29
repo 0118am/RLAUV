@@ -1,3 +1,24 @@
 *
 !.gitignore
 !README.md
+
+# Curated production archive: final V16 policy, immutable run inputs,
+# TensorBoard history, export, and the complete selected evaluation.  Earlier
+# checkpoints and every other experiment remain local artifacts.
+!auv_traj_mlp_history_8/
+auv_traj_mlp_history_8/*
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/
+auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/*
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/PROVENANCE.md
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/model_499.pt
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/events.out.tfevents.*
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/params/
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/params/**
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/exports/
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/exports/**
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/evaluation/
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/evaluation/**
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/git/
+auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/git/*
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/git/isaac-auv-env.diff
+!auv_traj_mlp_history_8/2026-08-29_19-02-41_t60_precision_v16/SHA256SUMS
