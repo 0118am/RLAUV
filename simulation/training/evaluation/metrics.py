@@ -182,10 +182,12 @@ def _tracking_metrics(
     cfg: Any,
     domain_samples: pd.DataFrame,
 ) -> dict[str, Any]:
-    # The target finishes its smooth startup first; three actuator time
-    # constants plus the configured sensor delay then cover 95% response.
+    # The target finishes its smooth startup first.  The fixed communication
+    # delay, three actuator time constants, and fused-state sensor delay then
+    # cover the complete command/plant/observation chain through 95% thrust.
     steady_state_start_s = (
         float(cfg.trajectory_startup_duration_s)
+        + float(domain_samples["thruster_command_delay_s"].max())
         + 3.0 * float(domain_samples["sampled_thruster_time_constant_s"].max())
         + float(domain_samples["pose_sensor_delay_s"].max())
     )
@@ -289,6 +291,7 @@ def _domain_metrics(domain_samples: pd.DataFrame) -> dict[str, float]:
         "fluid_added_mass_scale_min": float(np.min(fluid_added_mass_scales)),
         "fluid_added_mass_scale_max": float(np.max(fluid_added_mass_scales)),
         "thruster_time_constant_mean_s": float(domain_samples["sampled_thruster_time_constant_s"].mean()),
+        "thruster_command_delay_s": float(domain_samples["thruster_command_delay_s"].mean()),
         "pose_sensor_delay_s": float(domain_samples["pose_sensor_delay_s"].mean()),
     }
 

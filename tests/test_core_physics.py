@@ -7,9 +7,8 @@ import torch
 
 from environment.hydrodynamics import current_fields, models, pool_effects
 from simulation.dynamics import calculate_total_inertia_physx_wrench
-from robot.dynamics import tether
 from robot.propulsion import curves
-from robot.propulsion.dynamics import FirstOrderThrusterResponse
+from robot.propulsion.dynamics import FixedStepCommandDelay, FirstOrderThrusterResponse
 from robot.runtime import T60_RUNTIME
 from robot.sensors import DelayedPoseSensor
 
@@ -318,8 +317,8 @@ def test_pwm_branches_select_complete_installed_flu_vectors_without_sign_flip() 
     assert torch.all(negative_forces[:4, 2] > 0.0)
 
 
-def test_nominal_thruster_response_has_an_80_ms_time_constant() -> None:
-    assert T60_RUNTIME.thruster_time_constant_s == 0.08
+def test_nominal_thruster_response_has_a_40_ms_time_constant() -> None:
+    assert T60_RUNTIME.thruster_time_constant_s == 0.04
 
     response = FirstOrderThrusterResponse(
         1,
@@ -331,7 +330,7 @@ def test_nominal_thruster_response_has_an_80_ms_time_constant() -> None:
     response.reset(None, time_s=0.0)
     assert torch.equal(response.advance(target, 0.0), torch.zeros_like(target))
     first_substep = response.advance(target, 0.01)
-    expected_first_substep = 1.0 - torch.exp(torch.tensor(-0.01 / 0.08))
+    expected_first_substep = 1.0 - torch.exp(torch.tensor(-0.01 / 0.04))
     assert torch.allclose(first_substep, torch.full_like(target, expected_first_substep))
     response.reset(None, time_s=0.0)
     realized = response.advance(target, T60_RUNTIME.thruster_time_constant_s)
@@ -348,18 +347,55 @@ def test_motor_command_maps_directly_through_curve_response_and_wrench() -> None
         dtype=torch.float32,
     )
     target_forces_b = curves.measured_thruster_body_forces(command)
-    response = FirstOrderThrusterResponse(1, 8, 0.08, torch.device("cpu"))
+    response = FirstOrderThrusterResponse(1, 8, 0.04, torch.device("cpu"))
     response.reset(None, time_s=0.0)
 
     realized_forces_b = response.advance(target_forces_b, 0.01)
 
-    fraction = 1.0 - torch.exp(torch.tensor(-0.01 / 0.08))
+    fraction = 1.0 - torch.exp(torch.tensor(-0.01 / 0.04))
     torch.testing.assert_close(realized_forces_b, fraction * target_forces_b)
     positions_b = curves.get_thruster_positions(torch.device("cpu")).unsqueeze(0)
     torch.testing.assert_close(
         curves.reduce_point_forces_to_wrench(positions_b, realized_forces_b),
         curves.reduce_point_forces_to_wrench(positions_b, fraction * target_forces_b),
     )
+
+
+def test_thruster_command_delay_is_exactly_50_ms_at_100_hz() -> None:
+    assert T60_RUNTIME.thruster_command_delay_s == 0.05
+    assert T60_RUNTIME.thruster_command_delay_steps_for_dt(0.01) == 5
+
+    delay = FixedStepCommandDelay(1, 8, 5, torch.device("cpu"))
+    delay.reset(None)
+    command = torch.ones((1, 8))
+    for _ in range(5):
+        assert torch.equal(delay.advance(command), torch.zeros_like(command))
+    assert torch.equal(delay.advance(command), command)
+
+    delay.reset(torch.tensor([0]))
+    assert torch.equal(delay.advance(command), torch.zeros_like(command))
+
+
+def test_command_delay_precedes_static_curve_and_first_order_response() -> None:
+    delay = FixedStepCommandDelay(1, 8, 5, torch.device("cpu"))
+    response = FirstOrderThrusterResponse(1, 8, 0.04, torch.device("cpu"))
+    command = torch.ones((1, 8))
+    delay.reset(None)
+    response.reset(None, time_s=0.0)
+
+    for step in range(5):
+        delayed_command = delay.advance(command)
+        target_forces_b = curves.measured_thruster_body_forces(delayed_command)
+        realized_forces_b = response.advance(target_forces_b, step * 0.01)
+        assert torch.equal(realized_forces_b, torch.zeros_like(realized_forces_b))
+
+    delayed_command = delay.advance(command)
+    target_forces_b = curves.measured_thruster_body_forces(delayed_command)
+    realized_forces_b = response.advance(target_forces_b, 0.05)
+    fraction = 1.0 - torch.exp(torch.tensor(-0.01 / 0.04))
+
+    assert torch.equal(delayed_command, command)
+    torch.testing.assert_close(realized_forces_b, fraction * target_forces_b)
 
 
 def test_pose_sensor_applies_exact_50_ms_delay_on_the_100_hz_truth_grid() -> None:
@@ -427,31 +463,3 @@ def test_current_field_interpolation_and_periodic_current() -> None:
         torch.tensor([[0.0, 0.02, 0.0], [0.04, 0.0, 0.0]]),
         atol=1.0e-6,
     )
-
-
-def test_tether_is_slack_then_pulls_toward_its_anchor() -> None:
-    common = dict(
-        body_pos_w=torch.tensor([[0.0, 0.0, 0.0]]),
-        body_quat_w=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
-        body_linvel_w=torch.zeros(1, 3),
-        water_current_w=torch.zeros(1, 3),
-        attach_offset_b=[0.0, 0.0, 0.0],
-        stiffness=10.0,
-        damping=0.0,
-        drag_coeff=0.0,
-        quat_conjugate_fn=models.quat_conjugate_wxyz,
-        quat_apply_fn=models.quat_apply_wxyz,
-    )
-    slack_force, _ = tether.calculate_tether_wrench(
-        anchor_pos_w=[1.0, 0.0, 0.0],
-        slack_length=2.0,
-        **common,
-    )
-    taut_force, _ = tether.calculate_tether_wrench(
-        anchor_pos_w=[3.0, 0.0, 0.0],
-        slack_length=1.0,
-        **common,
-    )
-    assert torch.equal(slack_force, torch.zeros_like(slack_force))
-    assert taut_force[0, 0] > 0.0
-    assert torch.equal(taut_force[0, 1:], torch.zeros(2))

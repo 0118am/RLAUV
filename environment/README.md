@@ -26,7 +26,7 @@
 
 ## 边界
 
-环境 profile 会拒绝机器人、执行器、系缆、传感器和任务字段。机器人本体参数属于
+环境 profile 会拒绝机器人、执行器、传感器和任务字段。机器人本体参数属于
 `robot/`。`runtime/` 不调用 PhysX；Isaac 状态接线和最终外力提交只属于
 `simulation/assembly.py`。跨 environment/robot 的组合与 DR schema 属于 `simulation/`；
 评估覆盖属于 `simulation/training/evaluation/`。

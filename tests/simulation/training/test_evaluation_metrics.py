@@ -148,7 +148,8 @@ def test_tracking_metrics_report_axis_bias_and_steady_window() -> None:
     )
     domain_samples = pd.DataFrame(
         {
-            "sampled_thruster_time_constant_s": [0.08],
+            "sampled_thruster_time_constant_s": [0.04],
+            "thruster_command_delay_s": [0.05],
             "pose_sensor_delay_s": [0.05],
         }
     )
@@ -157,7 +158,7 @@ def test_tracking_metrics_report_axis_bias_and_steady_window() -> None:
     assert np.isclose(metrics["position_bias_x_m"], 0.1)
     assert metrics["cross_track_position_error_rmse_m"] == 0.0
     assert np.isclose(metrics["steady_position_rmse"], 0.1)
-    assert np.isclose(metrics["steady_state_start_s"], 4.29)
+    assert np.isclose(metrics["steady_state_start_s"], 4.22)
 
 
 def test_actuator_and_boundary_metrics_separate_thruster_from_physx_wrench() -> None:

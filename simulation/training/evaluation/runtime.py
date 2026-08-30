@@ -372,8 +372,14 @@ def collect_domain_samples(env: Any) -> pd.DataFrame:
         "sampled_thruster_scale_min",
         "sampled_thruster_scale_max",
         "sampled_thruster_time_constant_s",
+        "thruster_command_delay_s",
         "pose_sensor_delay_s",
         "sampled_common_thruster_force_scale",
+    )
+    command_delay = torch.full(
+        (unwrapped.num_envs, 1),
+        float(unwrapped.cfg.thruster_command_delay_s),
+        device=robot.device,
     )
     sensor_delay = torch.full(
         (unwrapped.num_envs, 1), float(unwrapped.cfg.pose_sensor_delay_s), device=robot.device
@@ -392,6 +398,7 @@ def collect_domain_samples(env: Any) -> pd.DataFrame:
             robot.thruster_force_scale.amin(dim=1, keepdim=True),
             robot.thruster_force_scale.amax(dim=1, keepdim=True),
             robot.thruster_time_constant.reshape(-1, 1),
+            command_delay,
             sensor_delay,
             robot.common_thruster_force_scale,
         ),

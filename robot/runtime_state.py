@@ -4,21 +4,15 @@ from __future__ import annotations
 
 import torch
 
-from common.tensor_math import quat_apply_wxyz, quat_conjugate_wxyz
-
 from robot.dynamics.parameters import AUVModel
 from robot.dynamics.rigid_body import inertia_matrix_tensor, principal_inertia_and_axes
-from robot.dynamics.tether import (
-    calculate_multisegment_tether_wrench,
-    update_rate_limited_winch_slack_length,
-)
 from robot.propulsion.curves import (
     get_thruster_axes,
     get_thruster_positions,
     measured_thruster_body_forces,
     reduce_point_forces_to_wrench,
 )
-from robot.propulsion.dynamics import FirstOrderThrusterResponse
+from robot.propulsion.dynamics import FixedStepCommandDelay, FirstOrderThrusterResponse
 from robot.propulsion.effects import (
     calculate_axial_inflow_thrust_scale,
     calculate_thruster_wake_interaction_scale,
@@ -27,7 +21,7 @@ from robot.sensors import DelayedPoseSensor
 
 
 class RobotRuntimeState:
-    """All mutable vehicle, actuator, and tether state."""
+    """All mutable vehicle and actuator state."""
 
     def __init__(
         self,
@@ -73,6 +67,12 @@ class RobotRuntimeState:
 
         self.thruster_response = FirstOrderThrusterResponse(
             self.num_envs, self.num_thrusters, cfg.dyn_time_constant, self.device
+        )
+        self.thruster_command_delay = FixedStepCommandDelay(
+            self.num_envs,
+            self.num_thrusters,
+            cfg.thruster_command_delay_steps,
+            self.device,
         )
         self.thruster_force_curve_coefficients = torch.as_tensor(
             model.thruster_force_curve_coefficients, dtype=torch.float32, device=self.device
@@ -125,16 +125,16 @@ class RobotRuntimeState:
         self.thruster_wake_loss_coefficient = torch.full(
             (self.num_envs,), float(cfg.thruster_wake_loss_coefficient), device=self.device
         )
-        self.tether_slack_length = torch.full(
-            (self.num_envs, 1), float(cfg.tether_slack_length), device=self.device
-        )
         self.thruster_response.set_time_constants(self.thruster_time_constant)
 
     def advance_thruster_forces(
         self, actions: torch.Tensor, *, physics_time_s: float
     ) -> torch.Tensor:
-        targets = measured_thruster_body_forces(actions, self.thruster_force_curve_coefficients)
-        return self.thruster_response.advance(targets, physics_time_s)
+        delayed_commands = self.thruster_command_delay.advance(actions)
+        target_forces_b = measured_thruster_body_forces(
+            delayed_commands, self.thruster_force_curve_coefficients
+        )
+        return self.thruster_response.advance(target_forces_b, physics_time_s)
 
     def compose_thruster_wrench(
         self,
@@ -183,61 +183,8 @@ class RobotRuntimeState:
         self.realized_thruster_wrench_b[:] = wrench
         return wrench[:, :3], wrench[:, 3:]
 
-    def compose_tether_wrench(
-        self,
-        kinematics,
-        *,
-        water_current_w: torch.Tensor,
-        gravity_w: torch.Tensor,
-        physics_dt: float,
-        additional_scale: float,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        zeros = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
-        if not self.cfg.tether_enabled:
-            return zeros, zeros
-        if self.cfg.tether_winch_enabled:
-            self.tether_slack_length[:] = update_rate_limited_winch_slack_length(
-                self.tether_slack_length,
-                self.cfg.tether_winch_target_length,
-                self.cfg.tether_winch_reel_speed,
-                physics_dt,
-                self.cfg.tether_winch_min_length,
-                self.cfg.tether_winch_max_length,
-            )
-        anchor_local = torch.as_tensor(
-            self.cfg.tether_anchor_pos_w,
-            dtype=kinematics.root_position_w.dtype,
-            device=self.device,
-        ).reshape(1, 3)
-        anchor_w = kinematics.scene_origins_w + anchor_local
-        force_b, _ = calculate_multisegment_tether_wrench(
-            kinematics.root_position_w,
-            kinematics.root_quat_w,
-            kinematics.root_linear_velocity_w,
-            water_current_w,
-            anchor_w,
-            self.cfg.tether_attach_offset_b,
-            self.tether_slack_length,
-            self.cfg.tether_stiffness,
-            self.cfg.tether_damping,
-            self.cfg.tether_drag_coeff,
-            self.cfg.tether_num_segments,
-            self.cfg.tether_segment_diameter,
-            self.cfg.tether_segment_density,
-            self.cfg.water_rho,
-            gravity_w,
-            quat_conjugate_wxyz,
-            quat_apply_wxyz,
-        )
-        attach_offset_from_current_com = torch.as_tensor(
-            self.cfg.tether_attach_offset_b,
-            dtype=force_b.dtype,
-            device=self.device,
-        ).reshape(1, 3) - self.center_of_mass_offsets
-        torque_b = torch.cross(attach_offset_from_current_com, force_b, dim=-1)
-        return force_b * additional_scale, torque_b * additional_scale
-
     def reset_dynamic_buffers(self, env_ids: torch.Tensor, *, physics_time_s: float) -> None:
+        self.thruster_command_delay.reset(env_ids)
         self.thruster_response.reset(env_ids, time_s=physics_time_s)
         self.realized_thruster_force_n[env_ids] = 0.0
         self.realized_thruster_forces_b[env_ids] = 0.0

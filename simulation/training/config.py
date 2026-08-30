@@ -78,15 +78,16 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
 
     # Deployable current-sample layout:
     # [position_error_b(3), target_linear_velocity_b(3), linear_velocity_error_b(3),
-    #  attitude_error_quat(4), projected_gravity_b(3), angular_velocity_b(3),
-    #  target_angular_velocity_b(3),
-    #  target_linear_acceleration_b(3), motor_command(8)]. Vehicle terms come from
+    #  attitude_error_quat(4), angular_velocity_b(3), target_angular_velocity_b(3),
+    #  target_linear_acceleration_b(3), previous_motor_command(8)]. Vehicle terms come from
     # the exact 50 ms delayed fused state, target terms from the reference generator,
-    # and motor_command directly from the bounded Actor output. No
+    # and previous_motor_command from the bounded Actor output emitted during
+    # the preceding policy interval; it is not the command currently emerging
+    # from the fixed communication-delay pipeline. No
     # simulator-only hydrodynamic or DR truth enters the Actor.
     #
     # ``mlp_architecture`` is selected by simulation.training. The current
-    # 33-D sample is always present; when history is requested the environment
+    # 30-D sample is always present; when history is requested the environment
     # appends only earlier, deployable samples of the named fields.  The mixin
     # derives the final Gym spaces before DirectRLEnv is constructed.
     # Use IsaacLab's integer space specification across Hydra. Serializing a
@@ -108,7 +109,7 @@ class AUVTrajEnvCfg(DirectRLEnvCfg):
     # Only ``mlp_architecture`` is user-selected. The two derived fields are
     # copied from its profile at environment construction and persisted in the
     # run config for auditability; do not override them independently.
-    mlp_architecture = "mlp_33d"
+    mlp_architecture = "mlp_30d"
     mlp_history_steps = 0
     mlp_history_fields = []
     critic_privileged_fields = []

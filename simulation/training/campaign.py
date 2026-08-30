@@ -10,6 +10,7 @@ import re
 import shlex
 import signal
 import subprocess
+import sys
 import time
 
 import psutil
@@ -70,6 +71,24 @@ def experiment_environment(extra_env: dict[str, str] | None = None) -> dict[str,
     env = os.environ.copy()
     env.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
     env.setdefault("TERM", "xterm")
+    # A Jupyter/VS Code kernel can use a Conda interpreter without running the
+    # environment activate.d hooks. Make the kernel interpreter authoritative
+    # so isaaclab.sh does not fall back to a missing binary-install python.sh.
+    runtime_prefix = Path(sys.executable).resolve().parent.parent
+    if (runtime_prefix / "conda-meta").is_dir():
+        env["CONDA_PREFIX"] = str(runtime_prefix)
+        env.pop("VIRTUAL_ENV", None)
+    elif (runtime_prefix / "pyvenv.cfg").is_file():
+        env["VIRTUAL_ENV"] = str(runtime_prefix)
+        env.pop("CONDA_PREFIX", None)
+
+    # Isaac Sim must load the matching Conda C++ runtime before Ubuntu's older
+    # libstdc++, or Kit exits on a missing CXXABI symbol.
+    runtime_lib = str(runtime_prefix / "lib")
+    library_paths = [path for path in env.get("LD_LIBRARY_PATH", "").split(os.pathsep) if path]
+    if runtime_lib not in library_paths:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join((runtime_lib, *library_paths))
+    env.setdefault("OMNI_KIT_ACCEPT_EULA", "YES")
     if extra_env:
         env.update(extra_env)
     return env

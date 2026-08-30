@@ -12,7 +12,7 @@ from rsl_rl.networks import EmpiricalNormalization, MLP
 
 from robot.control.trajectory.observation_contract import (
     BASE_OBSERVATION_DIM,
-    OBSERVATION_FIELD_DIMENSIONS,
+    HISTORY_OBSERVATION_FIELD_DIMENSIONS,
 )
 from simulation.training.ppo.squashed_actor_critic import (
     ACTION_SQUASH_VERSION,
@@ -32,7 +32,6 @@ TRAJECTORY_CRITIC_PRIVILEGED_FIELDS = (
     "thruster_force_scale",
     "common_thruster_force_scale",
     "thruster_parameters",
-    "tether_slack_ratio",
 )
 
 CRITIC_PRIVILEGED_FIELD_DIMENSIONS = {
@@ -47,7 +46,6 @@ CRITIC_PRIVILEGED_FIELD_DIMENSIONS = {
     "thruster_force_scale": 8,
     "common_thruster_force_scale": 1,
     "thruster_parameters": 2,
-    "tether_slack_ratio": 1,
 }
 
 
@@ -66,7 +64,10 @@ class MlpArchitecture:
 
     @property
     def history_feature_dim(self) -> int:
-        return sum(OBSERVATION_FIELD_DIMENSIONS[name] for name in self.history_fields)
+        return sum(
+            HISTORY_OBSERVATION_FIELD_DIMENSIONS[name]
+            for name in self.history_fields
+        )
 
     @property
     def observation_dim(self) -> int:
@@ -84,8 +85,8 @@ class MlpArchitecture:
         return self.observation_dim + self.critic_privileged_dim
 
 
-MLP_33D = MlpArchitecture(
-    name="mlp_33d",
+MLP_30D = MlpArchitecture(
+    name="mlp_30d",
     history_steps=0,
     history_fields=(),
     critic_privileged_fields=TRAJECTORY_CRITIC_PRIVILEGED_FIELDS,
@@ -97,15 +98,16 @@ MLP_33D = MlpArchitecture(
 
 MLP_HISTORY_8 = MlpArchitecture(
     name="mlp_history_8",
-    # Eight prior 25 Hz samples cover 320 ms: the measured 50 ms sensor delay
-    # plus more than three 80 ms actuator time constants.
+    # Eight prior 25 Hz samples cover 320 ms: the fixed 50 ms communication
+    # delay, measured 50 ms sensor delay, and more than three 40 ms actuator
+    # time constants.
     history_steps=8,
     history_fields=(
         "position_error_b",
         "linear_velocity_error_b",
         "attitude_error_quat",
-        "angular_velocity_b",
-        "motor_command",
+        "angular_velocity_error_b",
+        "previous_motor_command",
     ),
     critic_privileged_fields=TRAJECTORY_CRITIC_PRIVILEGED_FIELDS,
     actor_hidden_dims=(512, 256, 128),
@@ -116,7 +118,7 @@ MLP_HISTORY_8 = MlpArchitecture(
 
 MLP_ARCHITECTURES = {
     architecture.name: architecture
-    for architecture in (MLP_33D, MLP_HISTORY_8)
+    for architecture in (MLP_30D, MLP_HISTORY_8)
 }
 
 

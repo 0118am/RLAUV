@@ -113,14 +113,20 @@ def test_precision_recipe_covers_full_curve_and_actuator_transient() -> None:
     assert architecture.history_steps * 0.04 == 0.32
     assert recipe.schema_version == 6
     assert recipe.action_distribution == "tanh_gaussian_v1"
-    assert OBSERVATION_CONTRACT_VERSION == "t60_trajectory_obs_v8"
-    assert BASE_OBSERVATION_DIM == 33
-    assert TRAJECTORY_OBSERVATION.field("projected_gravity_b").width == 3
-    assert TRAJECTORY_OBSERVATION.field("motor_command").width == 8
+    assert OBSERVATION_CONTRACT_VERSION == "t60_trajectory_obs_v11"
+    assert BASE_OBSERVATION_DIM == 30
+    with pytest.raises(KeyError):
+        TRAJECTORY_OBSERVATION.field("projected_gravity_b")
+    assert TRAJECTORY_OBSERVATION.field("previous_motor_command").width == 8
     assert TRAJECTORY_OBSERVATION.field("target_linear_velocity_b").physical_scale == 0.5
-    assert architecture.observation_dim == 201
-    assert architecture.critic_privileged_dim == 61
-    assert architecture.critic_observation_dim == 262
+    assert get_mlp_architecture("mlp_30d").observation_dim == 30
+    with pytest.raises(ValueError, match="Unknown MLP architecture"):
+        get_mlp_architecture("mlp_33d")
+    assert architecture.observation_dim == 198
+    assert "angular_velocity_error_b" in architecture.history_fields
+    assert "angular_velocity_b" not in architecture.history_fields
+    assert architecture.critic_privileged_dim == 60
+    assert architecture.critic_observation_dim == 258
     training_types = {
         command[0]
         for stage in curriculum.stages
@@ -137,7 +143,7 @@ def test_precision_recipe_covers_full_curve_and_actuator_transient() -> None:
         "hydrodynamics",
         "actuators",
     }
-    assert randomization.parameters.thruster_time_constant_range == (0.064, 0.096)
+    assert randomization.parameters.thruster_time_constant_range == (0.032, 0.048)
     assert randomization.schema_version == 9
     assert randomization.parameters.disturbance_curriculum_stage_steps == (
         12_800,
@@ -443,13 +449,6 @@ def test_explicit_runtime_nominal_dr_and_wrench_contract() -> None:
         volumes=robot.volumes,
         com_to_cob_offsets=robot.com_to_cob_offsets,
     )
-    tether = robot.compose_tether_wrench(
-        kinematics,
-        water_current_w=effective.water_current_w,
-        gravity_w=environment.gravity_w,
-        physics_dt=0.01,
-        additional_scale=1.0,
-    )
-    total = (thrust[0] + fluid[0] + tether[0], thrust[1] + fluid[1] + tether[1])
+    total = (thrust[0] + fluid[0], thrust[1] + fluid[1])
     assert all(value.shape == (num_envs, 3) for value in total)
     assert all(torch.isfinite(value).all() for value in total)

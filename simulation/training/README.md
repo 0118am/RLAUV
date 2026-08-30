@@ -49,7 +49,7 @@ Actor 实际更新比例和 Critic 实际更新比例。
 横向和垂向前进正弦使用波数、纵向尺度、横向尺度及路径速度的显式可实现组合训练曲率。
 每个阶段只声明新命令，runtime 累积并均衡采样此前全部命令，不再生成速度与曲率的笛卡尔积。
 Lissajous 和正反空间 Helix 只用于未见几何评估。对应生成器、Actor 观测和评估日志契约分别为
-`curve_v5`、`t60_trajectory_obs_v8` 和 schema v9。
+`curve_v5`、`t60_trajectory_obs_v11` 和 schema v9。
 
 `auv_open_water_openfoam_hydrodynamics_dr_v9.json` 在每次环境 reset 时分别抽取线性阻尼、
 二次阻尼和流体附加质量的均值为 1 的对数正态倍率。阻尼使用整矩阵标量倍率以保留完整 6×6

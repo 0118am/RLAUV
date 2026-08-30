@@ -13,9 +13,11 @@ from common.tensor_math import quat_apply_wxyz, quat_conjugate_wxyz
 from robot.control.trajectory.observation_contract import (
     ACTION_DIM,
     BASE_OBSERVATION_DIM,
+    HISTORY_OBSERVATION_FIELD_DIMENSIONS,
     OBSERVATION_FIELD_SLICES,
     OBSERVATION_NORMALIZATION_SCALES,
     TRAJECTORY_OBSERVATION,
+    normalized_history_observation,
 )
 from simulation.training.ppo.networks import (
     CRITIC_PRIVILEGED_FIELD_DIMENSIONS,
@@ -44,7 +46,6 @@ class AUVCriticObservationMixin:
         )
         self._critic_max_thruster_force = max(float(robot.thruster_wake_reference_force_n), 1.0)
         self._critic_nominal_tau = max(float(self.cfg.dyn_time_constant), 1.0e-6)
-        self._critic_nominal_tether_length = max(float(self.cfg.tether_winch_max_length), 1.0)
 
     @staticmethod
     def _hydro_diagonal(coefficients: torch.Tensor) -> torch.Tensor:
@@ -118,7 +119,6 @@ class AUVCriticObservationMixin:
                 ),
                 dim=-1,
             ),
-            "tether_slack_ratio": robot.tether_slack_length / self._critic_nominal_tether_length,
         }
 
     def _build_critic_observation(self, actor_obs: torch.Tensor) -> torch.Tensor:
@@ -135,7 +135,7 @@ class AUVObservationMixin(AUVCriticObservationMixin):
     def _configure_mlp_observation_space(self, cfg) -> None:
         """Derive actor/critic spaces from the selected feed-forward profile.
 
-        History is assembled after the current 33-D sample is normalized, so
+        History is assembled after the current 30-D sample is normalized, so
         every cached value has the same deployed representation as the current
         actor input.
         """
@@ -157,10 +157,9 @@ class AUVObservationMixin(AUVCriticObservationMixin):
         cfg.critic_privileged_fields = list(selected_critic_fields)
         history_steps = architecture.history_steps
         fields = architecture.history_fields
-        slices = self._observation_group_slices()
         try:
             history_feature_dim = sum(
-                slices[name].stop - slices[name].start for name in fields
+                HISTORY_OBSERVATION_FIELD_DIMENSIONS[name] for name in fields
             )
         except KeyError as error:
             raise ValueError(
@@ -208,17 +207,13 @@ class AUVObservationMixin(AUVCriticObservationMixin):
         """Allocate history selected by ``simulation.training.ppo.networks``."""
 
         self._mlp_history_steps = int(self.cfg.mlp_history_steps)
-        fields = tuple(self.cfg.mlp_history_fields)
-        slices = self._observation_group_slices()
-        indices = [
-            torch.arange(slices[name].start, slices[name].stop, dtype=torch.long, device=self.device)
-            for name in fields
-        ]
-        self._mlp_history_indices = (
-            torch.cat(indices) if indices else torch.empty(0, dtype=torch.long, device=self.device)
+        self._mlp_history_fields = tuple(self.cfg.mlp_history_fields)
+        history_feature_dim = sum(
+            HISTORY_OBSERVATION_FIELD_DIMENSIONS[name]
+            for name in self._mlp_history_fields
         )
         self._mlp_history = torch.zeros(
-            (self.num_envs, self._mlp_history_steps, len(self._mlp_history_indices)),
+            (self.num_envs, self._mlp_history_steps, history_feature_dim),
             dtype=torch.float32,
             device=self.device,
         )
@@ -238,14 +233,14 @@ class AUVObservationMixin(AUVCriticObservationMixin):
         return dict(OBSERVATION_FIELD_SLICES)
 
     def _normalize_trajectory_observation(self, obs: torch.Tensor) -> torch.Tensor:
-        """Apply fixed physical scales to the current 33-D trajectory sample."""
+        """Apply fixed physical scales to the current 30-D trajectory sample."""
 
         return obs / self._observation_normalization_scale
 
     def _stack_mlp_history(self, normalized_current_obs: torch.Tensor) -> torch.Tensor:
         """Append prior selected samples, newest first, without changing history.
 
-        The current sample remains at indices ``[0:33]``.  This makes a
+        The current sample remains at indices ``[0:30]``.  This makes a
         feed-forward MLP causal while preserving the exact information that a
         deployed policy runtime can cache between 25-Hz updates.
         """
@@ -265,7 +260,10 @@ class AUVObservationMixin(AUVCriticObservationMixin):
         if self._mlp_history.shape[1] > 1:
             self._mlp_history[:, 1:].copy_(self._mlp_history[:, :-1].clone())
         self._mlp_history[:, 0].copy_(
-            normalized_current_obs.index_select(1, self._mlp_history_indices)
+            normalized_history_observation(
+                normalized_current_obs,
+                self._mlp_history_fields,
+            )
         )
 
     def _reset_mlp_history(self, env_ids: Sequence[int] | torch.Tensor) -> None:

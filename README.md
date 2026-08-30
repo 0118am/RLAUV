@@ -7,7 +7,7 @@
 
 | 目录 | 唯一职责 |
 | --- | --- |
-| `robot/` | 机器人质量、惯量、浮心、推进器、执行器、系缆和可部署轨迹几何 |
+| `robot/` | 机器人质量、惯量、浮心、推进器、执行器和可部署轨迹几何 |
 | `environment/` | 水流、完整水动力矩阵、池壁/自由液面、确定性环境 profile 和逐步流体力计算 |
 | `simulation/` | environment+robot 组合、跨域 DR、PhysX 动力学桥和 Isaac 场景组装 |
 | `simulation/training/` | 仅训练相关：网络、PPO、奖励、观测、训练轨迹接入、评估、可视化、导出和进程管理 |
@@ -45,12 +45,12 @@ environment/
 
 robot/
 ├── assets/isaac/              T60 的 Isaac USD 表示
-├── dynamics/                  刚体参数、变换和系缆
+├── dynamics/                  刚体参数和变换
 ├── propulsion/                T1–T8 实测 FLU 曲线、执行器动态和安装点合成
 ├── control/                   可部署轨迹生成
 ├── randomization/             刚体与推进器随机化
-├── runtime.py                 执行器、传感器和系缆名义运行参数
-└── runtime_state.py           刚体、执行器和系缆的显式逐环境状态
+├── runtime.py                 执行器和传感器名义运行参数
+└── runtime_state.py           刚体和执行器的显式逐环境状态
 
 simulation/
 ├── assets.py                  robot 数据到 Isaac asset 配置的适配
@@ -80,7 +80,7 @@ simulation/
 - T60 刚体参数：`robot/dynamics/parameters.py`
 - T1–T8 安装位置/轴向：`robot/dynamics/parameters.py`
 - T1–T8 实测三分量推力曲线：`robot/propulsion/curves.py`
-- 执行器响应、传感器和系缆：`robot/runtime.py`
+- 执行器响应和传感器：`robot/runtime.py`
 - 最近一次完整开水域 CFD 水动力矩阵：
   `environment/hydrodynamics/coefficients/auv_open_water_openfoam_full_hydrodynamics_v2.json`
 - DR 基准：`simulation/training/recipes/auv_open_water_openfoam_hydrodynamics_dr_v9.json`
@@ -102,12 +102,13 @@ x ∈ [-0.75, 5.75] m, y ∈ [-0.75, 3.75] m, z ∈ [-0.60, 1.60] m
 每个 `100 Hz` 物理步执行一次：
 
 1. 策略通过 tanh-squashed Gaussian 直接产生 `(-1, 1)` 归一化电机指令；
-2. 按 `PWM_model = 1500 + 250·command` 映射为物理 `1250–1750 µs`；
-3. 用正/反 PWM 分支计算每台推进器实测 FLU `(Fx,Fy,Fz)`；
-4. 对三分量目标力施加名义 `0.08 s` 一阶响应；
-5. 在八个安装点计算 `ΣFᵢ` 和 `Σ(rᵢ×Fᵢ)`；
-6. 叠加浮力、流体力和可选系缆力；
-7. `assembly.py` 每个物理子步只向 PhysX 提交一次机体系合力与合矩。
+2. 归一化指令先经过固定 `0.05 s` 通信延迟，在 100 Hz 下精确实现为 5 个物理步；
+3. 按 `PWM_model = 1500 + 250·command` 映射为物理 `1250–1750 µs`；
+4. 用正/反 PWM 分支计算每台推进器实测 FLU `(Fx,Fy,Fz)`；
+5. 对三分量目标力施加名义 `0.04 s` 一阶响应；
+6. 在八个安装点计算 `ΣFᵢ` 和 `Σ(rᵢ×Fᵢ)`；
+7. 叠加浮力和流体力；
+8. `assembly.py` 每个物理子步只向 PhysX 提交一次机体系合力与合矩。
 
 `1475–1525 µs` 是闭区间零推力死区。正 PWM 时 T5/T6 正转，但安装朝 `F−`，所以
 `Fx<0`；T7/T8 朝 `F+`，所以 `Fx>0`。三个分量的符号均来自实测曲线，不存在第二套
@@ -135,23 +136,24 @@ polarity、spin direction、固定轴重建、反扭矩或高阶残差逻辑。
 - PhysX：`100 Hz` (`dt=0.01 s`)
 - Policy、融合状态观测和 8 路动作：`25 Hz` (`decimation=4`)
 - 真机 PWM 脉冲帧可继续保持 `50 Hz`，每个 policy 指令保持两个 PWM 周期
+- 指令通信延迟：固定 `0.05 s`，由 100 Hz 命令环形缓冲精确实现为 5 个物理步
 - 融合状态延迟：`0.05 s`，由 100 Hz 真值环形缓冲精确实现为 5 个物理步
-- 推力建立：`0.08 s` 一阶时间常数；实测 PWM `1475–1525 µs` 为零推力死区
+- 推力建立：通信延迟之后使用 `0.04 s` 一阶时间常数；实测 PWM `1475–1525 µs` 为零推力死区
 
-Actor 当前样本为 33 维：位置误差 3、目标线速度 3、线速度误差 3、姿态误差四元数 4、
-机体系重力方向 3、角速度 3、目标角速度 3、目标线加速度 3、实际应用动作 8。机体系重力
-方向由同一份延迟、无噪声的姿态测量计算，不向 Actor 泄漏模拟器未来状态。
+Actor 当前样本为 30 维：位置误差 3、目标线速度 3、线速度误差 3、姿态误差四元数 4、
+角速度 3、目标角速度 3、目标线加速度 3、上一策略周期 Actor 输出 8。该字段不是延迟线当前输出。
 
 网络只在 `training/ppo/networks.py` 定义：
 
 | 网络 | Actor 输入 | Actor/Critic 隐藏层 |
 | --- | ---: | --- |
-| `mlp_33d` | 当前 33 维 | `512,256,128` |
-| `mlp_history_8` | 当前 33 维 + 8 个历史样本，共 201 维 | `512,256,128` |
+| `mlp_30d` | 当前 30 维 | `512,256,128` |
+| `mlp_history_8` | 当前 30 维 + 8 个历史样本，共 198 维 | `512,256,128` |
 
-8 个先前样本覆盖 320 ms，超过 50 ms 状态延迟加三个 80 ms 推进器时间常数。每个样本包含
-位置误差、线速度误差、姿态误差、角速度和实际应用动作。Actor 的艇体状态全部直接取自
-50 ms 延迟环形缓冲，不再按 40 ms 观测周期重抽位置或姿态白噪声。Critic 额外接收 61 维
+8 个先前样本覆盖 320 ms，超过 50 ms 通信延迟、50 ms 状态延迟和三个 40 ms 推进器时间常数之和。每个样本包含
+位置误差、线速度误差、姿态误差、角速度误差和上一策略周期 Actor 输出。历史角速度误差由同一
+时刻机体系目标角速度减去实测角速度得到。Actor 的艇体状态全部直接取自
+50 ms 延迟环形缓冲，不再按 40 ms 观测周期重抽位置或姿态白噪声。Critic 额外接收 60 维
 模拟器特权状态，并保留当前真值；奖励也始终使用
 当前真值。Actor 和导出的 ONNX 不使用特权字段。
 

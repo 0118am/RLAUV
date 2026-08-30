@@ -298,17 +298,10 @@ class AUVTrajEnv(
             volumes=self.robot_runtime.volumes,
             com_to_cob_offsets=self.robot_runtime.com_to_cob_offsets,
         )
-        tether_forces, tether_torques = self.robot_runtime.compose_tether_wrench(
-            kinematics,
-            water_current_w=effective_hydrodynamics.water_current_w,
-            gravity_w=self.environment_runtime.gravity_w,
-            physics_dt=self.physics_dt,
-            additional_scale=additional_scale,
-        )
         external_wrench_b = torch.cat(
             (
-                fluid_forces + thruster_forces + tether_forces,
-                fluid_torques + thruster_torques + tether_torques,
+                fluid_forces + thruster_forces,
+                fluid_torques + thruster_torques,
             ),
             dim=-1,
         )
@@ -356,26 +349,18 @@ class AUVTrajEnv(
         attitude_error_quat = math_utils.quat_unique(
             quat_multiply_wxyz(root_quat_conjugate, self._target_quat_w)
         )
-        gravity_direction_w = (
-            self.environment_runtime.gravity_w
-            / self.environment_runtime.gravity_magnitude
-        ).reshape(1, 3).expand_as(root_position_w)
-        projected_gravity_b = quat_apply_wxyz(
-            root_quat_conjugate,
-            gravity_direction_w,
-        )
         raw_obs = torch.cat(
             [
                 target_pos_error_b,
                 target_lin_vel_b,
                 linear_velocity_error_b,
                 attitude_error_quat,
-                projected_gravity_b,
                 root_angular_velocity_b,
                 target_ang_vel_b,
                 target_lin_acc_b,
-                # Feed back the bounded motor command. The distinct realized-
-                # force state remains in the simulator-only Critic observation.
+                # Feed back the bounded command applied during the preceding
+                # policy interval. The distinct realized-force state remains
+                # in the simulator-only Critic observation.
                 self._actions,
             ],
             dim=-1,
@@ -621,7 +606,6 @@ class AUVTrajEnv(
             stage,
             enabled=self._domain_randomization_feature_enabled("actuators"),
         )
-        self.robot_runtime.tether_slack_length[ids] = self.cfg.tether_slack_length
         self._apply_runtime_mass_properties(ids)
         self._apply_runtime_center_of_mass(ids)
         self._log_domain_randomization_state()
@@ -678,6 +662,9 @@ class AUVTrajEnv(
         add_stats("thruster_force_scale", robot.thruster_force_scale)
         add_stats("common_thruster_force_scale", robot.common_thruster_force_scale)
         add_stats("thruster_time_constant_s", robot.thruster_time_constant)
+        log[f"{prefix}thruster_command_delay_s"] = float(
+            self.cfg.thruster_command_delay_s
+        )
 
     def _apply_runtime_mass_properties(self, env_ids: Sequence[int] | torch.Tensor) -> None:
         """Write environment-resolved mass and inertia into PhysX."""

@@ -7,7 +7,7 @@ from isaaclab_rl.rsl_rl import (
     RslRlPpoAlgorithmCfg,
 )
 from robot.runtime import T60_RUNTIME
-from simulation.training.ppo.networks import MLP_33D
+from simulation.training.ppo.networks import MLP_30D
 
 
 ACTION_CURVATURE_POLICY_DT_S = 1.0 / 25.0
@@ -56,8 +56,8 @@ class AUVTrajPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         # parity.
         actor_obs_normalization=False,
         critic_obs_normalization=False,
-        actor_hidden_dims=list(MLP_33D.actor_hidden_dims),
-        critic_hidden_dims=list(MLP_33D.critic_hidden_dims),
+        actor_hidden_dims=list(MLP_30D.actor_hidden_dims),
+        critic_hidden_dims=list(MLP_30D.critic_hidden_dims),
         activation="elu",
     )
     algorithm = AUVSmoothPpoAlgorithmCfg(

@@ -1,8 +1,53 @@
-"""Stateful first-order thruster response."""
+"""Fixed command delay and stateful first-order thruster response."""
 
 from __future__ import annotations
 
 import torch
+
+
+class FixedStepCommandDelay:
+    """Delay normalized thruster commands by an exact number of physics steps."""
+
+    def __init__(
+        self,
+        num_envs: int,
+        num_thrusters: int,
+        delay_steps: int,
+        device: torch.device | str,
+    ) -> None:
+        if num_envs <= 0 or num_thrusters <= 0:
+            raise ValueError("num_envs and num_thrusters must be positive.")
+        if int(delay_steps) != delay_steps or delay_steps < 0:
+            raise ValueError("delay_steps must be a non-negative integer.")
+        self.num_envs = int(num_envs)
+        self.num_thrusters = int(num_thrusters)
+        self.delay_steps = int(delay_steps)
+        self.device = torch.device(device)
+        self.write_index = 0
+        self.command_history = torch.zeros(
+            (max(self.delay_steps, 1), self.num_envs, self.num_thrusters),
+            dtype=torch.float32,
+            device=self.device,
+        )
+
+    def reset(self, env_ids: list | torch.Tensor | None) -> None:
+        """Fill selected command pipelines with neutral commands."""
+
+        selected = slice(None) if env_ids is None else env_ids
+        self.command_history[:, selected] = 0.0
+
+    def advance(self, commands: torch.Tensor) -> torch.Tensor:
+        """Record current commands and return commands from ``delay_steps`` ago."""
+
+        expected_shape = (self.num_envs, self.num_thrusters)
+        if commands.shape != expected_shape:
+            raise ValueError(f"commands must have shape {expected_shape}.")
+        if self.delay_steps == 0:
+            return commands
+        delayed = self.command_history[self.write_index].clone()
+        self.command_history[self.write_index].copy_(commands)
+        self.write_index = (self.write_index + 1) % self.delay_steps
+        return delayed
 
 
 class FirstOrderThrusterResponse:

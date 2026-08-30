@@ -77,6 +77,8 @@ def test_composition_combines_environment_and_robot_sources() -> None:
     assert cfg.linear_damping == environment.hydrodynamics.linear_damping
     assert cfg.mass == robot.model.mass_kg
     assert cfg.dyn_time_constant == pytest.approx(0.17)
+    assert cfg.thruster_command_delay_s == pytest.approx(0.05)
+    assert cfg.thruster_command_delay_steps == 5
     assert cfg.pose_sensor_delay_s == pytest.approx(0.05)
     assert cfg.pose_sensor_delay_steps == 5
     assert not hasattr(cfg, "pose_sensor_position_error_max_m")
